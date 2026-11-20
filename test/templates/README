@@ -1,0 +1,19 @@
+These tests are doctemplates 0.11's golden tests (test/*.test and the
+partials beside them), under doctemplates' BSD-3-Clause license, in
+LICENSE.
+
+Each .test file is a JSON context, a line holding ".", the template,
+another ".", and the expected output. The template's path, for its
+partials, is the .test file's with the extension .txt.
+
+Changed for podoc:
+
+- pad.test is left out: it tests the pipes left, right and center,
+  which podoc does not support.
+- pipes.test: "/right 4" is taken off the line with the roman pipe,
+  and its expected output, "   I. a" and "  II. b", becomes "I. a" and
+  "II. b".
+
+Added for podoc, for PdContextTest: ctx.html, and data/, a user data
+directory, with data/templates/ctxpart.html, indata.html and
+default.ms.

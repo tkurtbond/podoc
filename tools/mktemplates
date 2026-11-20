@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+# mktemplates: writes src/PdDefaults.Mod, pandoc's default templates
+# and their partials, from the files in data/templates.
+#   tools/mktemplates > src/PdDefaults.Mod
+import os, sys
+
+here = os.path.dirname(os.path.abspath(sys.argv[0]))
+tdir = os.path.join(here, '..', 'data', 'templates')
+names = ['default.html5', 'styles.html', 'styles.citations.html',
+         'default.ms', 'default.context', 'default.markdown']
+
+def pieces(data):
+    """Oberon statements that append the bytes of data"""
+    out, cur = [], ''
+    def flush():
+        nonlocal cur
+        if cur:
+            out.append('S("%s")' % cur)
+            cur = ''
+    for b in data:
+        if 0x20 <= b < 0x7F and b != 0x22:
+            cur += chr(b)
+            if len(cur) >= 60:
+                flush()
+        else:
+            flush()
+            out.append('C(%03XX)' % b if b >= 0xA0 else 'C(%02XX)' % b)
+    flush()
+    return out
+
+w = sys.stdout.write
+w('''MODULE PdDefaults;
+(* PdDefaults: pandoc 3.10's default templates and their partials,
+   from data/templates. Written by tools/mktemplates; do not edit. *)
+
+IMPORT PdIO;
+
+VAR
+  t: PdIO.Text;
+  n: LONGINT;
+
+PROCEDURE S(s: ARRAY OF CHAR);
+  VAR i: LONGINT;
+BEGIN
+  i := 0;
+  WHILE s[i] # 0X DO
+    PdIO.Reserve(t, n, n + 1); t[n] := s[i]; INC(n); INC(i)
+  END
+END S;
+
+PROCEDURE C(ch: CHAR);
+BEGIN
+  PdIO.Reserve(t, n, n + 1); t[n] := ch; INC(n)
+END C;
+
+''')
+for i, name in enumerate(names):
+    data = open(os.path.join(tdir, name), 'rb').read()
+    w('PROCEDURE T%d;\nBEGIN\n' % i)
+    ps = pieces(data)
+    for k in range(0, len(ps), 4):
+        w('  ' + '; '.join(ps[k:k + 4]) + (';' if k + 4 < len(ps) else '') + '\n')
+    w('END T%d;\n\n' % i)
+w('''(* Whether there is a default template or partial called name
+   ("default.html5", "styles.html", ...); if there is, it is
+   text[0 .. len-1] *)
+PROCEDURE Get*(name: ARRAY OF CHAR; VAR text: PdIO.Text; VAR len: LONGINT): BOOLEAN;
+BEGIN
+  t := NIL; n := 0;
+''')
+for i, name in enumerate(names):
+    w('  %s name = "%s" THEN T%d\n' % ('IF' if i == 0 else 'ELSIF', name, i))
+w('''  ELSE RETURN FALSE
+  END;
+  text := t; len := n; t := NIL;
+  RETURN TRUE
+END Get;
+
+END PdDefaults.
+''')

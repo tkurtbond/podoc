@@ -1,0 +1,2 @@
+podoc: Error compiling template '"tmpl-bad.txt" (line 1, column 5):
+unexpected "\n"'

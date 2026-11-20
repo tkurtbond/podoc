@@ -1,0 +1,46 @@
+ok   - basic
+ok   - basic-with-braces
+ok   - basic-with-it
+ok   - boolean
+ok   - comments
+ok   - conditionals
+ok   - elseif
+ok   - empty
+ok   - final-newline
+ok   - forloop
+ok   - indent
+ok   - loop-in-object
+ok   - loop-in-partial
+ok   - nested-loop
+ok   - nest
+ok   - numbers
+ok   - partials
+ok   - pipe-and-partial
+ok   - pipes
+ok   - space-in-loop
+ok   - values
+ok   - compile failure
+  (line 1, column 6):
+unexpected "$"
+ok   - a keyword as a variable
+  "foobar.txt" (line 1, column 5):
+unexpected "$"
+ok   - an unknown pipe
+  "foobar.txt" (line 1, column 10):
+unknown pipe
+ok   - a block pipe
+  "foobar.txt" (line 1, column 10):
+the pipes left, right and center are not supported
+ok   - an error in a partial
+  "../../../test/templates/bad.txt" (line 2, column 7):
+unexpected "s"
+ok   - a missing partial
+  "../../../test/templates/foobar.txt" (line 1, column 10):
+could not read the partial ../../../test/templates/nosuch.txt
+ok   - a comment with no newline
+ok   - reflow
+ok   - the nowrap pipe
+ok   - the alpha pipe
+ok   - alpha and roman on big numbers
+ok   - uppercase, length and reverse in UTF-8
+all passed

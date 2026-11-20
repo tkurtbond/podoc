@@ -52,7 +52,8 @@ test-oc: $(TESTS:%=$(BUILD)/OC/test/%.passed) $(BUILD)/OC/cases.passed
 # $* is <model>/test/<Test>. A test is built from the sources, in its own
 # directory.
 $(BUILD)/%.passed: $(SRCS) test/$$(notdir $$*).Mod test/$$(notdir $$*).expected \
-  $$(wildcard test/$$(notdir $$*).errors) $(POC_STAMP)
+  $$(wildcard test/$$(notdir $$*).errors) $(wildcard test/templates/* test/templates/data/templates/*) \
+  $(POC_STAMP)
 	mkdir -p $(BUILD)/$(dir $*)
 	$(POC) -$(firstword $(subst /, ,$*)) -library-path $(POCLIBDIR) \
 	  -import-path src -import-path test -output-dir $(BUILD)/$(dir $*) \

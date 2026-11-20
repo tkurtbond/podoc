@@ -14,11 +14,14 @@ CONST
   (* pandoc's exit codes, from Text.Pandoc.Error *)
   IOError* = 1;
   AppError* = 4;
+  TemplateError* = 5;
   OptionError* = 6;
   UnknownReader* = 21;
   UnknownWriter* = 22;
   ParseError* = 64;
+  CouldNotFindDataFile* = 97;
   CouldNotFindMetadataFile* = 98;
+  ResourceNotFound* = 99;
 
   BufSize = 8192;
   ReadChunk = 65536;

@@ -90,6 +90,13 @@ JSON AST compared byte for byte.
   took 89 and 85 ms, and written directly through `PdIO`, 10 and 12
   ms; the whole run 0.12 s and about 75 MB. Both are fast enough;
   writing directly is about 8 times faster and uses less memory.
+- **Writers build `PdLayout` Docs** (2026-11-20), doclayout's `Doc`
+  ported to Oberon: templates interpolate Docs, indent them and wrap
+  them, which flat output cannot do. A writer builds a Doc for the
+  body and each metadata value, `PdTemplate` renders the template
+  around them, and `PdLayout.Render` makes the Rope that `PdIO`
+  writes. Writing straight to `PdIO` stays the way for output with no
+  template (`-t json`).
 - **Modules** (names prefixed `Pd` to stay clear of the runtime's
   global module namespace):
   - `PdIO`: reading input whole, buffered output, messages and exit.
@@ -99,8 +106,12 @@ JSON AST compared byte for byte.
   - `PdYaml`: the YAML subset.
   - `PdMdBlocks`, `PdMdInlines`, `PdMarkdown`: the reader.
   - `PdIdent`: automatic identifiers.
+  - `PdLayout`: doclayout's `Doc`, rendered at a width.
   - `PdTemplate`: the doctemplates language.
-  - `PdHtml`, `PdMs`, `PdContext`, `PdMdWriter`: the writers, with
+  - `PdContext`: a template's context, the variables, and finding
+    templates; `PdDefaults`, written by `tools/mktemplates`, holds
+    the built-in templates.
+  - `PdHtml`, `PdMs`, `PdConTeXt`, `PdMdWriter`: the writers, with
     shared helpers in `PdWrite`.
   - `PdInclude`: `!include`.
   - `PdFilters`: the native filters.
@@ -298,16 +309,16 @@ The table is kept in AGENTS.md as codes are assigned.
   booleans as `MetaBool`, as pandoc does.
 - `-M key=value` (repeatable, building lists) and `--metadata-file`.
 
-## Phase 6: Templates
+## Phase 6: Templates [done]
 
-### Phase 6.1: `PdTemplate`
+### Phase 6.1: `PdTemplate` [done]
 
 - The language of §6: variables and fields, conditionals, loops with
   separators, comments, `$$`, partials, the pipes needed, and
   indentation of multi-line values.
 - Unit tests from doctemplates' own test cases, where they fit.
 
-### Phase 6.2: Template lookup and variables
+### Phase 6.2: Template lookup and variables [done]
 
 - The default templates bundled in `data/templates` (`default.html5`,
   `styles.html`, `default.ms`, `default.context`, `default.markdown`),
@@ -319,6 +330,12 @@ The table is kept in AGENTS.md as codes are assigned.
   (`body`, `toc`, `header-includes`, `include-before`,
   `include-after`, `pagetitle`, `lang`, ...).
 - `-H`/`--include-in-header`, `-B`, `-A`.
+
+The writer's own variables (`body`, `toc`, `pagetitle`, `lang`, ...)
+are set by each writer, through `PdContext.DefField` and
+`ResetField`, in Phases 7 to 10. Templates are looked for in pandoc's
+user data directory (`$XDG_DATA_HOME/pandoc`, or `~/.pandoc` when only
+that exists), which on the user's machine is `~/.pandoc`.
 
 ## Phase 7: The HTML writer
 
@@ -531,6 +548,9 @@ Oberon (decision 7).
   full-width, 0 for combining marks, 1 otherwise).
 - Citations, `--citeproc`.
 - Image conversion for ConTeXt beyond SVG.
+- Templates: the pipes `left`, `right` and `center` (block layout);
+  the `meta-json` variable; `--variable-json`; `--data-dir`; the
+  "expecting ..." part of template error messages.
 
 ## State
 
@@ -630,3 +650,34 @@ Oberon (decision 7).
   gave pandoc's JSON, and standard error and exit statuses matched
   pandoc's apart from the wording of YAML parse messages after their
   location line. Phase 6 next.
+- 2026-11-20: Phase 6 done. `PdLayout` (doclayout's `Doc`: text,
+  breaking spaces, new lines, blank lines, prefixes, nesting, hanging,
+  `nowrap`, `chomp`, rendered at a width or unwrapped) and
+  `PdTemplate` (the doctemplates language, parsed as doctemplates'
+  Parsec parser does, with its error positions: variables, fields,
+  conditionals with `elseif`, loops with separators, `it`, nesting
+  with `$^$`, reflow with `$~$`, comments, partials and partials
+  applied to values, and every pipe but `left`, `right` and `center`,
+  which are compile errors). `PdContext`: `-V` as pandoc's
+  `setVariable`, metadata in the context through a writer's block and
+  inline procedures (a metadata string as `Builder.text` makes it),
+  variables over metadata, `defField` and `resetField`, and templates
+  and partials found as pandoc finds them (a file, the user data
+  directory, then built in), with the format's extension tried for a
+  name without one. `data/templates` holds pandoc 3.10's
+  `default.html5`, `styles.html`, `styles.citations.html`,
+  `default.ms`, `default.context` and `default.markdown`;
+  `tools/mktemplates` builds them into `PdDefaults`. `podoc` adds
+  `-s`, `--template`, `-V`, `-H`, `-B` and `-A`, and sets
+  `sourcefile`, `outputfile`, `pandoc-version`, `include-before`,
+  `include-after`, `header-includes` and `curdir` as pandoc's
+  `outputSettings` does; no writer uses a template until Phase 7, so
+  with `-t json` only a template's errors show. `make test` passed
+  under `-O2` and `-OC`: `PdLayoutTest` (33 renderings, compared
+  with the expected output), `PdTemplateTest` (doctemplates'
+  21 golden tests that fit, pad.test left out and pipes.test adapted,
+  and 12 more checks, among them error positions inside partials, as
+  doctemplates gives them), `PdContextTest` (18 checks) and three
+  cases for a missing template (97), a template that does not compile
+  (5) and a missing `-H` file (99), with pandoc's messages but for its
+  data directory path. Phase 7 next.

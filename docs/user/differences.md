@@ -53,3 +53,20 @@ podoc reads YAML with its own small reader, `PdYaml`, not libyaml.
 - Messages start with "podoc: ".
 - `--metadata-file` files are looked for only where named, not also
   in pandoc's data directory.
+
+## Templates
+
+podoc's built-in templates are pandoc 3.10's defaults for `html5`,
+`ms`, `context` and `markdown`.
+
+- The pipes `left`, `right` and `center` are not supported: a
+  template that uses them does not compile.
+- A template that does not compile is reported with the position and
+  the unexpected text, as pandoc reports it, but without pandoc's
+  "expecting ..." list.
+- A template that cannot be found is reported as `Could not find data
+  file 'templates/NAME'`; pandoc names the file in its own data
+  directory.
+- `pandoc-version` is `3.10`, the pandoc that podoc follows.
+- The variable `meta-json` is not set, and there is no
+  `--variable-json` or `--data-dir`.

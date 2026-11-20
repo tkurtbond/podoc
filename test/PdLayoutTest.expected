@@ -1,0 +1,115 @@
+== text
+hello|
+== literal with new lines
+a
+b
+
+c|
+== cr after text
+a
+b|
+== cr cr
+a
+b|
+== blankline
+a
+
+b|
+== cr blankline
+a
+
+b|
+== blanklines 2
+a
+
+
+b|
+== leading blankline
+a|
+== trailing blankline
+a
+|
+== vcat
+a
+b
+c|
+== vsep
+a
+
+b
+
+c|
+== hsep
+a b|
+== wrap
+the quick
+brown fox
+jumps over
+the lazy
+dog|
+== no wrap
+the quick brown fox jumps over the lazy dog|
+== nest
+x
+  a
+  b
+y|
+== nest blank
+  a
+
+  b|
+== prefixed
+> a
+>
+> b|
+== hang
+- a
+   b|
+== hang wrap
+- one two
+  three four
+  five six|
+== nest in middle
+abc
+  d|
+== flush
+    a
+b
+    c|
+== beforeNonBlank
+Xa
+ b|
+== afterBreak
+ab
+\&.c|
+== chomp
+ab|
+== nestle
+ab|
+== nowrap
+aaa bbb ccc|
+== space then cr
+a
+b|
+== wide chars
+日本
+語の
+text|
+== combining
+éé
+abc|
+== newline newline
+a
+
+b|
+== empty
+|
+== prefix trimmed
+> a
+>
+> b|
+== nested prefixes
+> a
+>
+> > b
+> > c|

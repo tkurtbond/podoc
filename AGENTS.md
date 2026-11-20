@@ -24,10 +24,12 @@ there.
 
 ## Status
 
-As of 2026-11-20: Phases 1 to 5 done (the build, the tests, a `podoc`
-that joins its inputs as pandoc does, the AST, the JSON writer, and
-the markdown reader's blocks and inlines, `-t json`, and YAML
-metadata with `-M` and `--metadata-file`). Phase 6, templates, next.
+As of 2026-11-20: Phases 1 to 6 done (the build, the tests, a `podoc`
+that joins its inputs as pandoc does, the AST, the JSON writer, the
+markdown reader's blocks and inlines, `-t json`, YAML metadata with
+`-M` and `--metadata-file`, and templates: `PdLayout`, `PdTemplate`,
+`PdContext`, with `-s`, `--template`, `-V`, `-H`, `-B`, `-A`).
+Phase 7, the HTML writer, next.
 See PLAN.md's State.
 
 ## Reference material
@@ -123,7 +125,9 @@ reinstall after upgrading poc.
 
 Errors the user can cause end podoc with pandoc's exit status for that
 error (`Text.Pandoc.Error`), through `PdIO.Fail` or `PdIO.Exit`: 1
-input or output, 22 unknown output format, and so on. ArgParser ends
+input or output, 5 template error, 22 unknown output format, 64
+parse error, 97 data file not found, 98 metadata file not found, 99
+resource not found. ArgParser ends
 with 2 on a bad option (pandoc: 6).
 
 `HALT` is for what should never happen. The runtime uses 10..20 and

@@ -1,0 +1,19 @@
+ok   - a metadata string, through the inline writer
+ok   - booleans
+ok   - inlines and blocks
+ok   - a list and a map
+ok   - -V given twice
+ok   - -V with no value
+ok   - -V with an empty value
+ok   - variables override metadata
+ok   - list variables
+ok   - variables set if absent
+ok   - defField
+ok   - resetField
+ok   - a template file, its partial in the data directory
+ok   - a template with the format's extension added
+ok   - a template in the data directory
+ok   - a default template in the data directory
+ok   - the built-in html5 template and its partial
+ok   - a built-in template by name
+all passed
