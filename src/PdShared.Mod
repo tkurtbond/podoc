@@ -1,8 +1,8 @@
 MODULE PdShared;
 (* PdShared: what pandoc's writers share (Text.Pandoc.Shared,
    Text.Pandoc.Writers.Shared): the text of inlines and blocks
-   (stringify), and the division of a document into sections
-   (makeSections). *)
+   (stringify), the division of a document into sections
+   (makeSections), and the metadata that writers look up. *)
 
 IMPORT Ropes, A := PdAst;
 
@@ -364,5 +364,103 @@ BEGIN
   numbering := number; baseLevel := base; lastLen := 0;
   RETURN Go(b)
 END MakeSections;
+
+(* Metadata *)
+
+(* The inlines of the metadata value of key, as pandoc's docTitle,
+   docDate and lookupMetaInlines-like accessors see them: a string as
+   a Str, inlines, or the inlines of a single Plain or Para *)
+PROCEDURE DocMeta*(meta: A.MetaMapV; key: ARRAY OF CHAR): A.Inline;
+  VAR v: A.MetaValue; b: A.Block;
+BEGIN
+  v := A.GetMeta(meta, key);
+  IF v = NIL THEN RETURN NIL END;
+  WITH
+    v: A.MetaStringV DO RETURN A.NewStr(v.s)
+  | v: A.MetaInlinesV DO RETURN v.inlines
+  | v: A.MetaBlocksV DO
+    b := v.blocks;
+    IF (b # NIL) & (b.next = NIL) & ((b.kind = A.Plain) OR (b.kind = A.Para)) THEN
+      RETURN b(A.InlinesBlk).inlines
+    END
+  ELSE
+  END;
+  RETURN NIL
+END DocMeta;
+
+PROCEDURE AddLine(VAR first, last: A.InlineList; i: A.Inline);
+  VAR l: A.InlineList;
+BEGIN
+  NEW(l); l.inlines := i; l.next := NIL;
+  IF first = NIL THEN first := l ELSE last.next := l END;
+  last := l
+END AddLine;
+
+(* The authors, as pandoc's docAuthors finds and orders them: a list's
+   inlines, then its items that are a single Plain, then those that
+   are a single Para, then its strings *)
+PROCEDURE DocAuthors*(meta: A.MetaMapV): A.InlineList;
+  VAR v, x: A.MetaValue; first, last: A.InlineList; it: A.MetaItem; pass: INTEGER;
+    b: A.Block;
+BEGIN
+  first := NIL; last := NIL;
+  v := A.GetMeta(meta, "author");
+  IF v = NIL THEN RETURN NIL END;
+  WITH
+    v: A.MetaStringV DO AddLine(first, last, A.NewStr(v.s))
+  | v: A.MetaInlinesV DO AddLine(first, last, v.inlines)
+  | v: A.MetaListV DO
+    FOR pass := 0 TO 3 DO
+      it := v.items;
+      WHILE it # NIL DO
+        x := it.value;
+        IF (pass = 0) & (x IS A.MetaInlinesV) THEN AddLine(first, last, x(A.MetaInlinesV).inlines)
+        ELSIF (pass = 1) OR (pass = 2) THEN
+          IF x IS A.MetaBlocksV THEN
+            b := x(A.MetaBlocksV).blocks;
+            IF (b # NIL) & (b.next = NIL)
+               & ((pass = 1) & (b.kind = A.Plain) OR (pass = 2) & (b.kind = A.Para)) THEN
+              AddLine(first, last, b(A.InlinesBlk).inlines)
+            END
+          END
+        ELSIF (pass = 3) & (x IS A.MetaStringV) THEN AddLine(first, last, A.NewStr(x(A.MetaStringV).s))
+        END;
+        it := it.next
+      END
+    END
+  ELSE
+  END;
+  RETURN first
+END DocAuthors;
+
+(* Dimensions *)
+
+PROCEDURE IsDigit(ch: CHAR): BOOLEAN;
+BEGIN
+  RETURN (ch >= "0") & (ch <= "9")
+END IsDigit;
+
+(* Splits s, a dimension such as "2.5in", into the digits before and
+   after its point (frac NIL if it has no point) and its unit; FALSE
+   if its number is not one *)
+PROCEDURE NumUnit*(s: Rope; VAR int, frac, unit: Rope): BOOLEAN;
+  VAR b: POINTER TO ARRAY OF CHAR; n, i, e, p: LONGINT;
+BEGIN
+  n := Ropes.Length(s); NEW(b, n + 1);
+  IF n > 0 THEN Ropes.Blit(s, 0, b^, 0, n) END;
+  b[n] := 0X; e := 0;
+  WHILE (e < n) & (IsDigit(b[e]) OR (b[e] = ".")) DO INC(e) END;
+  i := 0; WHILE (i < e) & IsDigit(b[i]) DO INC(i) END;
+  IF i = 0 THEN RETURN FALSE END;
+  int := Ropes.FromSubchars(b^, 0, i); frac := NIL;
+  IF i < e THEN
+    p := i + 1; i := p;
+    WHILE (i < e) & IsDigit(b[i]) DO INC(i) END;
+    IF (i = p) OR (i < e) THEN RETURN FALSE END;
+    frac := Ropes.FromSubchars(b^, p, i - p)
+  END;
+  unit := Ropes.FromSubchars(b^, e, n - e);
+  RETURN TRUE
+END NumUnit;
 
 END PdShared.

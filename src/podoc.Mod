@@ -15,7 +15,7 @@ MODULE podoc;
    (-B), include-after (-A), header-includes (-H) and curdir. *)
 
 IMPORT Platform, ArgParser, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
-  T := PdTemplate, C := PdContext, PdHtml;
+  T := PdTemplate, C := PdContext, PdHtml, PdMs;
 
 CONST
   Version = "0.1";
@@ -234,6 +234,13 @@ BEGIN
   RETURN TRUE
 END AddCss;
 
+(* --pdf-engine: sets the variable pdf-engine *)
+PROCEDURE SetPdfEngine(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  C.SetVariableIfAbsent("pdf-engine", arg);
+  RETURN TRUE
+END SetPdfEngine;
+
 PROCEDURE SetToc(): BOOLEAN;
 BEGIN
   toc := TRUE;
@@ -283,6 +290,8 @@ BEGIN
     "Link to the style sheet URL (HTML, with -s).", AddCss));
   parser.AddOption(ArgParser.MakeStringOption(0X, "id-prefix",
     "Put STRING before every identifier (HTML).", SetIdPrefix));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "pdf-engine",
+    "Use PROGRAM to make PDF (pdfroff, groff); ms writes PDF marks for it.", SetPdfEngine));
   parser.AddOption(ArgParser.MakeStringOption(0X, "wrap",
     "How to wrap lines: auto, none or preserve (podoc does not wrap).", SetWrap));
   parser.AddOption(ArgParser.MakeIntOption(0X, "tab-stop",
@@ -354,7 +363,7 @@ PROCEDURE Run;
 BEGIN
   IF to = "" THEN to := "source" END;
   IF to = "html5" THEN to := "html" END;
-  IF (to # "source") & (to # "json") & (to # "html") THEN
+  IF (to # "source") & (to # "json") & (to # "html") & (to # "ms") THEN
     PdIO.Message3("Unknown output format '", to, "'");
     PdIO.Exit(PdIO.UnknownWriter)
   END;
@@ -371,6 +380,7 @@ BEGIN
   tmpl := NIL;
   IF standalone & (template # "") THEN C.Get(template, to, tmpl)
   ELSIF standalone & (to = "html") THEN C.GetDefault("html5", tmpl)
+  ELSIF standalone & (to = "ms") THEN C.GetDefault("ms", tmpl)
   END;
   text := NIL; len := 0;
   IF files = NIL THEN
@@ -394,6 +404,9 @@ BEGIN
       PdHtml.SetOptions(idPrefix, numberSections, wrap = "preserve", toc, tocDepth, files.name^)
     END;
     PdHtml.WriteDoc(ReadDoc(text, len), tmpl)
+  ELSIF to = "ms" THEN
+    PdMs.SetOptions(numberSections, wrap = "preserve", toc, tocDepth);
+    PdMs.WriteDoc(ReadDoc(text, len), tmpl)
   ELSIF len > 0 THEN
     PdIO.WriteChars(text^, 0, len)
   END;

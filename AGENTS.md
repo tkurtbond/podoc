@@ -24,12 +24,13 @@ there.
 
 ## Status
 
-As of 2026-11-20: Phases 1 to 7 done (the build, the tests, a `podoc`
+As of 2026-11-20: Phases 1 to 8 done (the build, the tests, a `podoc`
 that joins its inputs as pandoc does, the AST, the JSON writer, the
 markdown reader's blocks and inlines, `-t json`, YAML metadata with
 `-M` and `--metadata-file`, templates with `-s`, `--template`, `-V`,
 `-H`, `-B`, `-A`, and the HTML writer, `PdHtml`, with `--toc`, `-N`,
-`--css`, `--id-prefix` and `--wrap`). Phase 8, the ms writer, next.
+`--css`, `--id-prefix` and `--wrap`, and the ms writer, `PdMs`, with
+`--pdf-engine`). Phase 9, the ConTeXt writer, next.
 See PLAN.md's State.
 
 ## Reference material

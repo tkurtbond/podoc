@@ -75,7 +75,7 @@ END Int;
 
 (* The shortest digits that read back give x > 0, in digits (with no
    trailing zeros) and n of them; x is 0.d1d2... * 10^e. *)
-PROCEDURE ShortestDigits(x: LONGREAL; VAR digits: ARRAY OF CHAR; VAR n, e: INTEGER);
+PROCEDURE ShortestDigits*(x: LONGREAL; VAR digits: ARRAY OF CHAR; VAR n, e: INTEGER);
   VAR p, e10, i, k: INTEGER; s: ARRAY 48 OF CHAR; y: LONGREAL;
 BEGIN
   p := 0;

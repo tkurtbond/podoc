@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+# mkascii: writes src/PdAscii.Mod, the characters pandoc's toAsciiChar
+# (Text.Pandoc.Asciify) turns into an ASCII character: those whose
+# canonical decomposition (NFD) is an ASCII character followed by
+# marks, and U+0131, the Turkish dotless i. Made with Python's
+# unicodedata.
+#   tools/mkascii > src/PdAscii.Mod
+import sys, unicodedata
+
+pairs = []
+for c in range(0x80, 0x110000):
+    d = unicodedata.normalize('NFD', chr(c))
+    if ord(d[0]) < 128 and all(unicodedata.category(x) in ('Mn', 'Mc', 'Me')
+                               for x in d[1:]):
+        pairs.append((c, d[0]))
+pairs.append((0x131, 'i'))
+pairs.sort()
+assert all(c <= 0xFFFF and ch != '"' and ' ' < ch < '\x7f' for c, ch in pairs)
+
+lines, cur = [], ''
+for c, ch in pairs:
+    w = '%04X%s' % (c, ch)
+    if len(cur) + len(w) > 60:
+        lines.append(cur); cur = ''
+    cur += w
+if cur:
+    lines.append(cur)
+
+w = sys.stdout.write
+w('''MODULE PdAscii;
+(* PdAscii: the characters pandoc's toAsciiChar (Text.Pandoc.Asciify)
+   turns into an ASCII character, those whose canonical decomposition
+   is an ASCII character followed by marks, and U+0131. Made with
+   Unicode %s's data by tools/mkascii; do not edit. *)
+
+CONST
+  Count = %d;
+
+VAR
+  codes: ARRAY Count OF LONGINT;
+  chars: ARRAY Count OF CHAR;
+  n: INTEGER;
+
+PROCEDURE Hex(ch: CHAR): LONGINT;
+BEGIN
+  IF ch <= "9" THEN RETURN ORD(ch) - ORD("0") END;
+  RETURN ORD(ch) - ORD("A") + 10
+END Hex;
+
+(* Adds the entries in s, each four hexadecimal digits and a character *)
+PROCEDURE Add(s: ARRAY OF CHAR);
+  VAR i, k: INTEGER; c: LONGINT;
+BEGIN
+  i := 0;
+  WHILE s[i] # 0X DO
+    c := 0;
+    FOR k := 0 TO 3 DO c := c * 16 + Hex(s[i + k]) END;
+    codes[n] := c; chars[n] := s[i + 4]; INC(n); INC(i, 5)
+  END
+END Add;
+
+(* Whether the character r is an ASCII character or one toAsciiChar
+   turns into one; if so, that character is ch *)
+PROCEDURE ToAscii*(r: LONGINT; VAR ch: CHAR): BOOLEAN;
+  VAR lo, hi, mid: INTEGER;
+BEGIN
+  IF (r >= 0) & (r < 80H) THEN ch := CHR(r); RETURN TRUE END;
+  lo := 0; hi := Count - 1;
+  WHILE lo <= hi DO
+    mid := (lo + hi) DIV 2;
+    IF codes[mid] = r THEN ch := chars[mid]; RETURN TRUE
+    ELSIF codes[mid] < r THEN lo := mid + 1
+    ELSE hi := mid - 1
+    END
+  END;
+  RETURN FALSE
+END ToAscii;
+
+BEGIN
+  n := 0;
+''' % (unicodedata.unidata_version, len(pairs)))
+for l in lines:
+    w('  Add("%s");\n' % l)
+w('END PdAscii.\n')

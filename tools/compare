@@ -11,7 +11,7 @@
 #     pandoc --wrap=none --syntax-highlighting=none -f markdown -t FORMAT
 #     PODOC -t FORMAT
 #
-# are run, and for html also with -s. Outputs go in OUTDIR; a line
+# are run, and for html and ms also with -s. Outputs go in OUTDIR; a line
 # "DIFF <format> <input> (<pandoc status>/<podoc status>) <n>" is
 # printed for each pair that differs, n being the number of lines diff
 # shows. Known differences (docs/user/differences.md), TeX math for
@@ -59,7 +59,7 @@ input() {
   shift 3
   for f in $formats; do
     one "$idir" "$ifile" "$itag" "$f" "$@"
-    if [ "$f" = html ]; then one "$idir" "$ifile" "$itag-s" "$f" -s "$@"; fi
+    if [ "$f" = html ] || [ "$f" = ms ]; then one "$idir" "$ifile" "$itag-s" "$f" -s "$@"; fi
   done
 }
 

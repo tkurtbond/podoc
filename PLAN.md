@@ -337,7 +337,7 @@ are set by each writer, through `PdContext.DefField` and
 user data directory (`$XDG_DATA_HOME/pandoc`, or `~/.pandoc` when only
 that exists), which on the user's machine is `~/.pandoc`.
 
-## Phase 7: The HTML writer
+## Phase 7: The HTML writer [done]
 
 ### Phase 7.1: Blocks and inlines [done]
 
@@ -351,16 +351,16 @@ that exists), which on the user's machine is `~/.pandoc`.
   `--toc-depth`); `--number-sections`.
 - Acceptance: the user's HTML targets are equivalent to pandoc's.
 
-## Phase 8: The ms writer
+## Phase 8: The ms writer [done]
 
-### Phase 8.1: Blocks and inlines
+### Phase 8.1: Blocks and inlines [done]
 
 - Every element of §3.3: escapes (`\&` before `.` and `'`, `\e`), the
   special characters, smart quotes and dashes, font changes, lists,
   block quotes, rules, line blocks, footnotes, images.
 - Tables through `tbl`.
 
-### Phase 8.2: Standalone ms
+### Phase 8.2: Standalone ms [done]
 
 - The default template and the user's `tkb.ms` and `statement.ms`.
 - The title block, authors, abstract, date; `--toc` (`.TC`);
@@ -548,6 +548,8 @@ Oberon (decision 7).
   full-width, 0 for combining marks, 1 otherwise).
 - Citations, `--citeproc`.
 - Image conversion for ConTeXt beyond SVG.
+- The ms writer: TeX math to `eqn` (texmath's `writeEqn`), and
+  syntax highlighting.
 - Templates: the pipes `left`, `right` and `center` (block layout);
   the `meta-json` variable; `--variable-json`; `--data-dir`; the
   "expecting ..." part of template error messages.
@@ -706,3 +708,31 @@ Oberon (decision 7).
   (docs/user/differences.md). All 49 markdown files of Lost-Worlds and
   Galactic-Bounty-Hunters gave pandoc's HTML byte for byte, without
   and with `-s`, and with `-s --toc -N`. Phase 8 next.
+- 2026-11-20: Phase 8 done. `PdMs` writes pandoc's ms: escapes,
+  fonts (`\f[...]` from the features on), small caps, smart
+  punctuation, links and anchors as `.pdfhref` when `pdf-engine` is
+  set, headings (`.SH`/`.NH`, PDF bookmarks, `.XS`/`.XE` entries for
+  `--toc`), lists with pandoc's markers and indents, definition
+  lists, block quotes, line blocks, code blocks, notes (`.FS`/`.FE`),
+  images and figures (`.PSPIC`, `.PDFPIC`, sizes in points), CSL
+  entries, and tables through `tbl`, as pandoc's `toLegacyTable` sees
+  them, with column widths. `PdLayout` gains `SplitSentences`;
+  `PdShared` takes `DocMeta`, `DocAuthors` and `NumUnit` from
+  `PdHtml`; `PdAscii` (made by `tools/mkascii`) is pandoc's
+  `toAsciiChar`. `podoc` adds `-t ms`, the default `ms` template
+  under `-s`, and `--pdf-engine` (sets the variable, as pandoc does
+  when the output is not PDF). `make test` passed under `-O2` and
+  `-OC`: 126 checks, among them 16 new `.ms` expected files, three
+  for the new cases `ms-features`, `ms-pdf` and `ms-standalone`
+  (pandoc's output byte for byte); `blocks.ms`, `inline-basic.ms`,
+  `inlines.ms` and `tables.ms` are podoc's, because of highlighting
+  and TeX math (docs/user/differences.md), and the rest pandoc's.
+  Acceptance: `tools/compare` with `ms` gave 168 of 178 the same, the
+  ten that differ being highlighting and math; and all markdown files
+  of Lost-Worlds, Galactic-Bounty-Hunters and the cases, each with
+  `--pdf-engine=pdfroff`, `--pdf-engine=groff -N --toc`, `-s
+  --template=tkb.ms -N --toc --pdf-engine=pdfroff`, `-s
+  --template=statement.ms` and `-s --pdf-engine=groff -N --toc
+  --toc-depth=2`, gave pandoc's ms byte for byte (330 runs), except
+  the same highlighting and math. json and html still compare as
+  after Phase 7. Phase 9 next.

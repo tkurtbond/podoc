@@ -1,0 +1,183 @@
+.NH 1
+Héading with x\*{2\*} and H\*<2\*>O and S\s-2MALL\s0
+.pdfhref O 1 "\*[SN]  \376\377\000H\000\351\000a\000d\000i\000n\000g\000 \000w\000i\000t\000h\000 \000x\000\262\000 \000a\000n\000d\000 \000H\040\202\000O\000 \000a\000n\000d\000 \000S\000M\000A\000L\000L"
+.pdfhref M "he-ad"
+.XS
+.pdfhref L -D "he-ad" \
+ -- "	\*[SN]\~\~Héading with x\*{2\*} and H\*<2\*>O and S\s-2MALL\s0"
+.XE
+.SH 2
+Unnumbered \(lqquoted\(rq heading
+.pdfhref O 2 "\376\377\000U\000n\000n\000u\000m\000b\000e\000r\000e\000d\000 \040\034\000q\000u\000o\000t\000e\000d\040\035\000 \000h\000e\000a\000d\000i\000n\000g"
+.pdfhref M "unnumbered-quoted-heading"
+.XS
+.pdfhref L -D "unnumbered-quoted-heading" \
+ -- "		Unnumbered \(lqquoted\(rq heading"
+.XE
+.LP
+\&.leading period and `single' \(lqdouble\(rq and \(at \(ti \(ha \(ga and a M\s-2IXED\s0 S\s-2MALLCAPS\s0 3\s-2X\s0.
+.PDFPIC "pic.pdf" "144p" "85p"
+.ce 1
+A caption with \f[I]emph\f[R]
+.sp 1
+.LP
+[IMAGE: ] \" "pic.png" "0p"
+.PP
+.PSPIC "pic.eps" "75p"
+inline.
+.IP "   i." 6
+one
+.IP "  ii." 6
+two
+.IP " iii." 6
+three
+.IP " (a)" 5
+alpha
+.IP " (b)" 5
+beta
+.IP " 1." 4
+default
+.IP " 2." 4
+second
+.IP " 7)" 4
+seven
+.IP " 8)" 4
+eight
+.IP "\f[B]Term \f[BI]one\f[B]\f[R]" 3
+Definition one.
+.RS 3
+Second paragraph.
+.RE
+.IP "\f[B]Term two\f[R]" 3
+.IP
+.nf
+\f[C]
+code def
+\f[]
+.fi
+.RS 3
+.RE
+\(bu .RS 3
+.IP
+.nf
+\f[C]
+code item
+\f[]
+.fi
+.RE
+.IP \(bu 3
+item
+.RS 3
+.LP
+continued
+.RE
+\(bu .RS 3
+.QS
+.LP
+quoted
+.QE
+.RE
+.IP " 1." 4
+first
+.RS 4
+.LP
+second para
+.RE
+.LP
+line one
+.br
+\ \ line two
+.PP
+A note.\**
+.FS
+Note text.
+.PP
+More note.
+.FE
+And another.\**
+.FS
+.IP
+.nf
+\f[C]
+code note
+\f[]
+.fi
+.FE
+.LP
+\c
+.pdfhref L -D "he-ad" -A "\c" \
+ -- "link"
+\& and \c
+.pdfhref W -D "https://example.com/a%20b?q=1%40x" -A "\c" \
+ -- "web"
+\& and \c
+.pdfhref W -D "mailto:me%40example.com" -A "\c" \
+ -- "me\(atexample.com"
+\&.
+.IP "\f[B]Term with note\**
+.FS
+in a term
+.FE
+\f[R]" 3
+def
+.RS 3
+.RE
+.HLINE
+.pdfhref M "div-id"
+.LP
+Div para.
+.PP
+Caption \f[I]here\f[R].
+.na
+.TS
+delim(@@) tab(	);
+l r.
+T{
+A
+T}	T{
+B
+T}
+_
+T{
+1
+T}	T{
+2
+T}
+.TE
+.ad
+.PP
+Multiline with widths.
+.na
+.nr LLold \n[LL]
+.TS
+delim(@@) tab(	);
+cw(16.5n) cw(24.3n).
+T{
+Wide one
+T}	T{
+Wide two
+T}
+_
+T{
+.nr LL 16.5n
+x
+T}	T{
+.nr LL 24.3n
+y
+T}
+T{
+.nr LL 16.5n
+z
+T}	T{
+.nr LL 24.3n
+w
+T}
+.TE
+.nr LL \n[LLold]
+.ad
+.LP
+Line one
+.br
+line two.
+.PP
+\f[CR]code\f[R] and \f[CR].dot\f[R] and \f[B]bold \f[BI]both\f[B]\f[R] and \m[strikecolor]strike\m[].

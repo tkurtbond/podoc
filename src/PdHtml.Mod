@@ -539,25 +539,6 @@ BEGIN
   RETURN (ch >= "0") & (ch <= "9")
 END IsDigit;
 
-(* Splits s, a dimension, into the digits before and after its point,
-   and its unit; FALSE if its number is not one *)
-PROCEDURE NumUnit(s: Rope; VAR int, frac, unit: Rope): BOOLEAN;
-  VAR b: Buf; n, i, e, p: LONGINT;
-BEGIN
-  b := ToBuf(s); n := Len(s); e := 0;
-  WHILE (e < n) & (IsDigit(b[e]) OR (b[e] = ".")) DO INC(e) END;
-  i := 0; WHILE (i < e) & IsDigit(b[i]) DO INC(i) END;
-  IF i = 0 THEN RETURN FALSE END;
-  int := Ropes.FromSubchars(b^, 0, i); frac := NIL;
-  IF i < e THEN
-    p := i + 1; i := p;
-    WHILE (i < e) & IsDigit(b[i]) DO INC(i) END;
-    IF (i = p) OR (i < e) THEN RETURN FALSE END;
-    frac := Ropes.FromSubchars(b^, p, i - p)
-  END;
-  unit := Ropes.FromSubchars(b^, e, n - e);
-  RETURN TRUE
-END NumUnit;
 
 (* The digits of int without leading zeros, "0" if they are all zeros *)
 PROCEDURE StripZeros(int: Rope): Rope;
@@ -641,7 +622,7 @@ PROCEDURE AddDimension(a: A.Attr; kvs: A.KeyVal; name: ARRAY OF CHAR);
 BEGIN
   at := A.NewAttr(NIL); at.attrs := kvs;
   v := A.GetKeyVal(at, name, found);
-  IF ~found OR ~NumUnit(v, int, frac, unit) THEN RETURN END;
+  IF ~found OR ~Sh.NumUnit(v, int, frac, unit) THEN RETURN END;
   IF (Len(unit) = 0) OR Eq(unit, "px") THEN
     A.AddKeyVal(a, R(name), StripZeros(int))
   ELSIF Eq(unit, "%") THEN
@@ -1379,24 +1360,6 @@ END TocItems;
 
 (* Metadata for the template *)
 
-(* The inlines of the metadata value of key, as pandoc's docTitle *)
-PROCEDURE MetaInlines(meta: A.MetaMapV; key: ARRAY OF CHAR): A.Inline;
-  VAR v: A.MetaValue; b: A.Block;
-BEGIN
-  v := A.GetMeta(meta, key);
-  IF v = NIL THEN RETURN NIL END;
-  WITH
-    v: A.MetaStringV DO RETURN A.NewStr(v.s)
-  | v: A.MetaInlinesV DO RETURN v.inlines
-  | v: A.MetaBlocksV DO
-    b := v.blocks;
-    IF (b # NIL) & (b.next = NIL) & ((b.kind = A.Plain) OR (b.kind = A.Para)) THEN
-      RETURN b(A.InlinesBlk).inlines
-    END
-  ELSE
-  END;
-  RETURN NIL
-END MetaInlines;
 
 (* s escaped as pandoc's escapeStringForXML *)
 PROCEDURE EscapeXml(s: Rope): Rope;
@@ -1419,36 +1382,10 @@ END AddAuthor;
 
 (* author-meta: the authors, as pandoc's docAuthors orders them *)
 PROCEDURE Authors(meta: A.MetaMapV): T.Value;
-  VAR v: A.MetaValue; l: T.Value; it: A.MetaItem; pass: INTEGER; x: A.MetaValue;
-    b: A.Block;
+  VAR l: T.Value; a: A.InlineList;
 BEGIN
-  l := T.NewList();
-  v := A.GetMeta(meta, "author");
-  IF v = NIL THEN RETURN l END;
-  WITH
-    v: A.MetaStringV DO AddAuthor(l, A.NewStr(v.s))
-  | v: A.MetaInlinesV DO AddAuthor(l, v.inlines)
-  | v: A.MetaListV DO
-    FOR pass := 0 TO 3 DO
-      it := v.items;
-      WHILE it # NIL DO
-        x := it.value;
-        IF (pass = 0) & (x IS A.MetaInlinesV) THEN AddAuthor(l, x(A.MetaInlinesV).inlines)
-        ELSIF (pass = 1) OR (pass = 2) THEN
-          IF x IS A.MetaBlocksV THEN
-            b := x(A.MetaBlocksV).blocks;
-            IF (b # NIL) & (b.next = NIL)
-               & ((pass = 1) & (b.kind = A.Plain) OR (pass = 2) & (b.kind = A.Para)) THEN
-              AddAuthor(l, b(A.InlinesBlk).inlines)
-            END
-          END
-        ELSIF (pass = 3) & (x IS A.MetaStringV) THEN AddAuthor(l, A.NewStr(x(A.MetaStringV).s))
-        END;
-        it := it.next
-      END
-    END
-  ELSE
-  END;
+  l := T.NewList(); a := Sh.DocAuthors(meta);
+  WHILE a # NIL DO AddAuthor(l, a.inlines); a := a.next END;
   RETURN l
 END Authors;
 
@@ -1645,10 +1582,10 @@ BEGIN
     C.DefField(ctx, "toc", Lit(toc)); C.DefField(ctx, "table-of-contents", Lit(toc))
   END;
   C.DefField(ctx, "author-meta", Authors(meta));
-  date := NormalizeDate(EscapeXml(Sh.Stringify(MetaInlines(meta, "date"))));
+  date := NormalizeDate(EscapeXml(Sh.Stringify(Sh.DocMeta(meta, "date"))));
   IF date # NIL THEN C.DefField(ctx, "date-meta", Lit(date)) END;
   C.DefField(ctx, "description-meta", Lit(EscapeXml(MetaString(meta, "description"))));
-  s := EscapeXml(Sh.Stringify(MetaInlines(meta, "title")));
+  s := EscapeXml(Sh.Stringify(Sh.DocMeta(meta, "title")));
   C.DefField(ctx, "pagetitle", Lit(s));
   C.DefField(ctx, "idprefix", Lit(idPrefix));
   C.DefField(ctx, "table-caption-below", T.NewBool(FALSE));

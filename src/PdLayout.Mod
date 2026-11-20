@@ -415,6 +415,65 @@ BEGIN
   RETURN c
 END MapText;
 
+(* Whether the text r ends a sentence, as pandoc's splitSentences
+   sees it: it ends in . ! or ? and is not a single upper case letter
+   before that; or it ends in ) ] " or U+201D after . or ! or after a ?
+   that does not follow a single upper case letter (Haskell's
+   precedence, kept) *)
+PROCEDURE SentenceEnd(r: Ropes.Rope): BOOLEAN;
+  VAR n, i: LONGINT; ch, d: CHAR; rune: Utf8.Rune;
+
+  (* Whether buf[0 .. e-1] is one upper case letter *)
+  PROCEDURE Initial(e: LONGINT): BOOLEAN;
+    VAR j: LONGINT; c: INTEGER;
+  BEGIN
+    IF e <= 0 THEN RETURN FALSE END;
+    j := 0;
+    IF ~Utf8.Decode(buf^, j, rune) OR (j # e) THEN RETURN FALSE END;
+    c := Unicode.Category(rune);
+    RETURN (c = Unicode.Lu) OR (c = Unicode.Lt)
+  END Initial;
+
+BEGIN
+  n := Ropes.Length(r);
+  IF n = 0 THEN RETURN FALSE END;
+  PdIO.Reserve(buf, 0, n + 1);
+  Ropes.Blit(r, 0, buf^, 0, n); buf[n] := 0X;
+  ch := buf[n - 1]; i := n - 1;
+  IF (ch = ".") OR (ch = "!") OR (ch = "?") THEN RETURN ~Initial(i)
+  ELSIF (ch = ")") OR (ch = "]") OR (ch = 22X) OR (ch = 9DX) & (n >= 3)
+        & (buf[n - 2] = 80X) & (buf[n - 3] = 0E2X) THEN
+    IF ch = 9DX THEN i := n - 3 END;
+    IF i = 0 THEN RETURN FALSE END;
+    d := buf[i - 1];
+    RETURN (d = ".") OR (d = "!") OR (d = "?") & ~Initial(i - 1)
+  END;
+  RETURN FALSE
+END SentenceEnd;
+
+(* pandoc's splitSentences (Text.Pandoc.Writers.Shared): d with the
+   breaking space after each text that ends a sentence (and an
+   after-break part between them) made a new line, so that roff sees
+   one sentence a line. Only the top-level concatenation of d is
+   looked at. *)
+PROCEDURE SplitSentences*(d: Doc): Doc;
+  VAR parts: Stack; np, i, j: LONGINT;
+BEGIN
+  parts := NIL; Unfold(d, parts, np);
+  i := 0; j := 0;
+  WHILE i < np DO
+    IF (parts[i].kind = text) & (i + 2 < np) & (parts[i + 1].kind = afterBreak)
+       & (parts[i + 2].kind = breakingSpace) & SentenceEnd(parts[i].s) THEN
+      parts[j] := parts[i]; parts[j + 1] := New(newLine); INC(j, 2); INC(i, 3)
+    ELSIF (parts[i].kind = text) & (i + 1 < np) & (parts[i + 1].kind = breakingSpace)
+          & SentenceEnd(parts[i].s) THEN
+      parts[j] := parts[i]; parts[j + 1] := New(newLine); INC(j, 2); INC(i, 2)
+    ELSE parts[j] := parts[i]; INC(j); INC(i)
+    END
+  END;
+  RETURN Join(parts, 0, j)
+END SplitSentences;
+
 (* Columns *)
 
 (* Whether d starts with text (doclayout's isNonBlank) *)

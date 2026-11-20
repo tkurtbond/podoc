@@ -91,3 +91,22 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
   names), with `%x` and `%D` read as `%m/%d/%y`.
 - Raw blocks and inlines are passed through for the formats `html`,
   `html5` and `html4`; every other raw format is dropped.
+
+## The ms writer
+
+- Code is not highlighted. pandoc's ms writer highlights code blocks
+  and inline code that name a language even with
+  `--syntax-highlighting=none`, writing `\*[NormalTok "..."]`
+  strings that are left undefined without the highlighting macros;
+  podoc writes the code as plain text.
+- TeX math is written as its TeX: `$...$` inline, and `$$...$$`
+  inside `.RS 3` ... `.RE` for display math (pandoc's fallback when
+  it cannot convert a formula). pandoc converts math with texmath to
+  `eqn`: `@...@` inline and `.EQ` ... `.EN`.
+- The plain text of a heading in its PDF bookmark (`.pdfhref O`)
+  comes from podoc's own approximation of pandoc's plain writer.
+- Small caps use Unicode's simple upper-case mapping, one character
+  for one.
+- Output is not wrapped, as for HTML.
+- Raw blocks and inlines are passed through for the format `ms`
+  only.
