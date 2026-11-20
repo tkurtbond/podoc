@@ -101,6 +101,21 @@ Grid tables, the `%` title block, raw TeX blocks, and citations are
 not read. Extensions cannot be turned on or off. The full list of what
 is not read is in [differences.md](differences.md).
 
+podoc reads only markdown. A reStructuredText document can be
+translated once with pandoc, where pandoc is installed:
+
+    pandoc -s -r rst -w markdown-grid_tables --columns=110 \
+      -o book.md book.rst
+
+Grid tables then become multiline tables, which podoc reads; a wide
+`--columns` keeps a wide table's column proportions. A multiline
+table's column widths come from its dashes, so widths reST gives
+exactly (`:widths:`) may come out a little different. On the Minimal
+OpenD6 SRD, 5,090 lines of reST, the ms PDF podoc made from the
+translation had the same 83 pages as pandoc's from the reST, the
+same text but for a wrong quotation mark the translation corrected,
+and the same layout but for a few table column widths.
+
 ## Templates
 
 podoc carries pandoc 3.10's default templates for `html5`, `ms`,

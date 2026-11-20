@@ -1100,3 +1100,23 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
     PDFs of 12, as before.
   - `-O2` and `-OC` gave the same words everywhere; no temporary
     directories left.
+- 2026-11-20: a reStructuredText document through markdown. The
+  Minimal OpenD6 SRD (`~/current/RPG/Mini-Six/SRD`, 5,090 lines of
+  reST, raw ms and ConTeXt blocks, grid and simple tables, line
+  blocks) translated with `pandoc -s -r rst -w markdown-grid_tables
+  --columns=110` (grid tables become multiline tables; the wider
+  columns keep a 107-column grid table's proportions). podoc's JSON
+  from it is byte for byte pandoc 3.10's. Its makefile's
+  `.stmt.ms.pdf` options with `-r markdown` (template `statement`,
+  `-L general.lua`, `--pdf-engine-opt=-P-p8.5i,5.5i`), with groff
+  1.23.0 on atla, made 83 pages, as the existing PDF (pandoc from the
+  reST, groff 1.23.0) has; `pdftotext` gives the same text but one
+  quote (the source's `”Contributors”`, which the translation makes
+  `“Contributors”`). At 50 dpi 75 pages are pixel-identical; 6 differ
+  in a few table column widths (a multiline table's widths come from
+  its dashes, and cannot hold reST's exact widths or `:widths:`), one
+  in the quote, one (66) in a sentence space. pandoc's `--wrap=none`
+  ms from the same markdown is byte for byte podoc's; its default
+  wrapping ends a line after `Speck!”`, where groff adds sentence
+  space, which is page 66's difference. The SRD's files were not
+  changed.
