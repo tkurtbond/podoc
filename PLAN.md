@@ -1149,3 +1149,17 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
   break the first line sooner than under `-Tpdf`, so the repeated
   word is a different one, but it is again the word at the start of
   the second line. So the bug is in ms, not in a device.
+- 2026-11-20: the SRD's markdown on atla, erekose and terhali with
+  groff 1.24.2 first in the PATH, built as for 1.25.0. Every build
+  and podoc run ended with status 0; each PDF has 83 pages and 301
+  bookmarks, and the three PDFs are the same. Against atla's groff
+  1.23.0 PDF the words are the same (no repeated heading words), and
+  every word but the page number is within 0.02 pt of its place
+  (`pdftotext -bbox`), so lines and pages break the same. The page
+  number sets 12 pt (one vee) higher on every page: 1.24's ms
+  subtracts one vee from the footer trap that `FM` gives (its NEWS);
+  `statement.ms` sets `FM` to 0.75i. 1.24.2's gropdf subsets the
+  fonts (209 KB against 737 KB), so `pdftotext` splits "−5" into two
+  words on seven pages and spaces the scale table's columns
+  differently, though the glyphs have not moved. The Symbola error is
+  as under 1.25.0. Temporary directories removed on all three hosts.

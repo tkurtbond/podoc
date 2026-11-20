@@ -27,7 +27,8 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
     repeats a word, and spaces out a line, in an `.SH` or `.NH`
     heading that wraps to a second line, under `-Tpdf` and `-Tps`
     and under `-Tascii`, `-Tutf8` and `-Tlatin1` alike; 1.24.2 and
-    1.23.0 do not. Since groff 1.24,
+    1.23.0 do not. From 1.24 on, ms sets the page footer one line
+    higher than 1.23.0 did, which moves nothing else. Since groff 1.24,
     `pdfroff` is not part of groff: with the pdfmark macros, it is now
     the separate groff-pdfmark package. An older `pdfroff` left on the
     PATH may then make an empty PDF without reporting an error;
@@ -118,7 +119,10 @@ exactly (`:widths:`) may come out a little different. On the Minimal
 OpenD6 SRD, 5,090 lines of reST, the ms PDF podoc made from the
 translation had the same 83 pages as pandoc's from the reST, the
 same text but for a wrong quotation mark the translation corrected,
-and the same layout but for a few table column widths.
+and the same layout but for a few table column widths. With groff
+1.24.2 its layout was the same again but for the page numbers, one
+line higher; with groff 1.25.0, three headings that wrap repeat a
+word (see "What it needs").
 
 ## Templates
 
