@@ -1,0 +1,28 @@
+# Cases (test/cases/<name>.md) whose markdown, written by podoc and read
+# again, gives the same JSON: tools/roundtrip. The others lose what
+# markdown cannot hold, as in pandoc: consecutive lists gain `<!-- -->`
+# blocks, simple tables gain AlignLeft, raw HTML blocks come back as
+# inlines, metadata numbers and some block scalars change.
+roundtrip
+context-standalone
+edges
+empty
+html-pagetitle
+html-preserve
+inline-basic
+inlines
+join
+links
+meta-blank
+meta-cli
+meta-comments
+meta-dash
+meta-files
+meta-fold
+meta-hr
+meta-lists
+meta-md
+meta-multi
+meta-null
+meta-warnings
+nonewline

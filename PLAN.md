@@ -382,13 +382,13 @@ that exists), which on the user's machine is `~/.pandoc`.
 - Acceptance: the ConTeXt for the user's documents is equivalent to
   pandoc's.
 
-## Phase 10: The markdown writer
+## Phase 10: The markdown writer [done]
 
 pandoc's is 1,928 lines of Haskell (`Writers/Markdown.hs` and
 `Writers/Markdown/`); podoc's should be 1,200 to 1,500 lines of
 Oberon (decision 7).
 
-### Phase 10.1: Blocks and inlines
+### Phase 10.1: Blocks and inlines [done]
 
 - `PdMdWriter`: every element the reader produces, written as pandoc
   markdown, unwrapped: headers (ATX), lists with pandoc's indentation,
@@ -402,7 +402,7 @@ Oberon (decision 7).
   pandoc does; smart quotes and dashes written back as their ASCII
   forms.
 
-### Phase 10.2: Standalone markdown and the round trip
+### Phase 10.2: Standalone markdown and the round trip [done]
 
 - `-s` writes the metadata as a YAML block (so `PdYaml` gains a
   writer), with the default markdown template.
@@ -412,6 +412,13 @@ Oberon (decision 7).
 - Acceptance: the `-whole.md` targets of Lost-Worlds and
   Galactic-Bounty-Hunters (after Phase 12) read back to the same AST
   as pandoc's `-whole.md`.
+- As done: pandoc's own round trip is not exact (consecutive lists,
+  simple tables' alignments, raw HTML blocks, numbers in metadata:
+  docs/user/differences.md), so the round-trip test is run on the
+  cases that round-trip, listed in `test/roundtrip.txt`, among them
+  `roundtrip`, made for it; elsewhere podoc's markdown must read back
+  as pandoc's does. The `-whole.md` acceptance moves to Phase 12,
+  which builds those targets.
 
 ## Phase 11: The command line
 
@@ -533,7 +540,8 @@ Oberon (decision 7).
 - JSON filters: a JSON reader for the AST and `--filter prog` over
   standard input and output (§8.4).
 - Output wrapping at `--columns` as pandoc's `doclayout` does.
-- Grid tables.
+- Grid tables, in the reader and the markdown writer; pipe tables in
+  the markdown writer (written as HTML for now).
 - The markdown reader, not needed by the user's documents so far:
   the `%` title block; raw TeX blocks, environments, macros and the
   commands pandoc's LaTeX reader reads specially; citations and
@@ -767,3 +775,34 @@ Oberon (decision 7).
   --toc -N -V papersize=a4 -M lang=en-US`, gave pandoc's ConTeXt byte
   for byte (112 runs) except the four of `CLAUDE.md`, highlighting.
   The filters these builds use come in Phase 13. Phase 10 next.
+- 2026-11-20: Phase 10 done. `PdMdWriter` writes pandoc's markdown
+  (pandoc 3.10's default extensions, unwrapped, or with
+  `--wrap=preserve` the input's line breaks): escapes where pandoc
+  escapes, attributes, every inline (autolinks, reference-free links
+  and images, notes, spans, code, math, raw), ATX headings with
+  pandoc's identifier checks, fenced and indented code, fenced divs,
+  block quotes, the lists with pandoc's markers, indents and
+  `<!-- -->` separators, task lists, definition lists, line blocks,
+  figures, simple and multiline tables (widths as doclayout's
+  `realLength`), the HTML fallback for other tables, and notes at the
+  end. Under `-s`: the metadata as a YAML block, the default markdown
+  template, `--toc` and `-N`. Reader fixes: a paragraph that is only
+  an indented HTML block no longer leaves an empty Plain; C1 controls
+  and the soft hyphen have width 0 in tables, in the reader and in
+  `PdLayout`. `tools/roundtrip` (in `make test`) writes each case
+  named in `test/roundtrip.txt` with `-s --wrap=preserve -t markdown`
+  and reads it again; the JSON must be the same. `make test` passed
+  under `-O2` and `-OC`: 123 of 123 cases, among them 40 new
+  `.markdown` expected files (pandoc's `--wrap=none -t markdown`
+  output, byte for byte) and the new case `roundtrip`, and 23 of 23
+  round trips. Acceptance: `make compare` gave 831 of 855 the same,
+  json and markdown everywhere; the 24 that differ are math (html, ms)
+  and highlighting (ms, context). pandoc's `testsuite.txt` and
+  `tables.txt` give pandoc's markdown except where the reader does not
+  read the `%` title block and raw TeX. On the user's 49 documents the
+  round trip gives the same AST for 40; the other 9 read back exactly
+  as pandoc's own round trip does (simple tables' alignments, curly
+  quotes). For every case, podoc's markdown read back by podoc gives
+  what pandoc gives for it, except for raw TeX blocks; where the
+  round trip fails it fails in pandoc too
+  (docs/user/differences.md). Phase 11 next.

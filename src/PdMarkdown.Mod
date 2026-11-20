@@ -1236,7 +1236,8 @@ BEGIN
       kind := A.Para; B.pos := p + 1
     END
   END;
-  A.AddBlock(l, A.NewInlinesBlock(kind, inl));
+  (* B.plain drops a Plain with no inlines; B.para keeps an empty Para *)
+  IF (kind = A.Para) OR (inl # NIL) THEN A.AddBlock(l, A.NewInlinesBlock(kind, inl)) END;
   RETURN TRUE
 END Para;
 

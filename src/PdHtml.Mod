@@ -1315,6 +1315,20 @@ BEGIN
   END
 END TocItems;
 
+(* The table of contents of blocks, as pandoc's toTableOfContents
+   makes it: a bullet list, NIL if there are no headings. number and
+   depth are -N and --toc-depth *)
+PROCEDURE TableOfContents*(blocks: A.Block; number: BOOLEAN; depth: INTEGER): A.Block;
+  VAR items: A.BlockList; saveNumber: BOOLEAN; saveDepth: INTEGER;
+BEGIN
+  saveNumber := numberSections; saveDepth := tocDepth;
+  numberSections := number; tocDepth := depth;
+  items := NIL; TocItems(Sh.MakeSections(number, -1, blocks), items);
+  numberSections := saveNumber; tocDepth := saveDepth;
+  IF items = NIL THEN RETURN NIL END;
+  RETURN A.NewBulletList(items)
+END TableOfContents;
+
 (* Metadata for the template *)
 
 
@@ -1501,12 +1515,43 @@ END Lit;
 
 (* Writes the document doc as HTML: its body, or, if tmpl is not NIL,
    the template filled in *)
+PROCEDURE ResetState;
+BEGIN
+  notes := NIL; noteCount := 0; mathSeen := FALSE; cslSeen := FALSE; cslHasSpacing := FALSE;
+  inLink := 0; inCite := 0; inCslEntry := 0
+END ResetState;
+
+(* body, with the notes' section after it if there are notes *)
+PROCEDURE AddNotes(body: Rope): Rope;
+BEGIN
+  IF notes # NIL THEN
+    body := Cat(Cat(body, nl), PairS(R("<section"), "id", Cat(idPrefix, R("footnotes"))));
+    body := CatL(body, ' class="footnotes footnotes-end-of-document" role="doc-endnotes">');
+    body := CatS(CatL(Cat(CatL(CatL(body, "<hr />"), "<ol>"), notes), "</ol>"), "</section>")
+  END;
+  RETURN body
+END AddNotes;
+
+(* The block b alone (not those after it) as HTML, as pandoc writes a
+   document holding only b, without a template *)
+PROCEDURE Fragment*(b: A.Block): Rope;
+  VAR next: A.Block; r: Rope; empty: BOOLEAN;
+BEGIN
+  ResetState;
+  next := b.next; b.next := NIL;
+  r := Block(b, empty);
+  b.next := next;
+  IF empty THEN r := NIL END;
+  r := AddNotes(r);
+  ResetState;
+  RETURN r
+END Fragment;
+
 PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
   VAR sections: A.Block; ctx: T.Value; body, toc, s, date: Rope; items: A.BlockList;
     empty: BOOLEAN; meta: A.MetaMapV; v: T.Value;
 BEGIN
-  notes := NIL; noteCount := 0; mathSeen := FALSE; cslSeen := FALSE; cslHasSpacing := FALSE;
-  inLink := 0; inCite := 0; inCslEntry := 0;
+  ResetState;
   meta := doc.meta;
   sections := Sh.MakeSections(numberSections, -1, doc.blocks);
   IF tmpl # NIL THEN ctx := C.Build(meta, BlockDoc, InlineDoc) END;
@@ -1515,12 +1560,7 @@ BEGIN
     items := NIL; TocItems(sections, items);
     IF items # NIL THEN toc := Block(A.NewBulletList(items), empty) END
   END;
-  body := Blocks(sections);
-  IF notes # NIL THEN
-    body := Cat(Cat(body, nl), PairS(R("<section"), "id", Cat(idPrefix, R("footnotes"))));
-    body := CatL(body, ' class="footnotes footnotes-end-of-document" role="doc-endnotes">');
-    body := CatS(CatL(Cat(CatL(CatL(body, "<hr />"), "<ol>"), notes), "</ol>"), "</section>")
-  END;
+  body := AddNotes(Blocks(sections));
   IF tmpl = NIL THEN
     PdIO.WriteRope(body); PdIO.WriteLn;
     RETURN

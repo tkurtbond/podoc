@@ -138,6 +138,8 @@ PROCEDURE CharWidth*(p: LONGINT; VAR q: LONGINT): INTEGER;
 BEGIN
   q := RuneAt(p, r);
   IF q <= p THEN q := p + 1 END;
+  (* doclayout: control characters and the soft hyphen have width 0 *)
+  IF (r < 20H) OR (r >= 7FH) & (r <= 9FH) OR (r = 0ADH) THEN RETURN 0 END;
   IF r < 300H THEN RETURN 1 END;
   w := Unicode.EastAsianWidth(r);
   IF (w = Unicode.widthW) OR (w = Unicode.widthF) THEN RETURN 2 END;

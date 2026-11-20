@@ -1085,6 +1085,30 @@ BEGIN
   RETURN q
 END ListMarker;
 
+(* beginsWithOrderedListMarker, as pandoc's markdown writer has it:
+   whether the first 10 bytes of s are exactly an ordered list marker,
+   other than an upper-case letter, or I, V, X, L, C, D or M, before a
+   period (which needs two spaces after it anyway). The reader's state
+   is kept. *)
+PROCEDURE IsOrderedListMarker*(s: PdAst.Rope): BOOLEAN;
+  VAR f: Frame; text: Text; n, num, q, saveNext: LONGINT; style, delim: INTEGER;
+    ok: BOOLEAN; saveEx: PdAst.KeyVal;
+BEGIN
+  n := Ropes.Length(s);
+  IF n > 10 THEN n := 10 END;
+  IF n = 0 THEN RETURN FALSE END;
+  text := NewText(n); Ropes.Blit(s, 0, text^, 0, n);
+  saveNext := nextExample; saveEx := examples; nextExample := 1; examples := NIL;
+  Enter(f, text, n);
+  q := ListMarker(0, TRUE, num, style, delim);
+  ok := (q = n) & ~((delim = PdAst.Period) & ((style = PdAst.UpperAlpha)
+    OR (style = PdAst.UpperRoman) & ((num = 1) OR (num = 5) OR (num = 10)
+      OR (num = 50) OR (num = 100) OR (num = 500) OR (num = 1000))));
+  Leave(f);
+  nextExample := saveNext; examples := saveEx;
+  RETURN ok
+END IsOrderedListMarker;
+
 (* orderedListStart: with anyStyle, any marker, whose number, style and
    delimiter are set; otherwise a marker of style and delim, whose
    number is set. *)

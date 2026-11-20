@@ -1,0 +1,6 @@
+Soft
+breaks
+kept.[^1]
+
+[^1]: A
+    note.

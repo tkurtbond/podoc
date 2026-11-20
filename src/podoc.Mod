@@ -15,7 +15,7 @@ MODULE podoc;
    (-B), include-after (-A), header-includes (-H) and curdir. *)
 
 IMPORT Platform, ArgParser, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
-  T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt;
+  T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt, PdMdWriter;
 
 CONST
   Version = "0.1";
@@ -364,7 +364,7 @@ BEGIN
   IF to = "" THEN to := "source" END;
   IF to = "html5" THEN to := "html" END;
   IF (to # "source") & (to # "json") & (to # "html") & (to # "ms")
-     & (to # "context") THEN
+     & (to # "context") & (to # "markdown") THEN
     PdIO.Message3("Unknown output format '", to, "'");
     PdIO.Exit(PdIO.UnknownWriter)
   END;
@@ -383,6 +383,7 @@ BEGIN
   ELSIF standalone & (to = "html") THEN C.GetDefault("html5", tmpl)
   ELSIF standalone & (to = "ms") THEN C.GetDefault("ms", tmpl)
   ELSIF standalone & (to = "context") THEN C.GetDefault("context", tmpl)
+  ELSIF standalone & (to = "markdown") THEN C.GetDefault("markdown", tmpl)
   END;
   text := NIL; len := 0;
   IF files = NIL THEN
@@ -412,6 +413,10 @@ BEGIN
   ELSIF to = "context" THEN
     PdConTeXt.SetOptions(numberSections, wrap = "preserve", toc, tocDepth);
     PdConTeXt.WriteDoc(ReadDoc(text, len), tmpl)
+  ELSIF to = "markdown" THEN
+    PdHtml.SetOptions(idPrefix, numberSections, FALSE, FALSE, tocDepth, "-");
+    PdMdWriter.SetOptions(wrap = "preserve", toc, tocDepth, numberSections, idPrefix);
+    PdMdWriter.WriteDoc(ReadDoc(text, len), tmpl)
   ELSIF len > 0 THEN
     PdIO.WriteChars(text^, 0, len)
   END;

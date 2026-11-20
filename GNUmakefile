@@ -5,7 +5,9 @@
 # under both, runs it and compares its output with test/<Name>Test.expected
 # and its standard error with test/<Name>Test.errors (empty if there is no
 # such file); then it runs the case tests, test/cases/, with each podoc
-# (tools/runcases). Neither needs pandoc. `make clean` removes build/.
+# (tools/runcases), and the markdown writer's round trip on the cases
+# test/roundtrip.txt names (tools/roundtrip). None of it needs pandoc.
+# `make clean` removes build/.
 #
 # The libraries podoc uses (ArgParser, Ropes, pounicode) are found in
 # $(POCLIBDIR), ~/.local/lib/poc by default, where their own makefiles
@@ -47,12 +49,14 @@ $(BUILD)/%/podoc: $(SRCS) $(POC_STAMP)
 test: test-o2 test-oc
 
 # pandoc and podoc side by side (tools/compare), where pandoc is installed
-COMPARE_FORMATS ?= json html ms context
+COMPARE_FORMATS ?= json html ms context markdown
 compare: $(BUILD)/OC/podoc
 	tools/compare $(BUILD)/OC/podoc $(BUILD)/compare $(COMPARE_FORMATS)
 
-test-o2: $(TESTS:%=$(BUILD)/O2/test/%.passed) $(BUILD)/O2/cases.passed
-test-oc: $(TESTS:%=$(BUILD)/OC/test/%.passed) $(BUILD)/OC/cases.passed
+test-o2: $(TESTS:%=$(BUILD)/O2/test/%.passed) $(BUILD)/O2/cases.passed \
+  $(BUILD)/O2/roundtrip.passed
+test-oc: $(TESTS:%=$(BUILD)/OC/test/%.passed) $(BUILD)/OC/cases.passed \
+  $(BUILD)/OC/roundtrip.passed
 
 # $* is <model>/test/<Test>. A test is built from the sources, in its own
 # directory.
@@ -70,6 +74,11 @@ $(BUILD)/%.passed: $(SRCS) test/$$(notdir $$*).Mod test/$$(notdir $$*).expected 
 
 $(BUILD)/%/cases.passed: $(BUILD)/%/podoc $(CASES) tools/runcases
 	tools/runcases $(BUILD)/$*/podoc $(BUILD)/$*/cases
+	touch $@
+
+# the markdown writer's round trip (tools/roundtrip)
+$(BUILD)/%/roundtrip.passed: $(BUILD)/%/podoc $(CASES) test/roundtrip.txt tools/roundtrip
+	tools/roundtrip $(BUILD)/$*/podoc $(BUILD)/$*/roundtrip
 	touch $@
 
 clean:

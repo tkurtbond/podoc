@@ -1,0 +1,46 @@
+#!/bin/sh
+# roundtrip PODOC OUTDIR [LIST]
+#
+# The markdown writer's round trip: for each case named in LIST
+# (test/roundtrip.txt by default), one name per line, `#` comments,
+# reads test/cases/<name>.md to JSON, and writes it as markdown
+#
+#     PODOC -s --wrap=preserve -t markdown <name>.md
+#
+# and reads that back to JSON. The two must be the same. Not every case
+# is listed: markdown cannot hold everything the AST can, in pandoc too
+# (docs/user/differences.md). Results go in OUTDIR. Prints an "ok   - "
+# or "FAIL - " line for each, and exits 1 if any failed.
+
+if [ $# -lt 2 ]; then
+  echo "usage: roundtrip PODOC OUTDIR [LIST]" >&2
+  exit 2
+fi
+podoc=$1
+outdir=$2
+list=${3:-test/roundtrip.txt}
+
+case $podoc in /*) ;; *) podoc=$(pwd)/$podoc ;; esac
+case $list in /*) ;; *) list=$(pwd)/$list ;; esac
+mkdir -p "$outdir" || exit 2
+case $outdir in /*) ;; *) outdir=$(pwd)/$outdir ;; esac
+cd test/cases || exit 2
+
+failed=0
+total=0
+while read -r name rest; do
+  case $name in ''|'#'*) continue ;; esac
+  total=$((total + 1))
+  out=$outdir/$name
+  if "$podoc" -t json "$name.md" > "$out.json" 2> "$out.err" &&
+     "$podoc" -s --wrap=preserve -t markdown "$name.md" > "$out.markdown" 2>> "$out.err" &&
+     "$podoc" -t json "$out.markdown" > "$out.again.json" 2>> "$out.err" &&
+     cmp -s "$out.json" "$out.again.json"; then
+    echo "ok   - $name"
+  else
+    echo "FAIL - $name (round trip; see $out.*)"
+    failed=$((failed + 1))
+  fi
+done < "$list"
+echo "$((total - failed)) of $total round trips passed"
+[ $failed -eq 0 ]

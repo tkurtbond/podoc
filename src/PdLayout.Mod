@@ -63,14 +63,18 @@ PROCEDURE CharsWidth(VAR s: ARRAY OF CHAR; i, n: LONGINT): LONGINT;
 BEGIN
   w := 0;
   WHILE i < n DO
-    IF ORD(s[i]) < 80H THEN INC(w); INC(i)
+    IF ORD(s[i]) < 80H THEN
+      (* doclayout: control characters have width 0 *)
+      IF (s[i] >= " ") & (s[i] # 7FX) THEN INC(w) END;
+      INC(i)
     ELSE
       q := i;
       IF ~Utf8.Decode(s, q, r) OR (q <= i) OR (q > n) THEN
         r := 0FFFDH; q := i + 1
       END;
       i := q;
-      IF r < 300H THEN INC(w)
+      IF (r <= 9FH) OR (r = 0ADH) THEN (* control characters, the soft hyphen: 0 *)
+      ELSIF r < 300H THEN INC(w)
       ELSE
         eaw := Unicode.EastAsianWidth(r);
         IF (eaw = Unicode.widthW) OR (eaw = Unicode.widthF) THEN INC(w, 2)
@@ -399,6 +403,39 @@ BEGIN
   RETURN d
 END RemoveFinalNl;
 
+(* Whether d holds a new line, a carriage return or blank lines outside
+   its prefixed, flush and conditional parts (doctemplates' hasNewlines,
+   as pandoc's markdown writer uses it) *)
+PROCEDURE HasNewlines*(d: Doc): BOOLEAN;
+BEGIN
+  WHILE (d # NIL) & (d.kind = concat) DO
+    IF HasNewlines(d.a) THEN RETURN TRUE END;
+    d := d.b
+  END;
+  RETURN (d # NIL) & ((d.kind = newLine) OR (d.kind = carriageReturn)
+                      OR (d.kind = blankLines))
+END HasNewlines;
+
+(* pandoc's delimited: open, d, close, with the new lines, carriage
+   returns, breaking spaces and blank lines at d's start put before open
+   and those at its end after close *)
+PROCEDURE Delimited*(open, close, d: Doc): Doc;
+  VAR parts: Stack; np, i, j: LONGINT;
+
+  PROCEDURE IsWS(x: Doc): BOOLEAN;
+  BEGIN
+    RETURN (x.kind = newLine) OR (x.kind = carriageReturn)
+      OR (x.kind = breakingSpace) OR (x.kind = blankLines)
+  END IsWS;
+
+BEGIN
+  parts := NIL; Unfold(d, parts, np);
+  i := 0; WHILE (i < np) & IsWS(parts[i]) DO INC(i) END;
+  j := np; WHILE (j > i) & IsWS(parts[j - 1]) DO DEC(j) END;
+  RETURN Cat(Join(parts, 0, i),
+    Cat(open, Cat(Join(parts, i, j), Cat(close, Join(parts, j, np)))))
+END Delimited;
+
 (* d with f applied to the text of each of its text parts; their widths
    are kept, as Haskell's fmap keeps them *)
 PROCEDURE MapText*(d: Doc; f: PROCEDURE (r: Ropes.Rope): Ropes.Rope): Doc;
@@ -414,6 +451,28 @@ BEGIN
   END;
   RETURN c
 END MapText;
+
+(* Whether d is one text part, s its text *)
+PROCEDURE SingleText*(d: Doc; VAR s: Ropes.Rope): BOOLEAN;
+BEGIN
+  s := NIL;
+  IF (d # NIL) & (d.kind = text) THEN s := d.s; RETURN TRUE END;
+  RETURN FALSE
+END SingleText;
+
+(* The text of d's text parts, in order, including those in its
+   prefixed, flush and conditional parts (a fold over d's text) *)
+PROCEDURE AllText*(d: Doc): Ropes.Rope;
+BEGIN
+  IF d = NIL THEN RETURN NIL END;
+  CASE d.kind OF
+    text: RETURN d.s
+  | concat: RETURN Ropes.Cat(AllText(d.a), AllText(d.b))
+  | prefixed, beforeNonBlank, flush: RETURN AllText(d.a)
+  ELSE
+  END;
+  RETURN NIL
+END AllText;
 
 (* Whether the text r ends a sentence, as pandoc's splitSentences
    sees it: it ends in . ! or ? and is not a single upper case letter

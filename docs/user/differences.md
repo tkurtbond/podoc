@@ -121,3 +121,34 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
 - Output is not wrapped, as for HTML.
 - Raw blocks and inlines are passed through for the formats `context`
   and `tex` only.
+
+## The markdown writer
+
+- Tables that pandoc writes as grid or pipe tables (cells holding
+  more than one paragraph or other blocks, or tables too wide for a
+  multiline table) are written as HTML tables, pandoc's fallback when
+  no other table extension fits. Simple and multiline tables are
+  written as pandoc writes them.
+- A run of colons that would start a fenced div is escaped as `\`
+  and the same colons. pandoc 3.10 writes one colon too many (`::::`
+  becomes `\:::::`), so its output does not read back as its input.
+- Citations, which podoc's reader does not read, are written as their
+  text.
+- An autolink is written as `<...>` when its scheme is in podoc's
+  list of URI schemes (the reader's, from pandoc's), which may differ
+  from pandoc's own list for a rare scheme.
+- Output is not wrapped, as for HTML; `--wrap=preserve` keeps the
+  input's line breaks.
+- The round trip is not exact, in pandoc either: markdown cannot hold
+  everything the AST can. Written and read again, consecutive lists
+  gain `<!-- -->` separators, an example list becomes a decimal list,
+  simple tables' default alignments become left alignments (and
+  their column widths change), raw HTML blocks come back as raw
+  inlines in a paragraph, an attribute-less span is lost, curly
+  quotes in text come back as Quoted, a tight definition's
+  paragraphs are joined, metadata numbers and some literal block
+  scalars change, and without `--wrap=preserve` line breaks become
+  spaces. `make test` checks the round trip on the cases listed in
+  `test/roundtrip.txt`; on the user's 49 documents, 40 read back to
+  the same AST and the other 9 lose only what pandoc's round trip
+  loses.
