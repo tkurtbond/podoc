@@ -1012,3 +1012,40 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
   pounicode installed on both; podoc built from a clean `git archive`,
   and `make test` passed under `-O2` and `-OC` on each (382 `ok`
   lines, no `FAIL`, 23 of 23 round trips). PDF output was not tried there.
+- 2026-11-20: PDF output on erekose and terhali. podoc built from a
+  clean `git archive` under both models; each document of the ms test
+  cases made with `--pdf-engine=pdfroff` and `--pdf-engine=groff`; the
+  `-O2` and `-OC` PDFs were the same, and no temporary directories were
+  left.
+  - erekose, groff 1.22.4 (OpenBSD package): 26 of 26 runs ended with
+    status 0. Against podoc's PDFs on atla (groff 1.23.0), 12 of 24
+    have the same words; the other 12 (`-s -N --toc`) differ only in
+    the contents page's number, "1" for 1.22.4, "i" for 1.23.0.
+    Warnings: an unbalanced `RE` (the display-math fallback) and
+    missing glyphs U+2610, U+2612 and U+2082. `-t context` ends with
+    47: no ConTeXt there.
+  - terhali, base groff 1.19.2: `groff` ends with 43 (`invalid option
+    -- k`), `pdfroff` and `context` with 47 (pkgsrc's tex-context has
+    `mtxrun` but no `context`). Its groff 1.23.0 under
+    `/usr/local/sw/versions` is broken: `preconv` cannot find
+    `libiconv.so.2`; `groff` ends with 43 and `pdfroff` makes empty
+    PDFs.
+  - groff 1.25.0 on both (configure found Ghostscript, 10.08.0 on
+    terhali, 10.07.1 on erekose): `--pdf-engine=groff`, 14 of 14 runs
+    ended with status 0 on each host, and `-V papersize=a4l` gives A4.
+    inlines, lists and tables have atla's words. But in ms-features,
+    ms-pdf and ms-standalone each heading is followed by a stray line,
+    `.pdfbookmark "1" "Plain heading" Plain heading Plain heading`:
+    1.25's `s.tmac` diverts the heading (`box @NHpdf`) and makes the
+    bookmark itself, so the `.pdfhref O` pandoc and podoc put after
+    the heading text runs inside the diversion and is printed. pandoc
+    3.10's ms has the same `.pdfhref O`. Leaving it out for groff 1.25
+    would be a difference from pandoc; not decided.
+  - groff 1.25.0 no longer ships `pdfroff` or `pdfmark.tmac` (its NEWS:
+    the pdfmark package is now maintained separately, as
+    groff-pdfmark). terhali: `pdfroff` ends with 47. erekose: 1.22.4's
+    `/usr/local/bin/pdfroff` is found instead, cannot load `pdfmark`
+    with 1.25's troff, exits 0 and leaves an empty PDF, which podoc
+    cannot tell from a good one.
+  - `groff -ms -Tutf8` on podoc's standalone ms-features ran over two
+    minutes on terhali without finishing; podoc does not use `-Tutf8`.

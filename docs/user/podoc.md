@@ -18,8 +18,15 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
   globs (`opendir`, `readdir`, `stat`), and needs no other C library.
 - To run: a POSIX `/bin/sh`. For PDF output, it also needs `mkdir`,
   `cp` and `rm`, plus the engine:
-  - for `ms`: groff with `gropdf` and `-k` (`preconv`); groff 1.23.0
-    works, and 1.19.2, as in NetBSD's base system, does not;
+  - for `ms`: groff with `gropdf` and `-k` (`preconv`). groff 1.23.0
+    and 1.22.4 work (1.22.4 numbers the contents page "1", not "i");
+    1.19.2, as in NetBSD's base system, does not. With groff 1.25.0,
+    `--pdf-engine=groff` works, but each heading in a document made
+    with bookmarks is followed by a stray `.pdfbookmark` line, as with
+    pandoc's ms output; and groff 1.25.0 no longer includes `pdfroff`,
+    which, with the pdfmark macros, is now the separate groff-pdfmark
+    package. An older `pdfroff` left on the PATH may then make an
+    empty PDF without reporting an error;
   - for `context`: ConTeXt LMTX;
   - for SVG images in ConTeXt: `rsvg-convert` (optional).
 
