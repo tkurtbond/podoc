@@ -1,0 +1,146 @@
+\startplacetable[title={A pipe table},reference={tbl:pipe}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=right] Left \stopxcell
+\startxcell[align=middle] Center \stopxcell
+\startxcell[align=left] Right \stopxcell
+\startxcell Default \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=right] \type{a|b} \stopxcell
+\startxcell[align=middle] $x|y$ \stopxcell
+\startxcell[align=left] \letterbar{} \stopxcell
+\startxcell c \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=right] short \stopxcell
+\startxcell[align=middle]  \stopxcell
+\startxcell[align=left]  \stopxcell
+\startxcell  \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[title={A simple table.}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left] Right \stopxcell
+\startxcell[align=right] Left \stopxcell
+\startxcell[align=middle] Center \stopxcell
+\startxcell Default \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=left] 12 \stopxcell
+\startxcell[align=right] 12 \stopxcell
+\startxcell[align=middle] 12 \stopxcell
+\startxcell 12 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left] 123 \stopxcell
+\startxcell[align=right] 123 \stopxcell
+\startxcell[align=middle] 123 \stopxcell
+\startxcell 123 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=left] 12 \stopxcell
+\startxcell[align=right] 12 \stopxcell
+\startxcell[align=middle] 12 \stopxcell
+\startxcell[align=middle] 12 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left] 123 \stopxcell
+\startxcell[align=right] 123 \stopxcell
+\startxcell[align=middle] 123 \stopxcell
+\startxcell[align=middle] 123 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[title={Here's the caption. It, too, may span multiple lines.}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.17\textwidth}] Centered Header \stopxcell
+\startxcell[width={0.11\textwidth}] Default Aligned \stopxcell
+\startxcell[align=left,width={0.22\textwidth}] Right Aligned \stopxcell
+\startxcell[align=right,width={0.36\textwidth}] Left Aligned \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=middle,width={0.17\textwidth}] First \stopxcell
+\startxcell[width={0.11\textwidth}] row \stopxcell
+\startxcell[align=left,width={0.22\textwidth}] 12.0 \stopxcell
+\startxcell[align=right,width={0.36\textwidth}] Example of a row that spans multiple lines. \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.17\textwidth}] Second \stopxcell
+\startxcell[width={0.11\textwidth}] row \stopxcell
+\startxcell[align=left,width={0.22\textwidth}] 5.0 \stopxcell
+\startxcell[align=right,width={0.36\textwidth}] Here's another one. Note the blank line between rows. \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.33\textwidth}] a very long first column header that goes on \stopxcell
+\startxcell[width={0.67\textwidth}] and the second one, which is also long \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.33\textwidth}] x \stopxcell
+\startxcell[width={0.67\textwidth}] y \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable

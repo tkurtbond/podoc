@@ -1,0 +1,48 @@
+\startsectionlevel[title={A heading},reference={a-heading}]
+
+Some text here over two lines.
+
+\startsectionlevel[title={Another heading},reference={own}]
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\startsectionlevel[title={A heading},reference={a-heading-1}]
+
+\startsectionlevel[title={A heading},reference={a-heading-2}]
+
+\starttyping
+indented code
+  more
+
+after blank
+\stoptyping
+
+\starttyping
+main = print 1
+\stoptyping
+
+\starttyping
+x = 1
+\stoptyping
+
+\startblockquote
+A quote continued lazily and more
+
+second para
+\stopblockquote
+
+\startlines
+line one
+~~~indented line
+continued here
+\stoplines
+
+\thinrule
+
+plain para
+
+\stopsectionlevel
+
+\stopsectionlevel

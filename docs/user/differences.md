@@ -110,3 +110,14 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
 - Output is not wrapped, as for HTML.
 - Raw blocks and inlines are passed through for the format `ms`
   only.
+
+## The ConTeXt writer
+
+- Code is not highlighted. pandoc's ConTeXt writer highlights code
+  blocks that name a language even with `--syntax-highlighting=none`,
+  writing `\starthighlighting` ... `\stophighlighting`; podoc writes
+  `\starttyping` ... `\stoptyping`, as pandoc does for code with no
+  language.
+- Output is not wrapped, as for HTML.
+- Raw blocks and inlines are passed through for the formats `context`
+  and `tex` only.

@@ -11,7 +11,7 @@ MODULE PdMs;
    same order. *)
 
 IMPORT Ropes, Strings, Utf8, Unicode, A := PdAst, L := PdLayout, T := PdTemplate,
-  C := PdContext, Sh := PdShared, PdAscii, PdJson, PdIO;
+  C := PdContext, Sh := PdShared, PdAscii, PdIO;
 
 TYPE
   Rope = Ropes.Rope;
@@ -305,51 +305,6 @@ BEGIN
   END;
   RETURN out
 END EscapeUri;
-
-(* printf "%0.1f" x, as GHC writes it: the shortest digits of x
-   rounded, half to even, to one decimal *)
-PROCEDURE Fixed1(x: LONGREAL): Rope;
-  CONST max = 400;
-  VAR digits: ARRAY 24 OF CHAR; is: ARRAY max OF INTEGER; n, e, d, k, c, j, v: INTEGER;
-    out: Rope; s: ARRAY max OF CHAR; zero: BOOLEAN;
-BEGIN
-  IF x <= 0 THEN RETURN R("0.0") END;
-  PdJson.ShortestDigits(x, digits, n, e);
-  IF (e > max - 30) OR (-e > max - 30) THEN RETURN R("0.0") END; (* not a width *)
-  (* the digits, with -e zeros before them if e < 0 *)
-  j := 0;
-  IF e < 0 THEN
-    FOR k := 1 TO -e DO is[j] := 0; INC(j) END
-  END;
-  FOR k := 0 TO n - 1 DO is[j] := ORD(digits[k]) - ORD("0"); INC(j) END;
-  n := j;
-  IF e >= 0 THEN d := 1 + e ELSE d := 1 END;
-  (* roundTo 10 d is *)
-  c := 0;
-  IF n <= d THEN
-    WHILE n < d DO is[n] := 0; INC(n) END
-  ELSE
-    zero := TRUE;
-    FOR k := d + 1 TO n - 1 DO IF is[k] # 0 THEN zero := FALSE END END;
-    IF (is[d] = 5) & zero & ((d = 0) OR ~ODD(is[d - 1])) THEN c := 0
-    ELSIF is[d] >= 5 THEN c := 1
-    END;
-    k := d - 1;
-    WHILE k >= 0 DO
-      v := is[k] + c;
-      IF v = 10 THEN is[k] := 0; c := 1 ELSE is[k] := v; c := 0 END;
-      DEC(k)
-    END
-  END;
-  (* s: is[0 .. d-1], after a 1 if there is a carry *)
-  j := 0;
-  IF c = 1 THEN s[0] := "1"; j := 1 END;
-  FOR k := 0 TO d - 1 DO s[j] := CHR(ORD("0") + is[k]); INC(j) END;
-  IF (e >= 0) & (j > 1) OR (e < 0) & (c = 1) THEN out := Ropes.FromSubchars(s, 0, j - 1)
-  ELSE out := R("0")
-  END;
-  RETURN Cat(CatS(out, "."), Ropes.FromSubchars(s, j - 1, 1))
-END Fixed1;
 
 (* Fonts *)
 
@@ -879,22 +834,12 @@ BEGIN
   RETURN Above(Lit(".PP"), L.SplitSentences(c))
 END Para;
 
-(* The lines of a line block joined by LineBreaks, copied *)
-PROCEDURE JoinLines(VAR il: A.Inlines; l: A.InlineList);
-BEGIN
-  WHILE l # NIL DO
-    A.Append(il, A.CopyInlines(l.inlines));
-    IF l.next # NIL THEN A.Append(il, A.NewSimple(A.LineBreak)) END;
-    l := l.next
-  END
-END JoinLines;
-
 PROCEDURE LineBlock(l: A.InlineList): L.Doc;
   VAR il: A.Inlines;
 BEGIN
   firstPara := TRUE;
   A.InitInlines(il);
-  JoinLines(il, l);
+  Sh.JoinLines(il, l);
   RETURN Para(il.first)
 END LineBlock;
 
@@ -1031,62 +976,6 @@ END DefList;
 
 (* Tables *)
 
-PROCEDURE^ BlocksToInlines(VAR l: A.Inlines; b: A.Block);
-
-(* blockToInlines, appended to l *)
-PROCEDURE BlockToInlines(VAR l: A.Inlines; b: A.Block);
-  VAR it: A.BlockList; di: A.DefItem; row: A.Row; c: A.Cell; tb: A.TableBody; t: A.TableBlk;
-    pass: INTEGER; firstRow: BOOLEAN;
-BEGIN
-  CASE b.kind OF
-    A.Plain, A.Para, A.Header: A.Append(l, A.CopyInlines(b(A.InlinesBlk).inlines))
-  | A.LineBlock: JoinLines(l, b(A.LineBlk).lines)
-  | A.CodeBlock: A.Append(l, A.NewCode(b(A.CodeBlk).attr, b(A.CodeBlk).text))
-  | A.RawBlock: A.Append(l, A.NewRawInline(b(A.RawBlk).format, b(A.RawBlk).text))
-  | A.BlockQuote, A.Div, A.Figure: BlocksToInlines(l, b(A.BlocksBlk).blocks)
-  | A.OrderedList, A.BulletList:
-    it := b(A.ListBlk).items;
-    WHILE it # NIL DO BlocksToInlines(l, it.blocks); it := it.next END
-  | A.DefinitionList:
-    di := b(A.DefListBlk).items;
-    WHILE di # NIL DO
-      A.Append(l, A.CopyInlines(di.term));
-      A.Append(l, A.NewStr(R(":"))); A.Append(l, A.NewSimple(A.Space));
-      it := di.defs;
-      WHILE it # NIL DO BlocksToInlines(l, it.blocks); it := it.next END;
-      di := di.next
-    END
-  | A.HorizontalRule:
-  | A.Table:
-    t := b(A.TableBlk); row := t.head.rows; tb := t.bodies; pass := 0; firstRow := TRUE;
-    LOOP
-      WHILE row # NIL DO
-        IF ~firstRow THEN A.Append(l, A.NewSimple(A.LineBreak)) END;
-        firstRow := FALSE;
-        c := row.cells;
-        WHILE c # NIL DO BlocksToInlines(l, c.blocks); c := c.next END;
-        row := row.next
-      END;
-      IF pass = 1 THEN row := tb.body; pass := 2; tb := tb.next
-      ELSIF tb # NIL THEN row := tb.head; pass := 1
-      ELSIF pass # 3 THEN row := t.foot.rows; pass := 3
-      ELSE EXIT
-      END
-    END
-  END
-END BlockToInlines;
-
-(* blocksToInlines', appended to l: the blocks, a LineBreak between
-   each two *)
-PROCEDURE BlocksToInlines(VAR l: A.Inlines; b: A.Block);
-BEGIN
-  WHILE b # NIL DO
-    BlockToInlines(l, b);
-    IF b.next # NIL THEN A.Append(l, A.NewSimple(A.LineBreak)) END;
-    b := b.next
-  END
-END BlocksToInlines;
-
 (* makeRow: the cells T{ ... T}, a tab between each two *)
 PROCEDURE MakeRow(cols: Docs): L.Doc;
   VAR d: L.Doc;
@@ -1109,7 +998,7 @@ PROCEDURE Table(t: A.TableBlk): L.Doc;
     pass: INTEGER;
 BEGIN
   A.InitInlines(il);
-  BlocksToInlines(il, t.caption.blocks);
+  Sh.BlocksToInlines(il, t.caption.blocks);
   caption := InlinesP(il.first, FALSE);
   ncols := 0; cs := t.colSpecs;
   WHILE cs # NIL DO INC(ncols); cs := cs.next END;
@@ -1124,7 +1013,7 @@ BEGIN
     | A.AlignCenter: s := CatC(s, "c")
     ELSE s := CatC(s, "l")
     END;
-    IF widths[k] # 0 THEN s := CatS(Cat(CatS(s, "w("), Fixed1(70 * widths[k])), "n)") END;
+    IF widths[k] # 0 THEN s := CatS(Cat(CatS(s, "w("), Sh.Fixed(70 * widths[k], 1)), "n)") END;
     INC(k); cs := cs.next
   END;
   desc := L.Literal(CatC(s, "."));
@@ -1149,7 +1038,7 @@ BEGIN
       WHILE (c # NIL) & (k < ncols) DO
         d := Blocks(c.blocks);
         IF ~simple THEN
-          d := Above(L.Literal(CatS(Cat(R(".nr LL "), Fixed1(widths[k] * 70)), "n")), d)
+          d := Above(L.Literal(CatS(Cat(R(".nr LL "), Sh.Fixed(widths[k] * 70, 1)), "n")), d)
         END;
         AddDoc(cols, lastCol, d);
         c := c.next; INC(k)

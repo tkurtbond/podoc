@@ -1,0 +1,73 @@
+\startsectionlevel[title={Same},reference={same}]
+
+\stopsectionlevel
+
+\startsectionlevel[title={Same},reference={same-1}]
+
+\stopsectionlevel
+
+\startsectionlevel[title={Same},reference={same-2}]
+
+\stopsectionlevel
+
+\startsectionlevel[reference={section}]
+
+\#5 not a heading \#\#\#\#\#\#\# seven \# closing hashes \#\#\# \#\# Trailing \# in text \#
+
+Text - not a list after para
+
+Para before code not code
+
+\startenumerate[n][stopper=.]
+\item
+  one
+
+  para in item
+\item
+  two
+\item
+  ten
+\stopenumerate
+
+\startitemize[packed]
+\item
+  a
+\item
+  b
+\item
+  c
+\stopitemize
+
+\startblockquote
+\startitemize[packed]
+\item
+  quoted list
+\item
+  two
+\stopitemize
+
+\startblockquote
+nested quote
+\stopblockquote
+\stopblockquote
+
+\starttyping
+tab code
+line two
+\stoptyping
+
+\stopsectionlevel
+
+\startsectionlevel[title={Unicode Ünïcode héading},reference={unicode-ünïcode-héading}]
+
+\startsectionlevel[title={123 Numbers first},reference={numbers-first}]
+
+indented para
+
+word\crlf
+next line\crlf
+hard break
+
+\stopsectionlevel
+
+\stopsectionlevel

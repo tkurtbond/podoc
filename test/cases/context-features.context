@@ -1,0 +1,244 @@
+\startsectionlevel[title={Escapes},reference={esc-1}]
+
+Braces \{\} backslash \letterbackslash{} dollar \$ bar \letterbar{} percent \letterpercent{} tilde \lettertilde{} hash \# {[}brackets{]}. Dashes -- and --- and \ldots{} and it's \quotation{quoted} and \quote{single}. Non-breaking~space.
+
+\startsectionlevel[title={Unnumbered},reference={unnumbered},number=no,incrementnumber=no]
+
+\stopsectionlevel
+
+\startsubsubject[title={Unlisted},reference={unlisted}]
+
+\startsubsubsubject[title={Both},reference={both},number=no,incrementnumber=no]
+
+\stopsubsubsubject
+
+\stopsubsubject
+
+\stopsectionlevel
+
+\startsectionlevel[title={Inlines},reference={inlines}]
+
+{\em em} {\bf bf} {\setsmallcaps sc} \underbar{ul} \overstrikes{strike} x\high{2} H\low{2}O \type{plain} \type"a{b}" \type`{"'\`()-+=\letterpercent{},.:;\}\type{}x\}y\type{$a+b$ and $$\int x$$ and}\raw\type"{=context}"\tex\type"{=tex}"`\{=html\}
+
+Line\crlf
+after\crlf
+break.
+
+A \goto{https://example.com/a\letterpercent{}20b\#frag}[url(https://example.com/a\%20b\#frag)] autolink and \goto{me@example.com}[url(mailto:me@example.com)]. \goto{Text}[url(https://example.com/x\%y\#z)] and \goto{internal}[esc-1] and \goto{odd}[aux3db].
+
+{\externalfigure[img/a b.png][cls][width=0.5\textwidth,height=3cm]} {\externalfigure[c:/path/x.png][width=1.04167in]} {\externalfigure[pic.jpg][width=2.5in,height=12pt]}
+
+\reference[sp]{}{\language[fr]{\lefttoright Span}} {\righttoleft rtl}.
+
+Note.\footnote{A {\em note}.
+
+  Second paragraph.} Code note.\startbuffer With code:
+
+\starttyping
+code
+\stoptyping\stopbuffer\footnote{\getbuffer}
+
+\stopsectionlevel
+
+\startsectionlevel[title={Blocks},reference={blocks}]
+
+\startblockquote
+Quote
+
+\startblockquote
+nested
+\stopblockquote
+\stopblockquote
+
+\startlines
+line one
+~~indented
+
+after empty
+\stoplines
+
+\start\language[gr]
+\startalignment[righttoleft]
+\reference[d1]{}%
+Div text.
+
+\stopalignment
+\stop
+
+\start\language[en-gb]
+English.
+
+\stop
+
+\startcslreferences
+Ref.
+
+\stopcslreferences
+\startenumerate[n][stopper=.]
+\item
+  one
+\item
+  two
+
+  \startenumerate[a][stopper=.]
+  \item
+    alpha
+  \item
+    beta
+
+    \startenumerate[r][stopper=.]
+    \item
+      roman
+
+      \startenumerate[A][stopper=)]
+      \item
+        Upper
+
+        \startenumerate[R,packed][left=(,stopper=)]
+        \item
+          Roman
+        \stopenumerate
+      \stopenumerate
+    \stopenumerate
+  \stopenumerate
+\stopenumerate
+
+\startenumerate[n,packed][start=3,stopper=)]
+\item
+  paren
+\stopenumerate
+
+\startenumerate[n,packed][start=7,left=(,stopper=)]
+\item
+  two parens
+\stopenumerate
+
+\startenumerate[n,packed]
+\item
+  default
+\item
+  default
+\stopenumerate
+
+\startdescription{Term}
+  Definition {\em one}.
+
+  Definition two.
+\stopdescription
+
+\startdescription{Term 2}
+  Loose
+  paragraphs
+\stopdescription
+
+\startitemize
+\item
+  tight
+\item
+  list
+\item
+  loose
+\item
+  list
+\stopitemize
+
+\thinrule
+
+\starttyping
+main = print 1
+\stoptyping
+
+\starttyping
+{ braces }
+\stoptyping
+
+\raw block
+
+\startplacefigure[reference=fig:one,title={Figure {\em caption}}]
+{\externalfigure[fig.png]}
+\stopplacefigure
+
+\startplacetable[title={Table caption},reference={tbl:one}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=right] Left \stopxcell
+\startxcell[align=left] Right \stopxcell
+\startxcell[align=middle] Center \stopxcell
+\startxcell Default \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=right] a \stopxcell
+\startxcell[align=left] b \stopxcell
+\startxcell[align=middle] c \stopxcell
+\startxcell d \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=right] e \stopxcell
+\startxcell[align=left] f \stopxcell
+\startxcell[align=middle] g \stopxcell
+\startxcell h \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.12\textwidth}] short \stopxcell
+\startxcell[align=right,width={0.12\textwidth}] long \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.12\textwidth}] x \stopxcell
+\startxcell[align=right,width={0.12\textwidth}] y \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[title={Multiline with widths}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.29\textwidth}] Wide \stopxcell
+\startxcell[align=right,width={0.57\textwidth}] Narrow \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=middle,width={0.29\textwidth}] A multiline cell that wraps. \stopxcell
+\startxcell[align=right,width={0.57\textwidth}] B \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.29\textwidth}] C \stopxcell
+\startxcell[align=right,width={0.57\textwidth}] D \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\stopsectionlevel

@@ -1,0 +1,8 @@
+{\em emph} {\bf strong} {\bf {\em both}} {\em u} {\bf uu} \overstrikes{strike} H\low{2}O x\high{2} \type{code} \quotation{double} and \quote{single} quotes -- dashes --- and\ldots{} ellipses, it's. $x + y$ and \startformula \int f \stopformula and \$5 and *not* and a\crlf
+hard break, raw html, and \LaTeX{} \textbf{bold}. \type{a ` b} and and {\setsmallcaps smallcaps} and an emoji-free line with intraword_under_scores and 3{\em 4}5.
+
+\startitemize[packed]
+\item
+\item
+  item after an empty one
+\stopitemize

@@ -1,0 +1,91 @@
+\startitemize
+\item
+  one
+\item
+  two
+\item
+  three
+\item
+  loose one
+\item
+  loose two
+\item
+  item
+
+  continued para
+
+\starttyping
+code in item
+\stoptyping
+\item
+  ☐ todo
+\item
+  ☒ done
+\stopitemize
+
+\startenumerate[n,packed][stopper=.]
+\item
+  first
+\item
+  second
+  \startitemize[packed]
+  \item
+    nested
+  \item
+    nested two
+  \stopitemize
+\item
+  third
+\stopenumerate
+
+\startenumerate[a,packed][left=(,stopper=)]
+\item
+  alpha
+\item
+  beta
+\stopenumerate
+
+\startenumerate[r][start=4,stopper=.]
+\item
+  roman
+\item
+  five
+\item
+  default
+\item
+  again
+\stopenumerate
+
+\startenumerate[n,packed][stopper=.]
+\item
+  example one
+\item
+  example two
+\stopenumerate
+
+\startdescription{Term one}
+  Definition one
+\stopdescription
+
+\startdescription{Term two}
+  Definition two
+
+  more of it
+\stopdescription
+
+\startdescription{Term three}
+  tight a
+
+  tight b
+\stopdescription
+
+Inside a div.
+
+\reference[inner]{}%
+nested
+
+\reference[d]{}%
+Html div text.
+
+Section text.
+end

@@ -1,0 +1,190 @@
+\startsectionlevel[title={Intro},reference={intro}]
+
+Text with a note\footnote{First note.
+
+  Second para of note.} and another.\footnote{Inline {\em note} here.}
+
+\startsectionlevel[title={Sub \goto{link}[url(http://x.com)] here},reference={sub-link-here}]
+
+\startitemize[packed]
+\item
+  ☐ todo
+\item
+  ☒ done
+\stopitemize
+
+\startenumerate[n,packed][stopper=.]
+\item
+  one
+\item
+  two
+\stopenumerate
+
+\startenumerate[n,packed][left=(,stopper=)]
+\item
+  ex one
+\item
+  ex two
+\stopenumerate
+
+\startenumerate[n,packed]
+\item
+  hash
+\stopenumerate
+
+\startenumerate[r,packed][start=4,stopper=.]
+\item
+  roman
+\item
+  roman2
+\stopenumerate
+
+\startenumerate[A,packed][stopper=)]
+\item
+  alpha
+\item
+  beta
+\stopenumerate
+
+\startsectionlevel[title={Deep},reference={deep},number=no,incrementnumber=no]
+
+\startsubsubsubsubject[title={Unlisted},reference={unlisted}]
+
+left
+
+right
+
+\reference[d1]{}%
+Inside div.
+
+\startplacefigure[reference=fig1,title={A figure caption}]
+{\externalfigure[fig.png][width=3.125in,height=2.5cm]}
+\stopplacefigure
+
+{\externalfigure[inline.svg][width=0.5\textwidth]} inline {\externalfigure[a.jpg]} and {\externalfigure[s.mp3]} and {\externalfigure[doc.pdf]}
+
+{\setsmallcaps span} \reference[s1]{}k m \underbar{u} p plain \type{x} \type{y}
+
+raw html
+
+\startlines
+Line one
+~~Line two
+\stoplines
+
+\startblockquote
+quote
+
+\startblockquote
+nested
+\stopblockquote
+\stopblockquote
+
+\startdescription{Term}
+  Definition one
+  more
+\stopdescription
+
+\startdescription{Term 2}
+  Def 2a
+
+  Def 2b
+\stopdescription
+
+\thinrule
+
+\startplacetable[title={Simple table}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left] Right \stopxcell
+\startxcell[align=right] Left \stopxcell
+\startxcell[align=middle] Center \stopxcell
+\startxcell Default \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=left] 12 \stopxcell
+\startxcell[align=right] 12 \stopxcell
+\startxcell[align=middle] 12 \stopxcell
+\startxcell 12 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left] 123 \stopxcell
+\startxcell[align=right] 123 \stopxcell
+\startxcell[align=middle] 123 \stopxcell
+\startxcell 123 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[title={Multiline},reference={tbl}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.15\textwidth}] Centered Header \stopxcell
+\startxcell[align=right,width={0.18\textwidth}] Default Aligned \stopxcell
+\startxcell[align=left,width={0.15\textwidth}] Right Aligned \stopxcell
+\startxcell[align=right,width={0.15\textwidth}] Left Aligned \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=middle,width={0.15\textwidth}] First \stopxcell
+\startxcell[align=right,width={0.18\textwidth}] row \stopxcell
+\startxcell[align=left,width={0.15\textwidth}] 12.0 \stopxcell
+\startxcell[align=right,width={0.15\textwidth}] Example long \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.15\textwidth}] Second \stopxcell
+\startxcell[align=right,width={0.18\textwidth}] row \stopxcell
+\startxcell[align=left,width={0.15\textwidth}] 5.0 \stopxcell
+\startxcell[align=right,width={0.15\textwidth}] Here \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\stopsubsubsubsubject
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\startsectionlevel[title={Second},reference={second}]
+
+Back link \goto{a@b.com}[url(mailto:a@b.com)] and \goto{mail}[url(mailto:x@y.z)] and \goto{int}[intro].
+
+Cite H\low{2}O \overstrikes{s} \high{sup}
+
+Last para with ↩ arrow and ↔.
+
+Para\startbuffer \starttyping
+code note
+\stoptyping\stopbuffer\footnote{\getbuffer}
+
+\startsectionlevel[title={Empty header},reference={empty-header},number=no,incrementnumber=no]
+
+\startsectionlevel[title={Not header},reference={not-header}]
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\stopsectionlevel

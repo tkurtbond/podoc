@@ -1,0 +1,244 @@
+% Enable hyperlinks
+\setupinteraction
+  [state=start,
+  title={Edge {\em cases} for ms},
+  author={Ann Ó Bruadair; B. (Two)},
+  style=,
+  color=,
+  contrastcolor=]
+\setupurl[style=]
+
+% make chapter, section bookmarks visible when opening document
+\placebookmarks[chapter, section, subsection, subsubsection, subsubsubsection, subsubsubsubsection][chapter, section]
+\setupinteractionscreen[option={bookmark,title}]
+
+\setuppagenumbering[location={footer,middle}]
+\setupstructure[state=start,method=auto]
+
+% use microtypography
+\definefontfeature[default][default][script=latn, protrusion=quality, expansion=quality, itlc=yes, textitalics=yes, onum=yes, pnum=yes]
+\definefontfeature[default:tnum][default][tnum=yes, pnum=no]
+\definefontfeature[smallcaps][script=latn, protrusion=quality, expansion=quality, smcp=yes, onum=yes, pnum=yes]
+\setupalign[hz,hanging]
+\setupitaliccorrection[global, always]
+
+\setupbodyfontenvironment[default][em=italic] % use italic as em, not slanted
+
+\definefallbackfamily[mainface][rm][CMU Serif][preset=range:greek, force=yes]
+\definefontfamily[mainface][rm][Latin Modern Roman]
+\definefontfamily[mainface][mm][Latin Modern Math]
+\definefontfamily[mainface][ss][Latin Modern Sans]
+\definefontfamily[mainface][tt][Latin Modern Typewriter][features=none]
+\setupbodyfont[mainface]
+
+\setupwhitespace[medium]
+
+\setuphead[chapter]            [style=\tfd\setupinterlinespace,header=empty]
+\setuphead[section]            [style=\tfc\setupinterlinespace]
+\setuphead[subsection]         [style=\tfb\setupinterlinespace]
+\setuphead[subsubsection]      [style=\bf]
+\setuphead[subsubsubsection]   [style=\sc]
+\setuphead[subsubsubsubsection][style=\it]
+
+\definesectionlevels
+   [default]
+   [section, subsection, subsubsection, subsubsubsection, subsubsubsubsection]
+
+\setuphead[chapter, section, subsection, subsubsection, subsubsubsection, subsubsubsubsection][number=no]
+
+\definedescription
+  [description]
+  [headstyle=bold, style=normal, location=hanging, width=broad, margin=1cm, alternative=hanging]
+
+\setupitemize[autointro]    % prevent orphan list intro
+\setupitemize[indentnext=no]
+
+\defineitemgroup[enumerate]
+\setupenumerate[each][fit][itemalign=left,distance=.5em,style={\feature[+][default:tnum]}]
+
+\setupfloat[figure][default={here,nonumber}]
+\setupfloat[table][default={here,nonumber}]
+
+\setupxtable[frame=off]
+\setupxtable[head][topframe=on]
+\setupxtable[body][]
+\setupxtable[foot][]
+\setupxtable[lastrow][bottomframe=on]
+
+
+\starttext
+\startalignment[middle]
+  {\tfd\setupinterlinespace Edge {\em cases} for ms}
+  \smallskip
+  {\tfa\setupinterlinespace Ann Ó Bruadair\crlf B. (Two)}
+  \smallskip
+  {\tfa\setupinterlinespace 2026-11-20}
+  \bigskip
+\stopalignment
+\midaligned{\it Abstract}
+\startnarrower[2*middle]
+An abstract with {\em emphasis}.
+
+\stopnarrower
+\blank[big]
+\completecontent
+
+\startsectionlevel[title={Héading with x\high{2} and H\low{2}O and {\setsmallcaps Small}},reference={hé-ad}]
+
+\startsectionlevel[title={Unnumbered \quotation{quoted} heading},reference={unnumbered-quoted-heading},number=no,incrementnumber=no]
+
+.leading period and \quote{single} \quotation{double} and @ \lettertilde{} ^ ` and a {\setsmallcaps Mixed Smallcaps 3x}.
+
+\startplacefigure[title={A caption with {\em emph}}]
+{\externalfigure[pic.pdf][width=2in,height=3cm]}
+\stopplacefigure
+
+{\externalfigure[pic.png][width=0.5\textwidth]}
+
+{\externalfigure[pic.eps][width=1.04167in]} inline.
+
+\startenumerate[r,packed][stopper=.]
+\item
+  one
+\item
+  two
+\item
+  three
+\stopenumerate
+
+\startenumerate[a,packed][left=(,stopper=)]
+\item
+  alpha
+\item
+  beta
+\stopenumerate
+
+\startenumerate[n,packed]
+\item
+  default
+\item
+  second
+\stopenumerate
+
+\startenumerate[n,packed][start=7,stopper=)]
+\item
+  seven
+\item
+  eight
+\stopenumerate
+
+\startdescription{Term {\em one}}
+  Definition one.
+  Second paragraph.
+\stopdescription
+
+\startdescription{Term two}
+\starttyping
+code def
+\stoptyping
+\stopdescription
+
+\startitemize
+\item
+\starttyping
+code item
+\stoptyping
+\item
+  item
+
+  continued
+\item
+  \startblockquote
+  quoted
+  \stopblockquote
+\stopitemize
+
+\startenumerate[n][stopper=.]
+\item
+  first
+
+  second para
+\stopenumerate
+
+\startlines
+line one
+~~line two
+\stoplines
+
+A note.\footnote{Note text.
+
+  More note.} And another.\startbuffer \starttyping
+code note
+\stoptyping\stopbuffer\footnote{\getbuffer}
+
+\goto{link}[hé-ad] and \goto{web}[url(https://example.com/a\%20b?q=1@x)] and \goto{me@example.com}[url(mailto:me@example.com)].
+
+\startdescription{Term with note\footnote{in a term}}
+  def
+\stopdescription
+
+\thinrule
+
+\reference[div-id]{}%
+Div para.
+
+\startplacetable[title={Caption {\em here}.}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell A \stopxcell
+\startxcell[align=left] B \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell 1 \stopxcell
+\startxcell[align=left] 2 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[title={Multiline with widths.}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.24\textwidth}] Wide one \stopxcell
+\startxcell[align=middle,width={0.35\textwidth}] Wide two \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=middle,width={0.24\textwidth}] x \stopxcell
+\startxcell[align=middle,width={0.35\textwidth}] y \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=middle,width={0.24\textwidth}] z \stopxcell
+\startxcell[align=middle,width={0.35\textwidth}] w \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Line one\crlf
+line two.
+
+\type{code} and \type{.dot} and {\bf bold {\em both}} and \overstrikes{strike}.
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\stoptext

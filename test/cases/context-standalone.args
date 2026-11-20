@@ -1,0 +1,1 @@
+-s --toc -N --toc-depth=2 -V papersize=letter -V fontsize=11pt -V margin-right=1in -V margin-bottom=2cm -V dir=ltr

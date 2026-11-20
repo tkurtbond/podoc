@@ -540,49 +540,6 @@ BEGIN
 END IsDigit;
 
 
-(* The digits of int without leading zeros, "0" if they are all zeros *)
-PROCEDURE StripZeros(int: Rope): Rope;
-  VAR i: LONGINT;
-BEGIN
-  i := 0;
-  WHILE (i < Len(int) - 1) & (Ropes.Fetch(int, i) = "0") DO INC(i) END;
-  RETURN Ropes.Substring(int, i, Len(int) - i)
-END StripZeros;
-
-(* int.frac as pandoc's showFl writes it: rounded to 5 decimals,
-   without trailing zeros or point *)
-PROCEDURE ShowFl(int, frac: Rope): Rope;
-  VAR d: ARRAY 6 OF INTEGER; b: Buf; i, k, n: LONGINT; carry: BOOLEAN; r: Rope;
-    s: ARRAY 8 OF CHAR;
-BEGIN
-  FOR i := 0 TO 5 DO
-    IF i < Len(frac) THEN d[i] := ORD(Ropes.Fetch(frac, i)) - ORD("0") ELSE d[i] := 0 END
-  END;
-  carry := d[5] >= 5;
-  i := 4;
-  WHILE carry & (i >= 0) DO
-    IF d[i] = 9 THEN d[i] := 0 ELSE INC(d[i]); carry := FALSE END;
-    DEC(i)
-  END;
-  IF carry THEN (* add one to int *)
-    b := ToBuf(int); n := Len(int); k := n - 1;
-    WHILE carry & (k >= 0) DO
-      IF b[k] = "9" THEN b[k] := "0" ELSE b[k] := CHR(ORD(b[k]) + 1); carry := FALSE END;
-      DEC(k)
-    END;
-    int := Ropes.FromSubchars(b^, 0, n);
-    IF carry THEN int := Cat(R("1"), int) END
-  END;
-  r := StripZeros(int);
-  n := 5; WHILE (n > 0) & (d[n - 1] = 0) DO DEC(n) END;
-  IF n > 0 THEN
-    FOR i := 0 TO n - 1 DO s[i] := CHR(d[i] + ORD("0")) END;
-    s[n] := 0X;
-    r := CatS(CatS(r, "."), s)
-  END;
-  RETURN r
-END ShowFl;
-
 (* int.frac as Haskell's show writes a Double *)
 PROCEDURE ShowDouble(int, frac: Rope): Rope;
   VAR digits: Rope; b: Buf; n, i, j, first, last, exp: LONGINT; r: Rope;
@@ -624,13 +581,13 @@ BEGIN
   v := A.GetKeyVal(at, name, found);
   IF ~found OR ~Sh.NumUnit(v, int, frac, unit) THEN RETURN END;
   IF (Len(unit) = 0) OR Eq(unit, "px") THEN
-    A.AddKeyVal(a, R(name), StripZeros(int))
+    A.AddKeyVal(a, R(name), Sh.StripZeros(int))
   ELSIF Eq(unit, "%") THEN
     A.AddKeyVal(a, R("style"), CatS(Cat(CatS(R(name), ":"), ShowDouble(int, frac)), "%"))
   ELSIF Eq(unit, "cm") OR Eq(unit, "mm") OR Eq(unit, "in") OR Eq(unit, "inch")
      OR Eq(unit, "pt") OR Eq(unit, "pc") OR Eq(unit, "em") THEN
     IF Eq(unit, "inch") THEN unit := R("in") END;
-    A.AddKeyVal(a, R("style"), Cat(Cat(CatS(R(name), ":"), ShowFl(int, frac)), unit))
+    A.AddKeyVal(a, R("style"), Cat(Cat(CatS(R(name), ":"), Sh.ShowFl(int, frac)), unit))
   END
 END AddDimension;
 

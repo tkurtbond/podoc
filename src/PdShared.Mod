@@ -4,7 +4,7 @@ MODULE PdShared;
    (stringify), the division of a document into sections
    (makeSections), and the metadata that writers look up. *)
 
-IMPORT Ropes, A := PdAst;
+IMPORT Ropes, PdJson, A := PdAst;
 
 CONST
   MaxLevels = 100; (* the most levels a section number has *)
@@ -462,5 +462,183 @@ BEGIN
   unit := Ropes.FromSubchars(b^, e, n - e);
   RETURN TRUE
 END NumUnit;
+
+(* The digits of int without leading zeros, "0" if they are all zeros *)
+PROCEDURE StripZeros*(int: Rope): Rope;
+  VAR i, n: LONGINT;
+BEGIN
+  i := 0; n := Ropes.Length(int);
+  WHILE (i < n - 1) & (Ropes.Fetch(int, i) = "0") DO INC(i) END;
+  RETURN Ropes.Substring(int, i, n - i)
+END StripZeros;
+
+(* int.frac as pandoc's showFl writes it: rounded to 5 decimals,
+   without trailing zeros or point *)
+PROCEDURE ShowFl*(int, frac: Rope): Rope;
+  VAR d: ARRAY 6 OF INTEGER; b: POINTER TO ARRAY OF CHAR; i, k, n: LONGINT; carry: BOOLEAN;
+    r: Rope; s: ARRAY 8 OF CHAR;
+BEGIN
+  FOR i := 0 TO 5 DO
+    IF i < Ropes.Length(frac) THEN d[i] := ORD(Ropes.Fetch(frac, i)) - ORD("0") ELSE d[i] := 0 END
+  END;
+  carry := d[5] >= 5;
+  i := 4;
+  WHILE carry & (i >= 0) DO
+    IF d[i] = 9 THEN d[i] := 0 ELSE INC(d[i]); carry := FALSE END;
+    DEC(i)
+  END;
+  IF carry THEN (* add one to int *)
+    n := Ropes.Length(int); NEW(b, n + 1);
+    IF n > 0 THEN Ropes.Blit(int, 0, b^, 0, n) END;
+    k := n - 1;
+    WHILE carry & (k >= 0) DO
+      IF b[k] = "9" THEN b[k] := "0" ELSE b[k] := CHR(ORD(b[k]) + 1); carry := FALSE END;
+      DEC(k)
+    END;
+    int := Ropes.FromSubchars(b^, 0, n);
+    IF carry THEN int := Ropes.Cat(Ropes.FromChar("1"), int) END
+  END;
+  r := StripZeros(int);
+  n := 5; WHILE (n > 0) & (d[n - 1] = 0) DO DEC(n) END;
+  IF n > 0 THEN
+    FOR i := 0 TO n - 1 DO s[i] := CHR(d[i] + ORD("0")) END;
+    s[n] := 0X;
+    r := Ropes.Cat(Ropes.Cat(r, Ropes.FromChar(".")), Ropes.FromString(s))
+  END;
+  RETURN r
+END ShowFl;
+
+(* printf "%0.<dec>f" x, as GHC writes it, for x >= 0: the shortest
+   digits of x rounded, half to even, to dec decimals (0 < dec < 10) *)
+PROCEDURE Fixed*(x: LONGREAL; dec: INTEGER): Rope;
+  CONST max = 400;
+  VAR digits: ARRAY 24 OF CHAR; is: ARRAY max OF INTEGER; n, e, d, k, c, j, v: INTEGER;
+    out: Rope; s: ARRAY max OF CHAR; zero: BOOLEAN;
+BEGIN
+  IF x <= 0 THEN
+    s[0] := "0"; s[1] := "."; FOR k := 1 TO dec DO s[k + 1] := "0" END; s[dec + 2] := 0X;
+    RETURN Ropes.FromString(s)
+  END;
+  PdJson.ShortestDigits(x, digits, n, e);
+  IF (e > max - 30) OR (-e > max - 30) THEN RETURN Fixed(0, dec) END; (* not a width *)
+  (* the digits, with -e zeros before them if e < 0 *)
+  j := 0;
+  IF e < 0 THEN
+    FOR k := 1 TO -e DO is[j] := 0; INC(j) END
+  END;
+  FOR k := 0 TO n - 1 DO is[j] := ORD(digits[k]) - ORD("0"); INC(j) END;
+  n := j;
+  IF e >= 0 THEN d := dec + e ELSE d := dec END;
+  (* roundTo 10 d is *)
+  c := 0;
+  IF n <= d THEN
+    WHILE n < d DO is[n] := 0; INC(n) END
+  ELSE
+    zero := TRUE;
+    FOR k := d + 1 TO n - 1 DO IF is[k] # 0 THEN zero := FALSE END END;
+    IF (is[d] = 5) & zero & ((d = 0) OR ~ODD(is[d - 1])) THEN c := 0
+    ELSIF is[d] >= 5 THEN c := 1
+    END;
+    k := d - 1;
+    WHILE k >= 0 DO
+      v := is[k] + c;
+      IF v = 10 THEN is[k] := 0; c := 1 ELSE is[k] := v; c := 0 END;
+      DEC(k)
+    END
+  END;
+  (* s: is[0 .. d-1], after a 1 if there is a carry *)
+  j := 0;
+  IF c = 1 THEN s[0] := "1"; j := 1 END;
+  FOR k := 0 TO d - 1 DO s[j] := CHR(ORD("0") + is[k]); INC(j) END;
+  IF j > dec THEN out := Ropes.FromSubchars(s, 0, j - dec) ELSE out := Ropes.FromChar("0") END;
+  out := Ropes.Cat(out, Ropes.FromChar("."));
+  RETURN Ropes.Cat(out, Ropes.FromSubchars(s, j - dec, dec))
+END Fixed;
+
+(* Blocks as inlines *)
+
+(* The lines of a line block joined by LineBreaks, copied, appended
+   to il *)
+PROCEDURE JoinLines*(VAR il: A.Inlines; l: A.InlineList);
+BEGIN
+  WHILE l # NIL DO
+    A.Append(il, A.CopyInlines(l.inlines));
+    IF l.next # NIL THEN A.Append(il, A.NewSimple(A.LineBreak)) END;
+    l := l.next
+  END
+END JoinLines;
+
+PROCEDURE^ BlocksToInlines*(VAR l: A.Inlines; b: A.Block);
+
+PROCEDURE BlockToInlines(VAR l: A.Inlines; b: A.Block);
+  VAR it: A.BlockList; di: A.DefItem; row: A.Row; c: A.Cell; tb: A.TableBody; t: A.TableBlk;
+    pass: INTEGER; firstRow: BOOLEAN;
+BEGIN
+  CASE b.kind OF
+    A.Plain, A.Para, A.Header: A.Append(l, A.CopyInlines(b(A.InlinesBlk).inlines))
+  | A.LineBlock: JoinLines(l, b(A.LineBlk).lines)
+  | A.CodeBlock: A.Append(l, A.NewCode(b(A.CodeBlk).attr, b(A.CodeBlk).text))
+  | A.RawBlock: A.Append(l, A.NewRawInline(b(A.RawBlk).format, b(A.RawBlk).text))
+  | A.BlockQuote, A.Div, A.Figure: BlocksToInlines(l, b(A.BlocksBlk).blocks)
+  | A.OrderedList, A.BulletList:
+    it := b(A.ListBlk).items;
+    WHILE it # NIL DO BlocksToInlines(l, it.blocks); it := it.next END
+  | A.DefinitionList:
+    di := b(A.DefListBlk).items;
+    WHILE di # NIL DO
+      A.Append(l, A.CopyInlines(di.term));
+      A.Append(l, A.NewStr(Ropes.FromChar(":"))); A.Append(l, A.NewSimple(A.Space));
+      it := di.defs;
+      WHILE it # NIL DO BlocksToInlines(l, it.blocks); it := it.next END;
+      di := di.next
+    END
+  | A.HorizontalRule:
+  | A.Table:
+    t := b(A.TableBlk); row := t.head.rows; tb := t.bodies; pass := 0; firstRow := TRUE;
+    LOOP
+      WHILE row # NIL DO
+        IF ~firstRow THEN A.Append(l, A.NewSimple(A.LineBreak)) END;
+        firstRow := FALSE;
+        c := row.cells;
+        WHILE c # NIL DO BlocksToInlines(l, c.blocks); c := c.next END;
+        row := row.next
+      END;
+      IF pass = 1 THEN row := tb.body; pass := 2; tb := tb.next
+      ELSIF tb # NIL THEN row := tb.head; pass := 1
+      ELSIF pass # 3 THEN row := t.foot.rows; pass := 3
+      ELSE EXIT
+      END
+    END
+  END
+END BlockToInlines;
+
+(* blocksToInlines', appended to l: the blocks, a LineBreak between
+   each two *)
+PROCEDURE BlocksToInlines*(VAR l: A.Inlines; b: A.Block);
+BEGIN
+  WHILE b # NIL DO
+    BlockToInlines(l, b);
+    IF b.next # NIL THEN A.Append(l, A.NewSimple(A.LineBreak)) END;
+    b := b.next
+  END
+END BlocksToInlines;
+
+(* isTightList: whether each of the items starts with a Plain, is
+   empty, or is just a tight list *)
+PROCEDURE IsTightList*(items: A.BlockList): BOOLEAN;
+  VAR b: A.Block;
+BEGIN
+  WHILE items # NIL DO
+    b := items.blocks;
+    IF (b # NIL) & (b.kind # A.Plain) THEN
+      IF (b.next # NIL) OR (b.kind # A.BulletList) & (b.kind # A.OrderedList)
+         OR ~IsTightList(b(A.ListBlk).items) THEN
+        RETURN FALSE
+      END
+    END;
+    items := items.next
+  END;
+  RETURN TRUE
+END IsTightList;
 
 END PdShared.

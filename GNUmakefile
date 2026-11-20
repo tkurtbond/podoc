@@ -47,7 +47,7 @@ $(BUILD)/%/podoc: $(SRCS) $(POC_STAMP)
 test: test-o2 test-oc
 
 # pandoc and podoc side by side (tools/compare), where pandoc is installed
-COMPARE_FORMATS ?= json html ms
+COMPARE_FORMATS ?= json html ms context
 compare: $(BUILD)/OC/podoc
 	tools/compare $(BUILD)/OC/podoc $(BUILD)/compare $(COMPARE_FORMATS)
 

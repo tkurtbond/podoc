@@ -368,14 +368,14 @@ that exists), which on the user's machine is `~/.pandoc`.
 - Acceptance: the ms for the user's documents is equivalent to
   pandoc's.
 
-## Phase 9: The ConTeXt writer
+## Phase 9: The ConTeXt writer [done]
 
-### Phase 9.1: Blocks and inlines
+### Phase 9.1: Blocks and inlines [done]
 
 - Every element of §3.3: escapes, sections, lists, tables
   (`xtable`), block quotes, line blocks, images, footnotes, links.
 
-### Phase 9.2: Standalone ConTeXt
+### Phase 9.2: Standalone ConTeXt [done]
 
 - The default template and the user's `tkb.context` and
   `statement.context`, with their variables.
@@ -736,3 +736,34 @@ Oberon (decision 7).
   --toc-depth=2`, gave pandoc's ms byte for byte (330 runs), except
   the same highlighting and math. json and html still compare as
   after Phase 7. Phase 9 next.
+- 2026-11-20: Phase 9 done. `PdConTeXt` writes pandoc's ConTeXt:
+  escapes and ligatures, `toLabel` references, sections as
+  `\startsectionlevel` (unnumbered, unlisted), emphasis and the other
+  font commands, `\type` with pandoc's delimiter choice, math, raw
+  `context` and `tex`, line breaks with struts, links (`\goto`) and
+  autolinks (`\useURL`, numbered from the metadata on), images with
+  their dimensions, notes (with `\startbuffer` when they hold code),
+  spans and divs with `lang`, `dir` and ids, `refs`, block quotes,
+  line blocks, itemize, enumerate (styles, start, stoppers, nesting),
+  descriptions, rules, figures, and tables as `xtable`, with column
+  spans clipped as pandoc annotates them. Standalone, the context
+  fields: `toc`, `placelist`, `layout` from the margins, `context-lang`
+  (`fromBCP47`), `papersize` (`a5` -> `A5`), `pdfa`, `context-dir` and
+  the rest. `PdShared` takes `StripZeros`, `ShowFl` from `PdHtml`,
+  `JoinLines`, `BlocksToInlines` from `PdMs`, `Fixed` (generalized
+  from `Fixed1`) and `IsTightList`. `podoc` adds `-t context` and the
+  default `context` template under `-s`; `tools/compare` runs every
+  format but json also with `-s`, and `make compare` includes
+  context. `make test` passed under `-O2` and `-OC`: 81 of 81 cases,
+  among them 18 new `.context` expected files, two for the new cases
+  `context-features` and `context-standalone`; all are pandoc's
+  output byte for byte except `blocks.context`, podoc's because of
+  highlighting (docs/user/differences.md). Acceptance: `make compare`
+  gave 640 of 658 the same, the 18 that differ being math (html, ms)
+  and highlighting (ms, context); and all markdown files of
+  Lost-Worlds and Galactic-Bounty-Hunters, each with `-s -H cstyle.tex
+  --include-in-header=header-includes.context`, `-s
+  --template=tkb.context`, `-s --template=statement.context` and `-s
+  --toc -N -V papersize=a4 -M lang=en-US`, gave pandoc's ConTeXt byte
+  for byte (112 runs) except the four of `CLAUDE.md`, highlighting.
+  The filters these builds use come in Phase 13. Phase 10 next.
