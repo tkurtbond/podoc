@@ -54,6 +54,22 @@ TYPE
   IntArr = POINTER TO ARRAY OF LONGINT;
   RealArr = POINTER TO ARRAY OF LONGREAL;
 
+  (* gridTable's RenderedCell, a row of them, and the rows *)
+  GCell = POINTER TO GCellDesc;
+  GCellDesc = RECORD
+    col, span, rspan, align, width: LONGINT;
+    ct: CellText;
+    top, bottom: INTEGER (* border styles *)
+  END;
+  GCells = POINTER TO ARRAY OF GCell;
+  GRow = POINTER TO GRowDesc;
+  GRowDesc = RECORD
+    cells: GCells;
+    n: LONGINT;
+    next: GRow
+  END;
+  GridRows = RECORD first, last: GRow END;
+
 VAR
   (* options *)
   preserve, wantToc, numberSections: BOOLEAN;
@@ -74,6 +90,9 @@ VAR
 
 CONST
   NoScript = 0; Super = 1; Sub = 2;
+  (* gridTable's LineStyle *)
+  NoLine = 0; SingleLine = 1; DoubleLine = 2; SingleHeaderLine = 3;
+  DoubleHeaderLine = 4;
 
 (* Ropes *)
 
@@ -1173,7 +1192,8 @@ PROCEDURE RowDoc(rc: RowCells; widths, aligns: IntArr; nc: LONGINT): L.Doc;
 BEGIN
   h := 0;
   FOR k := 0 TO nc - 1 DO IF rc[k].n > h THEN h := rc[k].n END END;
-  IF h = 0 THEN RETURN NIL END;
+  IF nc = 0 THEN RETURN NIL END;
+  IF h = 0 THEN h := 1 END; (* a row of empty cells is a line, as in doclayout *)
   out := NIL;
   FOR li := 0 TO h - 1 DO
     line := NIL;
@@ -1247,6 +1267,423 @@ BEGIN
   RETURN d
 END PandocTable;
 
+(* Grid tables: pandoc's gridTable (Writers/Shared.hs) over
+   Writers/AnnotatedTable's toTable. Cells are rendered unwrapped
+   (--wrap=none), so the minimum widths are the full ones. *)
+
+PROCEDURE NewGCell(col, span, rspan, align, width: LONGINT; ct: CellText): GCell;
+  VAR c: GCell;
+BEGIN
+  NEW(c); c.col := col; c.span := span; c.rspan := rspan; c.align := align;
+  c.width := width; c.ct := ct; c.top := SingleLine;
+  IF rspan < 2 THEN c.bottom := SingleLine ELSE c.bottom := NoLine END;
+  RETURN c
+END NewGCell;
+
+(* annotateHeaderSection or annotateBodySection, then gridRow: the
+   section's rows, each cell placed in its columns (clipRows, the
+   overhang of row spans), rendered; appended to g *)
+PROCEDURE GridSection(row: A.Row; rhc, nc: LONGINT; aligns: IntArr; widths: RealArr;
+                      VAR g: GridRows);
+  VAR hang: IntArr; total, i, k, col, w, h, n: LONGINT; c: A.Cell; gr: GRow;
+    cells: GCells; sum: LONGREAL; r: A.Row;
+
+  (* annotateRowSection over the columns from col to lim *)
+  PROCEDURE Place(lim: LONGINT);
+    VAR ct: CellText;
+  BEGIN
+    WHILE col < lim DO
+      IF hang[col] > 1 THEN DEC(hang[col]); INC(col)
+      ELSE
+        IF c # NIL THEN
+          h := c.rowSpan; w := c.colSpan;
+          IF h > total - i THEN h := total - i END;
+          IF h < 1 THEN h := 1 END;
+          IF w < 1 THEN w := 1 END;
+          ct := RenderCell(c); c := c.next
+        ELSE h := 1; w := 1; ct := RenderCell(NIL)
+        END;
+        k := col; sum := 0;
+        WHILE (k < lim) & (k - col < w) & (hang[k] = 1) DO sum := sum + widths[k]; INC(k) END;
+        w := k - col;
+        FOR k := col TO col + w - 1 DO hang[k] := h END;
+        k := ENTIER(sum * 72) - 3; IF k < 0 THEN k := 0 END;
+        cells[n] := NewGCell(col, w, h, aligns[col], k, ct); INC(n);
+        INC(col, w)
+      END
+    END
+  END Place;
+
+BEGIN
+  IF rhc > nc THEN rhc := nc ELSIF rhc < 0 THEN rhc := 0 END;
+  total := 0; r := row; WHILE r # NIL DO INC(total); r := r.next END;
+  NEW(hang, nc + 1); FOR k := 0 TO nc - 1 DO hang[k] := 1 END;
+  i := 0;
+  WHILE row # NIL DO
+    NEW(cells, nc + 1); n := 0; c := row.cells; col := 0;
+    Place(rhc); Place(nc);
+    NEW(gr); gr.cells := cells; gr.n := n; gr.next := NIL;
+    IF g.last = NIL THEN g.first := gr ELSE g.last.next := gr END;
+    g.last := gr;
+    INC(i); row := row.next
+  END
+END GridSection;
+
+(* makeDummy *)
+PROCEDURE Dummy(d: GCell): GCell;
+  VAR c: GCell;
+BEGIN
+  NEW(c); c^ := d^; c.align := A.AlignDefault; DEC(c.rspan);
+  NEW(c.ct); c.ct.lines := NIL; c.ct.n := 0;
+  c.top := NoLine; c.bottom := NoLine;
+  RETURN c
+END Dummy;
+
+(* addDummies on the rows from first: the positions a row span covers
+   get dummy cells *)
+PROCEDURE AddDummies(first: GRow);
+  VAR prev, r: GRow; cells: GCells; i, j, n: LONGINT; d, c: GCell;
+BEGIN
+  IF first = NIL THEN RETURN END;
+  prev := first; r := first.next;
+  WHILE r # NIL DO
+    NEW(cells, prev.n + r.n + 1); n := 0; i := 0; j := 0;
+    WHILE j < r.n DO
+      c := r.cells[j];
+      IF (i < prev.n) & (prev.cells[i].col < c.col) THEN
+        cells[n] := Dummy(prev.cells[i]); INC(n); INC(i)
+      ELSE
+        cells[n] := c; INC(n); INC(j);
+        WHILE (i < prev.n) & (prev.cells[i].col < c.col + c.span) DO INC(i) END
+      END
+    END;
+    WHILE i < prev.n DO cells[n] := Dummy(prev.cells[i]); INC(n); INC(i) END;
+    r.cells := cells; r.n := n;
+    prev := r; r := r.next
+  END
+END AddDummies;
+
+PROCEDURE SetBorders(first, last: GRow; top, bottom: INTEGER);
+  VAR k: LONGINT;
+BEGIN
+  IF first = NIL THEN RETURN END;
+  FOR k := 0 TO first.n - 1 DO first.cells[k].top := top END;
+  FOR k := 0 TO last.n - 1 DO last.cells[k].bottom := bottom END
+END SetBorders;
+
+(* redoWidths: the columns' widths, then each cell's *)
+PROCEDURE RedoWidths(rows: GRow; nc: LONGINT);
+  VAR full, spec, used, new: IntArr; r: GRow; c: GCell;
+    k, j, o, s, numUn, unused, def, runs: LONGINT; final, same: BOOLEAN;
+BEGIN
+  NEW(full, nc + 1); NEW(spec, nc + 1); NEW(used, nc + 1); NEW(new, nc + 1);
+  FOR k := 0 TO nc - 1 DO full[k] := 0; spec[k] := 0 END;
+  r := rows;
+  WHILE r # NIL DO
+    FOR j := 0 TO r.n - 1 DO
+      c := r.cells[j];
+      o := 0;
+      FOR k := 0 TO c.ct.n - 1 DO
+        IF L.Width(c.ct.lines[k]) > o THEN o := L.Width(c.ct.lines[k]) END
+      END;
+      IF o < 1 THEN o := 1 END;
+      o := o DIV c.span + o MOD c.span;
+      s := c.width DIV c.span + c.width MOD c.span;
+      FOR k := c.col TO c.col + c.span - 1 DO
+        IF (k < nc) & (o > full[k]) THEN full[k] := o END;
+        IF (k < nc) & (s > spec[k]) THEN spec[k] := s END
+      END
+    END;
+    r := r.next
+  END;
+  FOR k := 0 TO nc - 1 DO
+    IF spec[k] = 0 THEN used[k] := 0
+    ELSIF spec[k] > full[k] THEN used[k] := spec[k]
+    ELSE used[k] := full[k]
+    END
+  END;
+  (* recalculateWidths *)
+  final := FALSE; runs := 1;
+  LOOP
+    numUn := 0; unused := 72 - 3 * nc - 1;
+    FOR k := 0 TO nc - 1 DO
+      IF used[k] = 0 THEN INC(numUn) END;
+      DEC(unused, used[k])
+    END;
+    IF numUn = 0 THEN def := 0
+    ELSIF unused >= 0 THEN def := unused DIV numUn
+    ELSE def := -((-unused + numUn - 1) DIV numUn) (* floor *)
+    END;
+    same := TRUE;
+    FOR k := 0 TO nc - 1 DO
+      new[k] := used[k];
+      IF used[k] = 0 THEN
+        IF final THEN
+          IF full[k] > def THEN new[k] := full[k] ELSE new[k] := def END
+        ELSIF full[k] <= def THEN new[k] := full[k]
+        END
+      END;
+      IF new[k] # used[k] THEN same := FALSE END
+    END;
+    IF final OR (runs > 4) THEN
+      FOR k := 0 TO nc - 1 DO used[k] := new[k] END;
+      EXIT
+    END;
+    IF same THEN final := TRUE
+    ELSE FOR k := 0 TO nc - 1 DO used[k] := new[k] END
+    END;
+    INC(runs)
+  END;
+  (* resetWidths *)
+  r := rows;
+  WHILE r # NIL DO
+    k := 0;
+    FOR j := 0 TO r.n - 1 DO
+      c := r.cells[j];
+      IF k < nc THEN
+        c.width := used[k];
+        FOR o := 1 TO c.span - 1 DO
+          IF k + o < nc THEN INC(c.width, used[k + o] + 3) END
+        END;
+        INC(k, c.span)
+      END
+    END;
+    r := r.next
+  END
+END RedoWidths;
+
+(* formatBorder: the border of the row's cells in the style top (TRUE)
+   or bottom of each, or in style if style # NoLine (formatHeaderLine's
+   const style), with alignment markers if marks *)
+PROCEDURE FormatBorder(r: GRow; top: BOOLEAN; style: INTEGER; marks: BOOLEAN): Rope;
+  VAR b: B.Buf; k, j: LONGINT; s, prevS: INTEGER; lc, la, ra: CHAR; c: GCell;
+BEGIN
+  B.InitBuf(b); prevS := NoLine; s := NoLine;
+  FOR k := 0 TO r.n - 1 DO
+    c := r.cells[k];
+    IF style # NoLine THEN s := style ELSIF top THEN s := c.top ELSE s := c.bottom END;
+    IF (s = NoLine) & (prevS = NoLine) THEN B.PutChar(b, "|") ELSE B.PutChar(b, "+") END;
+    CASE s OF
+      NoLine: lc := " "
+    | SingleLine, SingleHeaderLine: lc := "-"
+    | DoubleLine, DoubleHeaderLine: lc := "="
+    END;
+    la := lc; ra := lc;
+    IF marks THEN
+      IF c.align = A.AlignLeft THEN la := ":"
+      ELSIF c.align = A.AlignCenter THEN la := ":"; ra := ":"
+      ELSIF c.align = A.AlignRight THEN ra := ":"
+      END
+    END;
+    B.PutChar(b, la);
+    FOR j := 1 TO c.width DO B.PutChar(b, lc) END;
+    B.PutChar(b, ra);
+    prevS := s
+  END;
+  IF s = NoLine THEN B.PutChar(b, "|") ELSE B.PutChar(b, "+") END;
+  RETURN B.BufRope(b)
+END FormatBorder;
+
+(* combineBorders *)
+PROCEDURE CombineBorders(t1, t2: Rope): Rope;
+  VAR a, b: Buf; n, n2, i: LONGINT; o: B.Buf; x, y, z: CHAR;
+BEGIN
+  n := Len(t1);
+  IF n = 0 THEN RETURN t2 END;
+  n2 := Len(t2); IF n2 < n THEN n := n2 END;
+  a := ToBuf(t1); b := ToBuf(t2); B.InitBuf(o);
+  FOR i := 0 TO n - 1 DO
+    x := a[i]; y := b[i];
+    IF (x = "+") OR (y = "+") THEN z := "+"
+    ELSIF (x = ":") OR (y = ":") THEN z := ":"
+    ELSIF (x = "|") & ((y = "-") OR (y = "=")) OR (y = "|") & ((x = "-") OR (x = "=")) THEN
+      z := "+"
+    ELSIF (x = "=") OR (y = "=") THEN z := "="
+    ELSIF x = " " THEN z := y
+    ELSE z := x
+    END;
+    B.PutChar(o, z)
+  END;
+  RETURN B.BufRope(o)
+END CombineBorders;
+
+PROCEDURE IsHeaderStyle(s: INTEGER): BOOLEAN;
+BEGIN
+  RETURN (s = SingleHeaderLine) OR (s = DoubleHeaderLine)
+END IsHeaderStyle;
+
+(* The border above (top) or below the row: formatHeaderLine over all
+   the rows if the row's first cell has a header style, else
+   formatBorder *)
+PROCEDURE RowBorder(rows, r: GRow; top: BOOLEAN): Rope;
+  VAR s: INTEGER; t: Rope;
+BEGIN
+  IF r.n = 0 THEN RETURN NIL END;
+  IF top THEN s := r.cells[0].top ELSE s := r.cells[0].bottom END;
+  IF ~IsHeaderStyle(s) THEN RETURN FormatBorder(r, top, NoLine, FALSE) END;
+  t := NIL;
+  WHILE rows # NIL DO
+    t := CombineBorders(t, FormatBorder(rows, top, s, TRUE));
+    rows := rows.next
+  END;
+  RETURN t
+END RowBorder;
+
+(* formatRow: the cells side by side, each padded to its width *)
+PROCEDURE FormatRow(r: GRow): Rope;
+  VAR h, k, li, w: LONGINT; out, s: Rope; c: GCell;
+BEGIN
+  h := 0;
+  FOR k := 0 TO r.n - 1 DO IF r.cells[k].ct.n > h THEN h := r.cells[k].ct.n END END;
+  IF (h = 0) & (r.n > 0) THEN h := 1 END; (* empty cells: one line, as in doclayout *)
+  out := NIL;
+  FOR li := 0 TO h - 1 DO
+    IF li > 0 THEN out := CatC(out, 0AX) END;
+    out := CatS(out, "| ");
+    FOR k := 0 TO r.n - 1 DO
+      c := r.cells[k];
+      IF k > 0 THEN out := CatS(out, " | ") END;
+      IF li < c.ct.n THEN s := c.ct.lines[li] ELSE s := NIL END;
+      w := c.width - L.Width(s); IF w < 0 THEN w := 0 END;
+      out := Cat(Cat(out, s), Spaces(w))
+    END;
+    out := CatS(out, " |")
+  END;
+  RETURN out
+END FormatRow;
+
+(* gridTable *)
+PROCEDURE GridTable(t: A.TableBlk; nc: LONGINT; aligns: IntArr; widths: RealArr): L.Doc;
+  VAR g, all: GridRows; tb: A.TableBody; r: GRow; out, b1, b2: Rope;
+    hasHead: BOOLEAN; bodyFirst, bodyLast: GRow;
+
+  PROCEDURE Append(VAR to: GridRows; from: GridRows);
+  BEGIN
+    IF from.first = NIL THEN RETURN END;
+    IF to.last = NIL THEN to.first := from.first ELSE to.last.next := from.first END;
+    to.last := from.last
+  END Append;
+
+BEGIN
+  all.first := NIL; all.last := NIL;
+  g.first := NIL; g.last := NIL;
+  GridSection(t.head.rows, 0, nc, aligns, widths, g);
+  AddDummies(g.first); SetBorders(g.first, g.last, SingleLine, DoubleHeaderLine);
+  hasHead := g.first # NIL;
+  Append(all, g);
+  bodyFirst := NIL; bodyLast := NIL;
+  tb := t.bodies;
+  WHILE tb # NIL DO
+    g.first := NIL; g.last := NIL;
+    GridSection(tb.head, 0, nc, aligns, widths, g);
+    GridSection(tb.body, tb.rowHeadColumns, nc, aligns, widths, g);
+    AddDummies(g.first);
+    IF g.first # NIL THEN
+      IF bodyFirst = NIL THEN bodyFirst := g.first END;
+      bodyLast := g.last
+    END;
+    Append(all, g);
+    tb := tb.next
+  END;
+  IF hasHead THEN SetBorders(bodyFirst, bodyLast, SingleLine, SingleLine)
+  ELSE SetBorders(bodyFirst, bodyLast, SingleHeaderLine, SingleLine)
+  END;
+  g.first := NIL; g.last := NIL;
+  GridSection(t.foot.rows, 0, nc, aligns, widths, g);
+  AddDummies(g.first); SetBorders(g.first, g.last, DoubleLine, DoubleLine);
+  Append(all, g);
+  IF all.first = NIL THEN RETURN NIL END;
+  RedoWidths(all.first, nc);
+  out := RowBorder(all.first, all.first, TRUE);
+  r := all.first;
+  WHILE r # NIL DO
+    b1 := FormatRow(r);
+    IF b1 # NIL THEN out := Cat(CatC(out, 0AX), b1) END;
+    b1 := RowBorder(all.first, r, FALSE);
+    IF r.next # NIL THEN
+      b2 := RowBorder(all.first, r.next, TRUE);
+      b1 := CombineBorders(b1, b2)
+    END;
+    out := Cat(CatC(out, 0AX), b1);
+    r := r.next
+  END;
+  RETURN Lr(out)
+END GridTable;
+
+(* pipeTable *)
+PROCEDURE PipeTable(headless: BOOLEAN; head: RowCells; rows: RowArr; nr: LONGINT;
+                    aligns: IntArr; widths: RealArr; nc: LONGINT): L.Doc;
+  VAR cw: IntArr; k, j, maxw, w: LONGINT; pad, allZero: BOOLEAN; out: Rope; b: B.Buf;
+
+  PROCEDURE Cell1(rc: RowCells; k: LONGINT): Rope;
+  BEGIN
+    IF (rc = NIL) OR (rc[k].n = 0) THEN RETURN NIL END;
+    RETURN rc[k].lines[0]
+  END Cell1;
+
+  PROCEDURE Widen(rc: RowCells);
+    VAR k, w: LONGINT;
+  BEGIN
+    FOR k := 0 TO nc - 1 DO
+      w := L.Width(Cell1(rc, k)); IF w > cw[k] THEN cw[k] := w END
+    END
+  END Widen;
+
+  PROCEDURE ToRow(rc: RowCells): Rope;
+    VAR k, x, len, left: LONGINT; out, y: Rope;
+  BEGIN
+    out := R("|");
+    FOR k := 0 TO nc - 1 DO
+      IF k > 0 THEN out := CatC(out, "|") END;
+      y := Cell1(rc, k); len := L.Width(y); x := cw[k] + 2;
+      IF ~pad THEN out := CatC(Cat(CatC(out, " "), y), " ")
+      ELSIF aligns[k] = A.AlignCenter THEN
+        len := len + 2; left := (x - len) DIV 2; IF left < 0 THEN left := 0 END;
+        out := CatC(Cat(CatC(Cat(out, Spaces(left)), " "), y), " ");
+        IF x - len - left > 0 THEN out := Cat(out, Spaces(x - len - left)) END
+      ELSIF aligns[k] = A.AlignRight THEN
+        len := len + 1;
+        IF x > len THEN out := Cat(out, Spaces(x - len)) END;
+        out := CatC(Cat(out, y), " ")
+      ELSE
+        len := len + 1;
+        out := Cat(CatC(out, " "), y);
+        IF x > len THEN out := Cat(out, Spaces(x - len)) END
+      END
+    END;
+    RETURN CatC(out, "|")
+  END ToRow;
+
+BEGIN
+  NEW(cw, nc + 1);
+  FOR k := 0 TO nc - 1 DO cw[k] := 3 END;
+  Widen(head); FOR j := 0 TO nr - 1 DO Widen(rows[j]) END;
+  maxw := 0; allZero := TRUE;
+  FOR k := 0 TO nc - 1 DO INC(maxw, cw[k]); IF widths[k] # 0 THEN allZero := FALSE END END;
+  pad := maxw <= 72;
+  IF headless THEN out := ToRow(NIL) ELSE out := ToRow(head) END;
+  B.InitBuf(b); B.PutChar(b, "|");
+  FOR k := 0 TO nc - 1 DO
+    IF k > 0 THEN B.PutChar(b, "|") END;
+    IF ~plain & ~allZero & (maxw + nc + 1 > 72) THEN
+      w := ENTIER(widths[k] * (72 - (nc + 1))); IF w < 0 THEN w := 0 END
+    ELSIF pad THEN w := cw[k]
+    ELSE w := 2
+    END;
+    IF aligns[k] = A.AlignLeft THEN B.PutChar(b, ":"); INC(w)
+    ELSIF aligns[k] = A.AlignCenter THEN B.PutChar(b, ":")
+    ELSIF aligns[k] # A.AlignRight THEN INC(w, 2)
+    ELSE INC(w)
+    END;
+    FOR j := 1 TO w DO B.PutChar(b, "-") END;
+    IF (aligns[k] = A.AlignCenter) OR (aligns[k] = A.AlignRight) THEN B.PutChar(b, ":") END
+  END;
+  B.PutChar(b, "|");
+  out := Cat(CatC(out, 0AX), B.BufRope(b));
+  FOR j := 0 TO nr - 1 DO out := Cat(CatC(out, 0AX), ToRow(rows[j])) END;
+  RETURN Lr(out)
+END PipeTable;
+
 PROCEDURE Table(t: A.TableBlk): L.Doc;
   VAR caption: A.Inline; capD, capt: L.Doc; cs: A.ColSpec; tb: A.TableBody;
     nc, ncs, nr, k, n: LONGINT; aligns: IntArr; widths: RealArr;
@@ -1296,8 +1733,8 @@ BEGIN
   IF caption = NIL THEN capD := L.BlankLine()
   ELSE capD := L.Above(L.Above(L.BlankLine(), L.Cat(Lit(": "), capt)), L.BlankLine())
   END;
-  IF (simple & ~hasFooter & allZero & ~spans) OR (plainCells & ~spans & ~hasFooter) THEN
-    multiline := ~(simple & ~hasFooter & allZero & ~spans);
+  IF (simple & ~hasFooter & allZero & ~spans) OR (plainCells & ~spans & ~hasFooter)
+     OR ~plain & simple & ~spans & ~hasFooter & ~(72 >= 8 * nc) THEN
     headless := TRUE;
     IF headRow # NIL THEN
       c := headRow.cells;
@@ -1317,8 +1754,17 @@ BEGIN
       ELSE EXIT
       END
     END;
-    RETURN L.Above(L.Nest(2, L.Above(PandocTable(multiline, headless, head, rows, nr, aligns,
-      widths, nc), capD)), L.BlankLine())
+    IF (simple & ~hasFooter & allZero & ~spans) OR (plainCells & ~spans & ~hasFooter) THEN
+      multiline := ~(simple & ~hasFooter & allZero & ~spans);
+      RETURN L.Above(L.Nest(2, L.Above(PandocTable(multiline, headless, head, rows, nr, aligns,
+        widths, nc), capD)), L.BlankLine())
+    END;
+    (* simple cells, no spans, too many columns for a grid table *)
+    RETURN L.Above(L.Above(PipeTable(headless, head, rows, nr, aligns, widths, nc), capD),
+      L.BlankLine())
+  END;
+  IF spans OR (72 >= 8 * nc) OR hasFooter THEN
+    RETURN L.Above(L.Above(GridTable(t, ncs, aligns, widths), capD), L.BlankLine())
   END;
   IF plain THEN RETURN L.Above(L.Above(Lit("[TABLE]"), capD), L.BlankLine()) END;
   RETURN L.Above(Lr(RemoveBlankLines(PdHtml.Fragment(t))), L.BlankLine())

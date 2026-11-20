@@ -240,11 +240,6 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
 
 ## The markdown writer
 
-- Tables that pandoc writes as grid or pipe tables (cells holding
-  more than one paragraph or other blocks, or tables too wide for a
-  multiline table) are written as HTML tables, pandoc's fallback when
-  no other table extension fits. Simple and multiline tables are
-  written as pandoc writes them.
 - A run of colons that would start a fenced div is escaped as `\`
   and the same colons. pandoc 3.10 writes one colon too many (`::::`
   becomes `\:::::`), so its output does not read back as its input.
@@ -258,8 +253,8 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
 - The round trip is not exact, in pandoc either: markdown cannot hold
   everything the AST can. Written and read again, consecutive lists
   gain `<!-- -->` separators, an example list becomes a decimal list,
-  simple tables' default alignments become left alignments (and
-  their column widths change), raw HTML blocks come back as raw
+  simple and pipe tables' default alignments become left alignments,
+  tables' column widths change, raw HTML blocks come back as raw
   inlines in a paragraph, an attribute-less span is lost, curly
   quotes in text come back as Quoted, a tight definition's
   paragraphs are joined, metadata numbers and some literal block
@@ -276,9 +271,5 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
   the math texmath cannot convert. pandoc converts what it can into
   Unicode text (`$x^2$` becomes `x²`, `$\alpha$` becomes `α`); podoc
   has no TeX math parser.
-- Tables that pandoc writes as grid tables (cells holding more than
-  one paragraph or other blocks, or tables too wide for a multiline
-  table) are written as `[TABLE]`, with their caption, pandoc's
-  fallback when no table extension fits.
 - Output is not wrapped; `--wrap=preserve` keeps the input's line
   breaks.

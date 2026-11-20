@@ -730,7 +730,7 @@ writer to test it.
   translated from reST with grid tables kept (`-w markdown` without
   `-grid_tables`) gives pandoc's JSON byte for byte.
 
-### Phase 16.3: Grid and pipe tables in the writers
+### Phase 16.3: Grid and pipe tables in the writers [done]
 
 - pandoc's `gridTable` (`Writers/Shared.hs`, about 40 lines and the
   helpers it calls) on `PdLayout`: cells as block lists rendered to a
@@ -753,9 +753,9 @@ writer to test it.
   the relative widths when the table has them and is wider than
   `--columns` (markdown only), else the padded widths, else 4 per
   column. `|` in cells is escaped (`Writers/Markdown/Inline.hs`,
-  with `pipe_tables`). Also the
-  approximate pipe table pandoc writes for spans when raw HTML is
-  off (`-t markdown-raw_html`).
+  with `pipe_tables`). The approximate pipe table pandoc writes for
+  spans when raw HTML is off (`-t markdown-raw_html`) went to Later:
+  podoc takes no writer extensions, so nothing reaches it.
 - Tests: pandoc's `test/tables.plain` and `test/tables.markdown`
   (regenerated with `--wrap=none`), cases with block cells, spans and
   footers read by 16.2, both models; the markdown round trip on them.
@@ -829,6 +829,9 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   U+FE0F or a skin tone modifier and what it joins count as one wide
   character there).
 - Citations, `--citeproc`.
+- Writer extensions for `-t markdown` (`-raw_html`, `-pipe_tables`,
+  ...), and with them the approximate pipe table pandoc writes for a
+  table with spans when raw HTML is off.
 - Image conversion for ConTeXt beyond SVG.
 - The ms writer: TeX math to `eqn` (texmath's `writeEqn`), and
   syntax highlighting.
@@ -1415,3 +1418,31 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   tables; the SRD's 12 grid tables were taken from the reST into a
   markdown file instead, and give pandoc's JSON byte for byte on both
   models. Phase 16.3 next.
+- 2026-11-20: Phase 16.3 done. `PdMdWriter` writes grid tables
+  (pandoc's `gridTable`: `GridSection`, `AddDummies`, `RedoWidths`,
+  `FormatBorder`, `FormatRow`) and pipe tables (`PipeTable`), choosing
+  among simple, multiline, grid, pipe, HTML and `[TABLE]` in pandoc's
+  order. A row of empty cells is now one line, as in doclayout, in
+  multiline and simple tables too. Checked against `pandoc --wrap=none`,
+  byte for byte, under both models, in markdown and plain:
+  `test/cases/grid-tables.md`, a grid table with an empty row and a
+  footer, pandoc's `test/tables.markdown`, and pipe-table input of 10
+  columns (which pandoc writes as simple and multiline tables). The
+  markdown round trip gives the same JSON as pandoc's own round trip on
+  all of them; neither is exact (pipe tables' default alignments
+  become left, column widths change). pandoc's markdown reader never
+  gives a table whose writer output is a pipe table (a lone Para in a
+  grid cell becomes Plain, `plainify`; other tables' cells are
+  Plain), so `PipeTable` is unreachable from podoc's input; it was
+  checked with a scratch build without `plainify`, against
+  `pandoc -f json` on that build's JSON: alignments, a caption, `\|`
+  in a cell, a headless table, dashes from relative widths past 72
+  columns, both models, the same byte for byte. The approximate pipe
+  table for spans without raw HTML went to Later. New cases:
+  `pipe-tables`, `grid-tables-foot`; `grid-tables` gained `.markdown`
+  and `.plain`. `make test` passed under `-O2` and `-OC`: 228 case
+  tests and 23 round trips. `make compare`, run with the podoc of HEAD
+  (a12d530) and with this one on the same inputs: 218 and 210
+  differences of 1507; the 8 fewer are the grid tables in markdown and
+  plain, and none is new. (The 193 recorded for 16.2 was counted
+  before inputs added since.) Phase 16.4 next.
