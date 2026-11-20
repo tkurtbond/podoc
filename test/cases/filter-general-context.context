@@ -1,0 +1,38 @@
+Text {\it t} {\it s} {\it a} {\bf n} {\bf p} {\bi bi} \color[red]{r} \color[green]{g} \color[blue]{b} f c {\bi ap} none {\bf two} {\bf } {\bf {\em em}}.
+
+\startframedtext[width=broad,rulethickness=0.75pt,offset=3pt,aligned=yes]
+
+Boxed {\bf n}.
+
+Kept inside.
+
+\stopframedtext{}
+
+Kept.
+
+ms and ConTeXt.
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell a \stopxcell
+\startxcell b \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell 1 \stopxcell
+\startxcell 2 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\color[red]{r2}

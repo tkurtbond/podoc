@@ -1,0 +1,19 @@
+\startsectionlevel[title={Title},reference={title}]
+
+\blank[big]
+\switchtobodyfont[8pt]
+{\tfc\bf Contents}
+\blank[halfline]
+\startcolumns[n=2]
+\placecontent
+\stopcolumns
+\switchtobodyfont[10pt]
+\blank[big]
+
+Text.
+
+\stopsectionlevel
+
+\startsectionlevel[title={Another},reference={another}]
+
+\stopsectionlevel

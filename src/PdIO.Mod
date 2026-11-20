@@ -63,6 +63,14 @@ BEGIN
   Start; Err.String(a); Err.String(b); Err.String(c); Err.Ln; Err.Flush
 END Message3;
 
+(* Writes the strings a, b and c and a new line to standard error, with
+   no "podoc: " before them: what a built-in filter says as the user's
+   filter said it. *)
+PROCEDURE Note*(a, b, c: ARRAY OF CHAR);
+BEGIN
+  Out.Flush; Err.String(a); Err.String(b); Err.String(c); Err.Ln; Err.Flush
+END Note;
+
 (* Writes "podoc: [WARNING] msg" and a new line to standard error. *)
 PROCEDURE Warn*(msg: ARRAY OF CHAR);
 BEGIN

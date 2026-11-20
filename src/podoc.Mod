@@ -16,11 +16,11 @@ MODULE podoc;
    curdir.
 
    The filters run in order on the document read: pandoc-include is
-   PdInclude. *)
+   PdInclude, the user's Lua filters are PdFilters. *)
 
 IMPORT Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt, PdMdWriter,
-  PdInclude, O := PdOptions;
+  PdInclude, PdFilters, O := PdOptions;
 
 CONST
   PandocVersion = "3.10"; (* the pandoc podoc follows *)
@@ -46,6 +46,11 @@ BEGIN
       i := O.files;
       WHILE i # NIL DO PdInclude.AddInput(i.name^); i := i.next END;
       PdInclude.Expand(d, f.name^)
+    ELSIF n = "subs.lua" THEN PdFilters.Subs(d, f.name^)
+    ELSIF n = "strip-comments.lua" THEN PdFilters.StripComments(d)
+    ELSIF n = "general.lua" THEN PdFilters.General(d, O.filterFormat)
+    ELSIF n = "toc-columns.lua" THEN PdFilters.TocColumns(d)
+    ELSIF n = "combine-docs.lua" THEN PdFilters.CombineDocs(d, f.name^)
     END;
     f := f.next
   END

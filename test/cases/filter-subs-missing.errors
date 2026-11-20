@@ -1,0 +1,2 @@
+podoc: Error running filter 'subs.lua':
+podoc: no substitutions: give them as the metadata map "substitutions", usually with --metadata-file=substitutions.yaml

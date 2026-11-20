@@ -1,0 +1,1 @@
+-M title=Digest -M combine=filters/one-doc.md -M combine=filters/meta_title.md -M combine=filters/no-title_here.md -M combine=filters/two-h1.markdown -L combine-docs.lua --lua-filter=toc-columns.lua

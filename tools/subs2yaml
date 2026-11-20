@@ -1,0 +1,46 @@
+#!/bin/sh
+# subs2yaml [substitutions.lua]
+#
+# Converts the substitution table of subs.lua, a Lua file of lines like
+#
+#     substitutions = {
+#        ["|SCA|"] = "Seltroti",
+#     }
+#
+# to the YAML metadata podoc's subs filter reads (decision 5), written to
+# standard output:
+#
+#     substitutions:
+#       "|SCA|": "Seltroti"
+#
+# Give it to podoc with --metadata-file. The keys stay literal text; the
+# values are read as markdown, as all metadata is, and then taken as
+# plain text, so a value with markdown in it (*, _, `, an apostrophe,
+# which becomes a curly one) may need a backslash before it. Lines it
+# does not understand are reported on standard error, and it exits 1.
+
+if [ $# -gt 1 ]; then
+  echo "usage: subs2yaml [substitutions.lua]" >&2
+  exit 2
+fi
+
+awk '
+BEGIN { print "substitutions:"; bad = 0 }
+/^[ \t]*(--.*)?$/ { next }
+/^[ \t]*substitutions[ \t]*=[ \t]*\{[ \t]*$/ { next }
+/^[ \t]*\}[ \t]*$/ { next }
+/^[ \t]*\["([^"\\]|\\.)*"\][ \t]*=[ \t]*"([^"\\]|\\.)*"[ \t]*,?[ \t]*(--.*)?$/ {
+  line = $0
+  sub(/^[ \t]*\[/, "", line)
+  match(line, /^"([^"\\]|\\.)*"/)
+  key = substr(line, 1, RLENGTH)
+  line = substr(line, RLENGTH + 1)
+  sub(/^\][ \t]*=[ \t]*/, "", line)
+  match(line, /^"([^"\\]|\\.)*"/)
+  value = substr(line, 1, RLENGTH)
+  print "  " key ": " value
+  next
+}
+{ printf "subs2yaml: line %d not understood: %s\n", NR, $0 > "/dev/stderr"; bad = 1 }
+END { exit bad }
+' "${1:--}"

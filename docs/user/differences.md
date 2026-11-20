@@ -31,13 +31,15 @@ in PLAN.md) is listed by the writer.
   and the message lists only those three. PDF output with neither
   `-t` nor `--pdf-engine`, which pandoc makes with LaTeX and
   `pdflatex`, and PDF from html, end podoc with status 4.
-- Filters are not run. `--lua-filter` and `-F`/`--filter` name the
-  user's filters, by file name (any directory), and podoc runs its
-  built-in code in their place: `pandoc-include` (see Includes) and,
-  from Phase 13, `subs.lua`, `strip-comments.lua`, `general.lua`,
-  `toc-columns.lua` and `combine-docs.lua` (until then each ends
-  podoc with status 83). `pandoc-mermaid-selenium-filter` is ignored with a
-  warning (decision 4). Any other filter ends podoc with status 83.
+- Filters are not run. `--lua-filter` (`-L`) and `-F`/`--filter`
+  name the user's filters, by file name (any directory), and podoc
+  runs its built-in code in their place (see Filters):
+  `pandoc-include`, given with `-F`, and `subs.lua`,
+  `strip-comments.lua`, `general.lua`, `toc-columns.lua` and
+  `combine-docs.lua`, given with `-L`. Given with the other option,
+  each ends podoc with pandoc's message and status 83.
+  `pandoc-mermaid-selenium-filter` is ignored with a warning
+  (decision 4). Any other filter ends podoc with status 83.
 - A `--wrap` value other than `auto`, `none` or `preserve` gives
   pandoc's message and status, 6.
 
@@ -82,6 +84,29 @@ these ways:
   them, digit runs by value, except that names natsort holds equal
   (`x01` and `x1`) are ordered by their bytes, and names are not
   normalized to Unicode NFD first.
+
+## Filters
+
+podoc's built-in filters give the user's Lua filters' output. They
+differ in these ways:
+
+- `subs.lua` reads its table from the metadata map `substitutions`
+  (decision 5), usually given with
+  `--metadata-file=substitutions.yaml`, not from `substitutions.lua`;
+  `tools/subs2yaml` converts that file once. With no such map podoc
+  ends with status 83 and a message saying so. The values are
+  metadata, read as markdown and taken as plain text, so an
+  apostrophe in one becomes a curly one unless it has a backslash
+  before it. The keys are applied in the byte order of the keys, where
+  Lua's order is unspecified; it matters only when one key's text
+  contains another's.
+- `general.lua` writes its messages (the Span classes unimplemented
+  for the format, the note on `.color` in ms) to standard output,
+  before the document, and some (Divs left out) to standard error.
+  podoc writes them all to standard error, those for Spans first.
+- A filter's error ends podoc with status 83 and the filter's message,
+  without Lua's line numbers and stack traceback (`combine-docs.lua`
+  with no `combine` field, or with a file that is not there).
 
 ## The markdown reader
 

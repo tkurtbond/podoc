@@ -55,6 +55,9 @@ VAR
   pdfEngine*: String; (* --pdf-engine, or after Resolve the engine for PDF *)
   pdfEngineOpts*: File; (* --pdf-engine-opt *)
   filters*: Filter; (* --lua-filter, -F *)
+  (* the writer as a Lua filter's FORMAT names it, after Resolve: to,
+     but html5 when -t html5 named it so *)
+  filterFormat*: String;
   tabStop*: INTEGER; (* --tab-stop; 0 for -p *)
   standalone*: BOOLEAN; (* -s *)
   template*: String; (* --template; "" for the default *)
@@ -551,7 +554,7 @@ BEGIN
     "Make PDF with PROGRAM: pdfroff or groff (ms), or context.", SetPdfEngine));
   parser.AddOption(ArgParser.MakeStringOption(0X, "pdf-engine-opt",
     "Pass STRING to the PDF engine.", AddPdfEngineOpt));
-  parser.AddOption(ArgParser.MakeStringOption(0X, "lua-filter",
+  parser.AddOption(ArgParser.MakeStringOption("L", "lua-filter",
     "Run the built-in filter that replaces the Lua filter FILE.", AddLuaFilter));
   parser.AddOption(ArgParser.MakeStringOption("F", "filter",
     "Run the built-in filter that replaces the filter PROGRAM.", AddJsonFilter));
@@ -605,10 +608,13 @@ BEGIN
 END CheckReader;
 
 (* Checks the filters, by their file names: podoc runs built-in code
-   in place of the user's filters, ignores
+   in place of the user's filters (pandoc-include, given with --filter;
+   subs.lua, strip-comments.lua, general.lua, toc-columns.lua and
+   combine-docs.lua, given with --lua-filter), ignores
    pandoc-mermaid-selenium-filter with a warning (decision 4), and ends
-   with pandoc's status for a failed filter, 83, at any other. The
-   filters left in filters are those podoc runs: pandoc-include. *)
+   with pandoc's message and status for a failed filter, 83, at any
+   other, or at one of these given with the other option. The filters
+   left in filters are those podoc runs. *)
 PROCEDURE CheckFilters;
   VAR f, next: Filter; n: String; m: ARRAY 4096 OF CHAR;
 BEGIN
@@ -619,19 +625,28 @@ BEGIN
     IF n = "pandoc-mermaid-selenium-filter" THEN
       COPY("[WARNING] podoc ignores the filter ", m); Append(f.name^, m);
       PdIO.Message(m)
-    ELSIF (n = "pandoc-include") & (f.kind = JsonFilter) THEN
+    ELSIF (n = "pandoc-include") & (f.kind = JsonFilter)
+       OR ((n = "subs.lua") OR (n = "strip-comments.lua")
+           OR (n = "general.lua") OR (n = "toc-columns.lua")
+           OR (n = "combine-docs.lua")) & (f.kind = LuaFilter) THEN
       IF filters = NIL THEN filters := f ELSE lastFilter.next := f END;
       lastFilter := f
+    ELSIF n = "pandoc-include" THEN (* given to --lua-filter *)
+      COPY("Error running filter '", m); Append(f.name^, m); Append("':", m);
+      PdIO.Message(m);
+      PdIO.Fail("cannot open pandoc-include", "No such file or directory", PdIO.FilterError)
+    ELSIF (n = "subs.lua") OR (n = "strip-comments.lua")
+       OR (n = "general.lua") OR (n = "toc-columns.lua")
+       OR (n = "combine-docs.lua") THEN (* given to --filter *)
+      COPY("Error running filter '", m); Append(f.name^, m); Append("':", m);
+      PdIO.Message(m);
+      COPY("Could not find executable ", m); Append(f.name^, m);
+      PdIO.Message(m);
+      PdIO.Exit(PdIO.FilterError)
     ELSE
       COPY("Error running filter '", m); Append(f.name^, m); Append("':", m);
       PdIO.Message(m);
-      IF (n = "subs.lua") OR (n = "strip-comments.lua") OR (n = "general.lua")
-         OR (n = "toc-columns.lua") OR (n = "combine-docs.lua")
-         OR (n = "pandoc-include") THEN
-        PdIO.Message("podoc does not have this filter built in yet")
-      ELSE
-        PdIO.Message("podoc has no built-in filter in its place")
-      END;
+      PdIO.Message("podoc has no built-in filter in its place");
       PdIO.Exit(PdIO.FilterError)
     END;
     f := next
@@ -685,6 +700,7 @@ BEGIN
       IF to = "" THEN CouldNotDeduce(fmt, "html"); to := "html" END
     END
   END;
+  COPY(to, filterFormat);
   IF to = "html5" THEN to := "html" END;
   IF (to # "source") & (to # "json") & (to # "html") & (to # "ms")
      & (to # "context") & (to # "markdown") THEN

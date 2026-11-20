@@ -1,0 +1,81 @@
+\blank[big]
+\switchtobodyfont[8pt]
+{\tfc\bf Contents}
+\blank[halfline]
+\startcolumns[n=2]
+\placecontent
+\stopcolumns
+\switchtobodyfont[10pt]
+\blank[big]
+
+\startsectionlevel[title={The First},reference={one-doc}]
+
+Intro.
+
+\startsectionlevel[title={Prompt},reference={one-doc-prompt}]
+
+Text.
+
+\startsectionlevel[title={Deeper},reference={one-doc-custom}]
+
+\startsectionlevel[title={In a div},reference={one-doc-in-a-div}]
+
+\stopsectionlevel
+
+\page
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\startsectionlevel[title={Meta {\em Title}},reference={meta_title}]
+
+\startsectionlevel[title={Section A},reference={meta_title-section-a}]
+
+\startsectionlevel[title={Prompt},reference={meta_title-prompt}]
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\startsectionlevel[title={Section B},reference={meta_title-section-b}]
+
+\page
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\startsectionlevel[title={No Title Here},reference={no-title_here}]
+
+Just text.
+
+\startsectionlevel[title={Lone three},reference={no-title_here-lone-three}]
+
+\startsectionlevel[title={Four},reference={no-title_here-four}]
+
+\startsectionlevel[title={Six},reference={no-title_here-six}]
+
+\page
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\startsectionlevel[title={Two H1},reference={two-h1}]
+
+\startsectionlevel[title={A},reference={two-h1-a}]
+
+\stopsectionlevel
+
+\startsectionlevel[title={B},reference={two-h1-b}]
+
+\stopsectionlevel
+
+\stopsectionlevel

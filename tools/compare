@@ -18,6 +18,11 @@
 # one, show here. Exits 1 if any differ. pandoc is stopped after 10
 # seconds where timeout(1) is installed: pandoc-include never ends on an
 # include cycle.
+#
+# If FILTERDIR is set in the environment, a Lua filter given by name
+# (-L NAME, --lua-filter NAME, --lua-filter=NAME) that is in FILTERDIR
+# is given to both as FILTERDIR/NAME, so that pandoc can find the
+# user's filters; podoc knows its built-in filters by their base names.
 
 if [ $# -lt 3 ]; then
   echo "usage: compare PODOC OUTDIR FORMAT..." >&2
@@ -43,6 +48,20 @@ total=0
 one() {
   dir=$1 file=$2 tag=$3 fmt=$4
   shift 4
+  if [ -n "${FILTERDIR:-}" ]; then
+    lua=
+    for a do
+      shift
+      case $lua$a in
+        yes*) [ -f "$FILTERDIR/$a" ] && a=$FILTERDIR/$a; lua= ;;
+        -L|--lua-filter) lua=yes ;;
+        --lua-filter=*)
+          lf=${a#--lua-filter=}
+          [ -f "$FILTERDIR/$lf" ] && a=--lua-filter=$FILTERDIR/$lf ;;
+      esac
+      set -- "$@" "$a"
+    done
+  fi
   total=$((total + 1))
   out=$outdir/$tag.$fmt
   (cd "$dir" && $limit "$pandoc" --wrap=none --syntax-highlighting=none -f markdown \

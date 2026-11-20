@@ -479,6 +479,15 @@ pandoc writes them.
   `pandoc-mermaid-selenium-filter` warns and does nothing
   (decision 4). Any other filter is an error naming it.
 
+As done: `PdFilters` holds the passes, run by `podoc` in command-line
+order. A filter is known by its base name and the option that gives
+it, as pandoc would find it: `pandoc-include` with `-F`, the Lua
+filters with `-L` (added as `--lua-filter`'s short form, as pandoc);
+the other way round ends podoc with pandoc's message and status 83.
+Lua's `FORMAT` is the writer's name as given (`html5`, and `ms` for
+PDF made through ms), kept as `PdOptions.filterFormat`. A filter's
+messages go through `PdIO.Note`, without "podoc: ".
+
 ### Phase 13.2: `subs` and `strip-comments`
 
 - The new substitutions format (decision 5): a metadata map,
@@ -499,11 +508,23 @@ pandoc writes them.
 - Literal substitution in every `Str`.
 - `strip-comments`, recursively.
 
+As done: `tools/subs2yaml` converts `substitutions.lua`. With no
+`substitutions` map, `subs` ends podoc with status 83 and a message
+naming the map and `--metadata-file`. Keys are applied in key order
+(metadata maps are kept sorted), each over every `Str`, left to right
+without rescanning.
+
 ### Phase 13.3: `general`
 
 - The Div and Span rules of §4.3 for HTML, ms and ConTeXt, written as
   raw blocks and inlines, with the same warnings on standard error.
   For the markdown writer, Divs and Spans are left alone.
+
+As done: for the markdown writer too, `general` does what general.lua
+does there (pandoc runs it for every writer): `for-format` Divs
+without `markdown` are dropped, and the Span messages are printed.
+All its messages go to standard error, the Spans' first
+(docs/user/differences.md).
 
 ### Phase 13.4: `toc-columns` and `combine-docs`
 
@@ -513,6 +534,13 @@ pandoc writes them.
 - Acceptance: the Lost-Worlds GNUmakefile's targets, run with
   `PANDOC=podoc`, produce intermediate HTML, ms and ConTeXt equivalent
   to pandoc's.
+
+As done: `combine-docs` reads each file with `PdMarkdown`, takes its
+title from its metadata, a lone first level-1 header (removed) or its
+file name, shifts its headers so the highest is level 2, prefixes its
+identifiers with the file's stem, and puts a ConTeXt `\page` between
+files. `tools/compare` takes `FILTERDIR`, a directory of the user's Lua
+filters, so that pandoc finds them.
 
 ## Phase 14: PDF output
 
@@ -871,3 +899,21 @@ pandoc writes them.
   other 9, `opt-filter-later`'s, now match pandoc), and 27 from `inc-cycle`, `inc-self` and
   `inc-option`, where podoc deliberately differs
   (docs/user/differences.md). Phase 13 next.
+- 2026-11-20: Phase 13 done. `PdFilters` runs `subs`,
+  `strip-comments`, `general`, `toc-columns` and `combine-docs` in
+  place of the user's Lua filters; `-L` added; `tools/subs2yaml`
+  converts `substitutions.lua`. `make test` passed under `-O2` and
+  `-OC`: 166 of 166 case tests (20 new, from 13 new `filter-*` inputs;
+  `opt-filter-later` renamed `filter-subs-missing`) and 23 of 23 round trips. The new
+  cases' outputs and messages are pandoc 3.10's, byte for byte, run
+  with copies of the user's filters (general's standard-output
+  messages moved to standard error), and general's output and
+  messages were the same as pandoc's for json, html, ms, context and
+  markdown. Acceptance: the Lost-Worlds GNUmakefile's commands (gen.html,
+  ms, ctx and digest-ctx for its 12 documents, and the combined
+  digest), with the substitutions converted by `tools/subs2yaml`, gave
+  49 of 49 outputs byte for byte pandoc's, with the same statuses, under
+  both models; podoc wrote nothing on standard error. `FILTERDIR=...
+  make compare` gave 1015 of 1134 the same: Phase 12's 75, and 44
+  where podoc deliberately differs (`general`'s messages,
+  `filter-subs-missing`; docs/user/differences.md). Phase 14 next.
