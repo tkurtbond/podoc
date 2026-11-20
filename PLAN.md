@@ -1041,11 +1041,30 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
     the heading text runs inside the diversion and is printed. pandoc
     3.10's ms has the same `.pdfhref O`. Leaving it out for groff 1.25
     would be a difference from pandoc; not decided.
-  - groff 1.25.0 no longer ships `pdfroff` or `pdfmark.tmac` (its NEWS:
+  - groff 1.25.0 does not ship `pdfroff` or `pdfmark.tmac` (its NEWS:
     the pdfmark package is now maintained separately, as
-    groff-pdfmark). terhali: `pdfroff` ends with 47. erekose: 1.22.4's
+    groff-pdfmark; 1.24.2, below, does not ship them either). terhali: `pdfroff` ends with 47. erekose: 1.22.4's
     `/usr/local/bin/pdfroff` is found instead, cannot load `pdfmark`
     with 1.25's troff, exits 0 and leaves an empty PDF, which podoc
     cannot tell from a good one.
   - `groff -ms -Tutf8` on podoc's standalone ms-features ran over two
     minutes on terhali without finishing; podoc does not use `-Tutf8`.
+- 2026-11-20: groff 1.24.2 (`/usr/local/sw/versions/groff/1.24.2/bin`
+  first in the PATH) on atla, terhali and erekose, with the same runs
+  as for 1.25.0 (podoc from a clean `git archive`, both models).
+  - `--pdf-engine=groff`: 14 of 14 runs ended with status 0 on each
+    host. All 12 PDFs on each have the same words as podoc's on atla
+    with groff 1.23.0, the contents page numbered "i"; no stray
+    `.pdfbookmark` line, so that problem is new in 1.25. The bookmarks
+    are made (checked with `mutool show ... outline` on atla's ms-pdf),
+    and better than 1.23.0's: "H₂O" and the curly quotes are kept.
+    `-O2` and `-OC` gave the same PDFs; `-V papersize=a4l` gives A4; no
+    temporary directories left. Warnings as with 1.23.0: an unbalanced
+    `.RE`, U+2610 and U+2612 undefined, font name `C` deprecated.
+  - 1.24.2 has no `pdfroff` either: the pdfmark package left groff
+    in 1.24, not 1.25. terhali: `--pdf-engine=pdfroff` ends with 47.
+    atla and erekose: an older `pdfroff` later in the PATH (1.23.0's,
+    1.22.4's) cannot load `pdfmark` with 1.24.2's troff, exits 0 and
+    leaves an empty 2.4 KB PDF (12 of 24 runs on each).
+  - So a workaround for the stray heading line, if one is decided,
+    is needed for groff 1.25 and later only.

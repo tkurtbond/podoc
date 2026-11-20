@@ -20,13 +20,14 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
   `cp` and `rm`, plus the engine:
   - for `ms`: groff with `gropdf` and `-k` (`preconv`). groff 1.23.0
     and 1.22.4 work (1.22.4 numbers the contents page "1", not "i");
-    1.19.2, as in NetBSD's base system, does not. With groff 1.25.0,
-    `--pdf-engine=groff` works, but each heading in a document made
-    with bookmarks is followed by a stray `.pdfbookmark` line, as with
-    pandoc's ms output; and groff 1.25.0 no longer includes `pdfroff`,
-    which, with the pdfmark macros, is now the separate groff-pdfmark
-    package. An older `pdfroff` left on the PATH may then make an
-    empty PDF without reporting an error;
+    1.19.2, as in NetBSD's base system, does not. groff 1.24.2 works
+    with `--pdf-engine=groff`. With groff 1.25.0, `--pdf-engine=groff`
+    works, but each heading in a document made with bookmarks is
+    followed by a stray `.pdfbookmark` line, as with pandoc's ms
+    output. Since groff 1.24, `pdfroff` is not part of groff: with
+    the pdfmark macros, it is now the separate groff-pdfmark package.
+    An older `pdfroff` left on the PATH may then make an empty PDF
+    without reporting an error;
   - for `context`: ConTeXt LMTX;
   - for SVG images in ConTeXt: `rsvg-convert` (optional).
 
