@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+# mkentities: writes src/PdEntities.Mod, the HTML5 named character
+# references (those ending in ";", as commonmark's lookupEntity uses
+# them), from Python's html.entities.html5.
+import html.entities, sys
+
+ents = sorted((k[:-1], v) for k, v in html.entities.html5.items() if k.endswith(';'))
+lines = []
+cur = ''
+for name, val in ents:
+    item = name + ' ' + ','.join('%X' % ord(c) for c in val) + ' '
+    if len(cur) + len(item) > 64:
+        lines.append(cur); cur = ''
+    cur += item
+if cur: lines.append(cur)
+longest = max(len(n) for n, _ in ents)
+out = sys.stdout
+out.write('''MODULE PdEntities;
+(* PdEntities: the HTML5 named character references, as commonmark's
+   lookupEntity knows them. Written by tools/mkentities; do not edit. *)
+
+CONST
+  Count = %d;
+  NameLen = %d;
+
+TYPE
+  Name = ARRAY NameLen OF CHAR;
+
+VAR
+  names: ARRAY Count OF Name;
+  first, second: ARRAY Count OF LONGINT;
+  n: INTEGER;
+
+(* Adds the entries in s: a name, a space, its code points in hex
+   separated by commas, a space, and so on *)
+PROCEDURE Add(s: ARRAY OF CHAR);
+  VAR i, j: INTEGER; v: LONGINT; k: INTEGER;
+BEGIN
+  i := 0;
+  WHILE s[i] # 0X DO
+    j := 0;
+    WHILE s[i] # " " DO names[n][j] := s[i]; INC(i); INC(j) END;
+    names[n][j] := 0X; INC(i);
+    first[n] := 0; second[n] := 0; k := 0;
+    LOOP
+      v := 0;
+      WHILE (s[i] # ",") & (s[i] # " ") DO
+        IF s[i] <= "9" THEN v := v * 16 + ORD(s[i]) - ORD("0")
+        ELSE v := v * 16 + ORD(s[i]) - ORD("A") + 10
+        END;
+        INC(i)
+      END;
+      IF k = 0 THEN first[n] := v ELSE second[n] := v END;
+      INC(k);
+      IF s[i] = " " THEN EXIT END;
+      INC(i)
+    END;
+    INC(i); INC(n)
+  END
+END Add;
+
+(* The code points of the reference &name; in c1 and c2 (c2 = 0 if
+   there is one); FALSE if there is no such reference *)
+PROCEDURE Lookup*(name: ARRAY OF CHAR; VAR c1, c2: LONGINT): BOOLEAN;
+  VAR lo, hi, mid: INTEGER;
+BEGIN
+  lo := 0; hi := Count - 1;
+  WHILE lo <= hi DO
+    mid := (lo + hi) DIV 2;
+    IF names[mid] = name THEN
+      c1 := first[mid]; c2 := second[mid]; RETURN TRUE
+    ELSIF names[mid] < name THEN lo := mid + 1
+    ELSE hi := mid - 1
+    END
+  END;
+  RETURN FALSE
+END Lookup;
+
+BEGIN
+  n := 0;
+''' % (len(ents), longest + 1))
+for l in lines:
+    out.write('  Add("%s");\n' % l)
+out.write('END PdEntities.\n')

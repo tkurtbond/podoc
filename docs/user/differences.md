@@ -21,3 +21,20 @@ in PLAN.md) is listed by the writer.
   Latin-1, with a warning.
 - Input file names are not URLs: pandoc fetches `http:` and `https:`
   inputs.
+
+## The markdown reader
+
+podoc reads the markdown the user's documents use. It does not yet
+read:
+
+- grid tables, or table cells that hold blank lines;
+- the `%` title block;
+- raw TeX blocks, LaTeX environments and macros, and the commands
+  pandoc's LaTeX reader reads specially (podoc keeps every `\command`
+  with its options and arguments as a raw TeX inline);
+- citations, example references (`@label`), wikilinks and base64
+  data URIs.
+
+A table's column widths count East Asian wide and full-width
+characters as two and combining marks as none, which approximates
+pandoc's character widths.

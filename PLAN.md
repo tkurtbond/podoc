@@ -29,8 +29,8 @@ State section at the end records what was verified.
 - Output equivalent to pandoc 3.10's (decision 3): the same AST, and
   writer output that gives the same PDF or rendered HTML.
 
-Not in scope: other input formats, reStructuredText included; grid,
-simple and multiline tables; citations; output wrapping; mermaid
+Not in scope: other input formats, reStructuredText included; grid
+tables; citations; output wrapping; mermaid
 (decision 4); Lua filters (decision 6); VAX/VMS (decision 1).
 
 ## Decisions
@@ -190,7 +190,7 @@ The table is kept in AGENTS.md as codes are assigned.
   pandoc's JSON for the same documents.
 - `-t json` on podoc's command line comes with the reader, Phase 3.
 
-## Phase 3: The markdown reader, blocks
+## Phase 3: The markdown reader, blocks [done]
 
 ### Phase 3.1: Lines and the block structure [done]
 
@@ -226,42 +226,47 @@ The table is kept in AGENTS.md as codes are assigned.
   reference keys, abbreviations, raw TeX blocks, the title block and
   YAML (Phase 5).
 
-## Phase 4: The markdown reader, inlines
+## Phase 4: The markdown reader, inlines [done]
 
-### Phase 4.1: Text, escapes and code
+### Phase 4.1: Text, escapes and code [done]
 
 - `Str`, `Space`, `SoftBreak`, `LineBreak` (two spaces and backslash
   newline), backslash escapes, entities, inline code with attributes,
   raw inlines `` `x`{=ms} ``.
 
-### Phase 4.2: Emphasis
+### Phase 4.2: Emphasis [done]
 
 - `*` and `_` emphasis and strong emphasis, with pandoc's rules for
   intraword underscores and for nesting, and `~~` strikeout, `^`
   superscript and `~` subscript.
 
-### Phase 4.3: Links and images
+### Phase 4.3: Links and images [done]
 
 - Inline links and images, reference links and images (definitions
   collected in a first pass over the whole document), autolinks,
   `{width=...}` attributes, implicit header references.
 - An image alone in a paragraph becomes a `Figure`, as pandoc 3 does.
 
-### Phase 4.4: Smart punctuation
+### Phase 4.4: Smart punctuation [done]
 
 - Curly single and double quotes (`Quoted`), apostrophes, `--`, `---`,
   `...`, with pandoc's rules for contractions and for quotes next to
   punctuation. `test/command/smart.md` is the reference.
 
-### Phase 4.5: Identifiers
+### Phase 4.5: Identifiers [done]
 
-- `PdIdent`: pandoc's `auto_identifiers` with Unicode letters (using
-  pounicode), duplicates numbered `-1`, `-2`, and explicit `{#id}`
-  header attributes.
+- pandoc's `auto_identifiers` with Unicode letters (using pounicode),
+  duplicates numbered `-1`, `-2`, and explicit `{#id}` header
+  attributes. Written in `PdMdInline`, not a module of its own.
 
-### Phase 4.6: The rest of the extensions
+### Phase 4.6: The rest of the extensions [done]
 
 - Pipe tables, with alignment, captions and inline content in cells.
+- Simple and multiline tables, brought forward from Later on
+  2026-11-20: the acceptance needs them, for one multiline table in
+  Galactic-Bounty-Hunters and for YAML front matter, which pandoc
+  reads as a simple table when metadata blocks are off.
+- Raw TeX inlines, in the general form of pandoc's LaTeX reader.
 - Footnotes, inline and by reference.
 - Fenced divs (`:::`) and bracketed spans (`[text]{.class}`), with
   attributes, nesting, and the setext and fenced-div interaction
@@ -270,7 +275,10 @@ The table is kept in AGENTS.md as codes are assigned.
 - Header attributes (`{#id .class key=val}`).
 - TeX math passed through as `Math` (no parsing of its content).
 - Acceptance: every markdown file of Lost-Worlds and
-  Galactic-Bounty-Hunters gives the same JSON as pandoc.
+  Galactic-Bounty-Hunters gives the same JSON as pandoc. The five
+  files that start with YAML metadata are accepted on their blocks
+  (the same as pandoc's with `-yaml_metadata_block`); their metadata
+  is Phase 5's acceptance.
 
 ## Phase 5: YAML metadata
 
@@ -508,7 +516,19 @@ Oberon (decision 7).
 - JSON filters: a JSON reader for the AST and `--filter prog` over
   standard input and output (§8.4).
 - Output wrapping at `--columns` as pandoc's `doclayout` does.
-- Grid, simple and multiline tables.
+- Grid tables.
+- The markdown reader, not needed by the user's documents so far:
+  the `%` title block; raw TeX blocks, environments, macros and the
+  commands pandoc's LaTeX reader reads specially; citations and
+  example references; wikilinks and base64 data URIs; table cells
+  that hold blank lines.
+- Known gaps in the markdown reader: a note referenced twice shares
+  its blocks (only the JSON writer reads them so far, so nothing
+  shows); compactify runs before implicit figures exist; the
+  contents of Strikeout, Quoted and Link are not trimmed again after
+  resolving; character widths for tables (`realLength`) are an
+  approximation of pandoc's `charWidth` (2 for East Asian wide and
+  full-width, 0 for combining marks, 1 otherwise).
 - Citations, `--citeproc`.
 - Image conversion for ConTeXt beyond SVG.
 
@@ -563,3 +583,24 @@ Oberon (decision 7).
   `lists`, `edges`, `inline-basic`, `empty`, `nonewline`), whose
   expected JSON is pandoc 3.10's, byte for byte. Differences found
   and left for Phase 4 are listed under Phase 3.3. Phase 4 next.
+- 2026-11-20: Phase 4 done. `PdMdInline` reads pandoc's inlines:
+  emphasis and strong emphasis, strikeout, superscript and subscript,
+  inline and reference links and images, autolinks (pandoc's URI
+  schemes, in `PdWords`), bracketed and HTML spans, inline and
+  referenced notes, math, raw HTML and the general form of raw TeX,
+  smart quotes, dashes and ellipses, the abbreviations after which a
+  space is non-breaking (`PdWords`), every HTML5 named entity
+  (`PdEntities`), and identifiers with Unicode letters. `PdMarkdown`
+  adds reference keys, notes, implicit figures, pipe, simple and
+  multiline tables (with captions), and resolves references and notes
+  once the document is read; task list items are converted after
+  that, as pandoc does. `tools/mkwords` and `tools/mkentities` write
+  `PdWords` and `PdEntities`. `make test` passed under `-O2` and
+  `-OC`, with three new cases (`links`, `inlines`, `tables`) whose
+  expected JSON is pandoc 3.10's. Acceptance: of the 54 markdown files
+  of Lost-Worlds and Galactic-Bounty-Hunters, 49 give pandoc's JSON
+  byte for byte; the other five start with YAML metadata, and their
+  blocks match pandoc's with `-yaml_metadata_block` byte for byte.
+  Simple and multiline tables were brought forward from Later because
+  the acceptance needs them (Phase 4.6); grid tables stay there. What
+  the reader still lacks is listed in Later. Phase 5 next.

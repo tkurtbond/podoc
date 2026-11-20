@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+# mkwords: writes src/PdWords.Mod, two word lists from pandoc 3.10:
+# the URI schemes autolinks recognise (Text.Pandoc.URI.schemes) and
+# the abbreviations after which a space is non-breaking
+# (data/abbreviations).
+import sys
+
+SCHEMES = """aaa aaas about acap acct acr adiumxtra afp afs aim appdata apt attachment aw barion beshare bitcoin blob bolo browserext callto cap chrome chrome-extension cid coap coaps com-eventbrite-attendee content crid cvs data dav dict dis dlna-playcontainer dlna-playsingle dns dntp dtn dvb ed2k example facetime fax feed feedready file filesystem finger fish ftp geo gg git gizmoproject go gopher graph gtalk h323 ham hcp http https hxxp hxxps hydrazone iax icap icon im imap info iotdisco ipn ipp ipps irc irc6 ircs iris iris.beep iris.lwz iris.xpc iris.xpcs isostore itms jabber jar jms keyparc lastfm ldap ldaps lvlt magnet mailserver mailto maps market message mid mms modem mongodb moz ms-access ms-browser-extension ms-drive-to ms-enrollment ms-excel ms-gamebarservices ms-getoffice ms-help ms-infopath ms-media-stream-id ms-officeapp ms-project ms-powerpoint ms-publisher ms-search-repair ms-secondary-screen-controller ms-secondary-screen-setup ms-settings ms-settings-airplanemode ms-settings-bluetooth ms-settings-camera ms-settings-cellular ms-settings-cloudstorage ms-settings-connectabledevices ms-settings-displays-topology ms-settings-emailandaccounts ms-settings-language ms-settings-location ms-settings-lock ms-settings-nfctransactions ms-settings-notifications ms-settings-power ms-settings-privacy ms-settings-proximity ms-settings-screenrotation ms-settings-wifi ms-settings-workplace ms-spd ms-sttoverlay ms-transit-to ms-virtualtouchpad ms-visio ms-walk-to ms-whiteboard ms-whiteboard-cmd ms-word msnim msrp msrps mtqp mumble mupdate mvn news nfs ni nih nntp notes ocf oid onenote onenote-cmd opaquelocktoken pack palm paparazzi pkcs11 platform pop pres prospero proxy pwid psyc qb query redis rediss reload res resource rmi rsync rtmfp rtmp rtsp rtsps rtspu secondlife service session sftp sgn shttp sieve sip sips skype smb sms smtp snews snmp soap.beep soap.beeps soldat spotify ssh steam stun stuns submit svn tag teamspeak tel teliaeid telnet tftp things thismessage tip tn3270 tool turn turns tv udp unreal urn ut2004 v-event vemmi ventrilo videotex vnc view-source wais webcal wpid ws wss wtai wyciwyg xcon xcon-userid xfire xmlrpc.beep xmlrpc.beeps xmpp xri ymsgr z39.50 z39.50r z39.50s doi gemini isbn javascript pmid""".split()
+
+ABBREVIATIONS = """aet. aetat. al. Apr. Aug. bk. Bros. c. Capt. cf. ch. chap. chs. Co. col. Corp. cp. d. Dec. Dr. e.g. ed. eds. esp. f. fasc. Feb. ff. fig. fl. fol. fols. Fr. Gen. Gov. Hon. i.e. ill. Inc. incl. Jan. Jr. Jul. Jun. Ltd. M.A. M.D. Mar. Mr. Mrs. Ms. n. n.b. nn. No. Nov. Oct. p. Ph.D. pp. Pres. Prof. pt. q.v. Rep. Rev. s.v. s.vv. saec. sec. Sen. Sep. Sept. Sgt. Sr. St. univ. viz. vol. vs.""".split()
+
+def chunks(words):
+    lines, cur = [], ''
+    for w in words:
+        if len(cur) + len(w) + 1 > 64:
+            lines.append(cur); cur = ''
+        cur += w + ' '
+    if cur: lines.append(cur)
+    return lines
+
+out = sys.stdout
+out.write('''MODULE PdWords;
+(* PdWords: the URI schemes autolinks recognise and the abbreviations
+   after which a space is non-breaking, as pandoc 3.10 has them.
+   Written by tools/mkwords; do not edit. *)
+
+IMPORT PdIO;
+
+CONST
+  Schemes = %d;
+  Abbreviations = %d;
+  WordLen = %d;
+
+TYPE
+  Word = ARRAY WordLen OF CHAR;
+
+VAR
+  schemes: ARRAY Schemes OF Word;
+  abbrevs: ARRAY Abbreviations OF Word;
+  ns, na: INTEGER;
+
+(* Adds the words in s, each followed by a space, to the schemes if
+   scheme, else to the abbreviations *)
+PROCEDURE Add(scheme: BOOLEAN; s: ARRAY OF CHAR);
+  VAR i, j: INTEGER; w: Word;
+BEGIN
+  i := 0;
+  WHILE s[i] # 0X DO
+    j := 0;
+    WHILE s[i] # " " DO w[j] := s[i]; INC(i); INC(j) END;
+    w[j] := 0X; INC(i);
+    IF scheme THEN schemes[ns] := w; INC(ns)
+    ELSE abbrevs[na] := w; INC(na)
+    END
+  END
+END Add;
+
+PROCEDURE Lower(ch: CHAR): CHAR;
+BEGIN
+  IF (ch >= "A") & (ch <= "Z") THEN ch := CHR(ORD(ch) + 32) END;
+  RETURN ch
+END Lower;
+
+(* The length of the longest URI scheme, ignoring ASCII case, that t
+   has at p; 0 if there is none *)
+PROCEDURE Scheme*(t: PdIO.Text; p: LONGINT): LONGINT;
+  VAR i, j, best: LONGINT;
+BEGIN
+  best := 0;
+  FOR i := 0 TO Schemes - 1 DO
+    j := 0;
+    WHILE (schemes[i][j] # 0X) & (Lower(t[p + j]) = schemes[i][j]) DO
+      INC(j)
+    END;
+    IF (schemes[i][j] = 0X) & (j > best) THEN best := j END
+  END;
+  RETURN best
+END Scheme;
+
+(* Whether t[from .. to-1] is one of the abbreviations *)
+PROCEDURE IsAbbreviation*(t: PdIO.Text; from, to: LONGINT): BOOLEAN;
+  VAR i, j: LONGINT;
+BEGIN
+  IF to - from < WordLen THEN
+    FOR i := 0 TO Abbreviations - 1 DO
+      j := 0;
+      WHILE (from + j < to) & (abbrevs[i][j] = t[from + j]) DO INC(j) END;
+      IF (from + j = to) & (abbrevs[i][j] = 0X) THEN RETURN TRUE END
+    END
+  END;
+  RETURN FALSE
+END IsAbbreviation;
+
+BEGIN
+  ns := 0; na := 0;
+''' % (len(SCHEMES), len(ABBREVIATIONS),
+       max(len(w) for w in SCHEMES + ABBREVIATIONS) + 1))
+for l in chunks(SCHEMES):
+    out.write('  Add(TRUE, "%s");\n' % l)
+for l in chunks(ABBREVIATIONS):
+    out.write('  Add(FALSE, "%s");\n' % l)
+out.write('END PdWords.\n')

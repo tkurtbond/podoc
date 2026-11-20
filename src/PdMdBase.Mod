@@ -13,7 +13,7 @@ MODULE PdMdBase;
    names are pandoc's parsers'. Columns are counted in bytes; a tab
    (kept only with --preserve-tabs) counts as tabStop spaces. *)
 
-IMPORT Ropes, PdAst, PdIO;
+IMPORT Ropes, PdAst, PdIO, PdEntities;
 
 CONST
   MaxName* = 64;
@@ -36,7 +36,7 @@ TYPE
   (* Where the parser was before Enter *)
   Frame* = RECORD
     t: Text;
-    len, pos: LONGINT
+    len, pos, id: LONGINT
   END;
 
   Name* = ARRAY MaxName OF CHAR;
@@ -77,6 +77,11 @@ VAR
   htmlBlock*: Name; (* stateInHtmlBlock; "" for Nothing *)
   allowLineBreaks*: BOOLEAN;
   nextExample*: LONGINT; (* stateNextExample *)
+  lastStrPos*: LONGINT; (* stateLastStrPos: where the last str ended, in
+    the text lastStrText; -1 for Nothing *)
+  lastStrText*: LONGINT;
+  textId*: LONGINT; (* the current text's id; each Enter makes a new one *)
+  texts: LONGINT; (* the ids given out *)
   examples: PdAst.KeyVal; (* example labels and their numbers *)
 
 (* Texts *)
@@ -169,14 +174,14 @@ END Rope;
    start; the old one is kept in f. *)
 PROCEDURE Enter*(VAR f: Frame; text: Text; n: LONGINT);
 BEGIN
-  f.t := t; f.len := len; f.pos := pos;
-  t := text; len := n; pos := 0
+  f.t := t; f.len := len; f.pos := pos; f.id := textId;
+  t := text; len := n; pos := 0; INC(texts); textId := texts
 END Enter;
 
 (* Goes back to the text Enter left. *)
 PROCEDURE Leave*(VAR f: Frame);
 BEGIN
-  t := f.t; len := f.len; pos := f.pos
+  t := f.t; len := f.len; pos := f.pos; textId := f.id
 END Leave;
 
 (* Sets the reader up for a new document, the text t[0 .. n-1]. *)
@@ -188,7 +193,8 @@ BEGIN
   len := n; pos := 0;
   IF tabs <= 0 THEN tabStop := 4 ELSE tabStop := tabs END;
   context := NullState; divLevel := 0; htmlBlock := "";
-  allowLineBreaks := TRUE; nextExample := 1; examples := NIL
+  allowLineBreaks := TRUE; nextExample := 1; examples := NIL;
+  lastStrPos := -1; lastStrText := -1; textId := 0; texts := 0
 END Start;
 
 (* Characters *)
@@ -360,7 +366,7 @@ END HexValue;
    UTF-8. Phase 3 knows the numeric references and the five XML names;
    the full table of HTML names comes with the inlines. *)
 PROCEDURE CharRef*(p: LONGINT; VAR b: Buf): LONGINT;
-  VAR q, v: LONGINT; name: ARRAY 16 OF CHAR; i: INTEGER;
+  VAR q, v, v2: LONGINT; name: ARRAY 40 OF CHAR; i: INTEGER;
 BEGIN
   IF C(p) # "&" THEN RETURN -1 END;
   q := p + 1;
@@ -386,17 +392,13 @@ BEGIN
     RETURN q + 1
   END;
   i := 0;
-  WHILE IsAlnum(C(q)) & (i < LEN(name) - 1) DO name[i] := C(q); INC(i); INC(q) END;
-  name[i] := 0X;
-  IF C(q) # ";" THEN RETURN -1 END;
-  IF name = "amp" THEN PutChar(b, "&")
-  ELSIF name = "lt" THEN PutChar(b, "<")
-  ELSIF name = "gt" THEN PutChar(b, ">")
-  ELSIF name = "quot" THEN PutChar(b, 22X)
-  ELSIF name = "apos" THEN PutChar(b, "'")
-  ELSIF name = "nbsp" THEN PutUtf8(b, 0A0H)
-  ELSE RETURN -1
+  WHILE (q < len) & (C(q) # ";") & ~IsWhite(C(q)) & (i < LEN(name) - 1) DO
+    name[i] := C(q); INC(i); INC(q)
   END;
+  name[i] := 0X;
+  IF (i = 0) OR (C(q) # ";") OR ~PdEntities.Lookup(name, v, v2) THEN RETURN -1 END;
+  PutUtf8(b, v);
+  IF v2 # 0 THEN PutUtf8(b, v2) END;
   RETURN q + 1
 END CharRef;
 
@@ -411,8 +413,8 @@ BEGIN
     & ~IsAlnum(ch)
 END EscapedChar;
 
-(* litChar, appending to b *)
-PROCEDURE LitChar(p: LONGINT; VAR b: Buf): LONGINT;
+(* litChar at p, appended to b *)
+PROCEDURE LitChar*(p: LONGINT; VAR b: Buf): LONGINT;
   VAR q: LONGINT;
 BEGIN
   IF EscapedChar(p) THEN PutChar(b, C(p + 1)); RETURN p + 2 END;
@@ -790,6 +792,43 @@ BEGIN
   END;
   RETURN -1
 END HtmlInBalanced;
+
+(* The attributes of an HTML tag as a div's: id, class split into
+   words, and the others *)
+PROCEDURE HtmlTagAttr*(VAR tag: Tag): PdAst.Attr;
+  VAR a: PdAst.Attr; h: HtmlAttr; p, i, j: LONGINT; key, value: PdAst.Rope;
+    b: Buf;
+BEGIN
+  a := PdAst.NewAttr(NIL);
+  p := tag.attrStart;
+  WHILE (p < tag.end) & NextHtmlAttr(p, h) DO
+    key := NIL;
+    FOR i := h.nameStart TO h.nameStart + h.nameLen - 1 DO
+      key := Ropes.AppendChar(key, Lower(t[i]))
+    END;
+    IF h.valStart >= 0 THEN value := Rope(h.valStart, h.valStart + h.valLen)
+    ELSE value := NIL
+    END;
+    IF Ropes.EqualString(key, "id") THEN
+      a.id := value
+    ELSIF Ropes.EqualString(key, "class") THEN
+      InitBuf(b);
+      IF h.valStart >= 0 THEN Put(b, h.valStart, h.valStart + h.valLen) END;
+      i := 0;
+      WHILE i < b.len DO
+        WHILE (i < b.len) & IsWhite(b.t[i]) DO INC(i) END;
+        j := i;
+        WHILE (j < b.len) & ~IsWhite(b.t[j]) DO INC(j) END;
+        IF j > i THEN PdAst.AddClass(a, Ropes.FromSubchars(b.t^, i, j - i)) END;
+        i := j
+      END
+    ELSE
+      PdAst.AddKeyVal(a, key, value)
+    END;
+    p := h.end
+  END;
+  RETURN a
+END HtmlTagAttr;
 
 (* notFollowedByHtmlCloser fails at p: inside an HTML block, its
    closing tag is there. *)

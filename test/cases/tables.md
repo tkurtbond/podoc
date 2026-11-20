@@ -1,0 +1,37 @@
+| Left | Center | Right | Default |
+|:-----|:------:|------:|---------|
+| `a|b` | $x|y$ | \| | c |
+| short |
+
+: A pipe table {#tbl:pipe}
+
+  Right     Left     Center     Default
+-------     ------ ----------   -------
+     12     12        12            12
+    123     123       123          123
+
+Table: A simple table.
+
+-------     ------ ----------   -------
+     12     12        12            12
+    123     123       123          123
+-------     ------ ----------   -------
+
+-------------------------------------------------------------
+ Centered   Default           Right Left
+  Header    Aligned         Aligned Aligned
+----------- ------- --------------- -------------------------
+   First    row                12.0 Example of a row that
+                                    spans multiple lines.
+
+  Second    row                 5.0 Here's another one. Note
+                                    the blank line between
+                                    rows.
+-------------------------------------------------------------
+
+: Here's the caption. It, too, may span
+multiple lines.
+
+| a very long first column header that goes on | and the second one, which is also long |
+|---|------|
+| x | y |

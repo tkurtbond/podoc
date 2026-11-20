@@ -6,9 +6,13 @@ MODULE PdMarkdown;
    code, bullet, ordered and definition lists, HTML and fenced divs,
    setext and ATX headings (with attributes and identifiers), raw HTML
    blocks, indented code, line blocks, block quotes, horizontal rules,
-   paragraphs and plain text. Metadata blocks, the title block, tables,
-   raw TeX, notes, reference keys and implicit figures come in later
-   phases. *)
+   notes, reference keys, paragraphs (with implicit figures) and plain
+   text, and pipe, simple and multiline tables. Metadata blocks come
+   in Phase 5; the title block, grid tables and raw TeX blocks are in
+   PLAN.md's Later.
+
+   Reference links and note references are resolved when the whole
+   document has been read, as pandoc resolves them (its F monad). *)
 
 IMPORT Ropes, PdIO, A := PdAst, B := PdMdBase, I := PdMdInline;
 
@@ -16,8 +20,61 @@ CONST
   (* what starts a list item *)
   BulletItem = 1; OrderedItem = 2; DefItem = 3;
 
+TYPE
+  (* A reference key and its target *)
+  Key = POINTER TO KeyDesc;
+  KeyDesc = RECORD
+    key, url, title: A.Rope;
+    attr: A.Attr;
+    next: Key
+  END;
+
+  (* A note's text *)
+  Note = POINTER TO NoteDesc;
+  NoteDesc = RECORD
+    ref: A.Rope;
+    blocks: A.Block;
+    next: Note
+  END;
+
+  Longs = POINTER TO ARRAY OF LONGINT;
+  Reals = POINTER TO ARRAY OF LONGREAL;
+
+  (* A table's columns, from the dashed line under its header *)
+  Columns = RECORD
+    n: LONGINT; (* how many *)
+    align: Longs; (* each one's alignment *)
+    len: Longs; (* the length of each one's dashes (and colons) *)
+    index: Longs; (* simple and multiline tables: the n+1 indices *)
+    width: Reals (* each one's relative width; 0 for the default *)
+  END;
+
+  (* A line of a table, split into cells: t[s[k] .. f[k]-1] *)
+  RawLine = POINTER TO RawLineDesc;
+  RawLineDesc = RECORD
+    s, f: Longs;
+    m: LONGINT; (* how many cells *)
+    next: RawLine
+  END;
+
+  (* Resolves reference links and notes *)
+  Resolver = POINTER TO ResolverDesc;
+  ResolverDesc = RECORD (A.WalkerDesc)
+    inNote: BOOLEAN (* note references are not resolved *)
+  END;
+
+  (* A list item, for taskListItemFromAscii after resolving *)
+  Item = POINTER TO RECORD
+    item: A.BlockList;
+    next: Item
+  END;
+
 VAR
   ids: A.StrList; (* the header identifiers used so far *)
+  keys: Key; (* the reference keys; the last defined first *)
+  headerKeys: Key; (* the implicit header references *)
+  notes: Note; (* the notes; the last defined first *)
+  listItems: Item; (* the list items *)
 
 PROCEDURE^ Block(VAR l: A.Blocks): BOOLEAN;
 
@@ -109,6 +166,27 @@ BEGIN
   END;
   Use(attr.id)
 END RegisterHeader;
+
+(* The key of the text key in the list l, NIL if there is none *)
+PROCEDURE FindKey(l: Key; key: A.Rope): Key;
+BEGIN
+  WHILE (l # NIL) & ~Ropes.Equal(l.key, key) DO l := l.next END;
+  RETURN l
+END FindKey;
+
+(* registerImplicitHeader: the header whose raw text is t[from .. to-1]
+   and whose identifier is id is the target of a reference with its
+   text, unless an earlier header is *)
+PROCEDURE RegisterImplicitHeader(from, to: LONGINT; id: A.Rope);
+  VAR k: Key; key: A.Rope;
+BEGIN
+  IF to <= from THEN RETURN END;
+  key := I.Key(B.t^, from, to, FALSE);
+  IF FindKey(headerKeys, key) = NIL THEN
+    NEW(k); k.key := key; k.url := Ropes.Cat(A.S("#"), id); k.title := NIL;
+    k.attr := NIL; k.next := headerKeys; headerKeys := k
+  END
+END RegisterImplicitHeader;
 
 (* Code *)
 
@@ -207,7 +285,7 @@ END HeaderInlines;
 
 (* atxHeader *)
 PROCEDURE AtxHeader(VAR l: A.Blocks): BOOLEAN;
-  VAR p, q, start: LONGINT; level: INTEGER; inl: A.Inline; a: A.Attr;
+  VAR p, q, start, s, e: LONGINT; level: INTEGER; inl: A.Inline; a: A.Attr;
     ch: CHAR;
 BEGIN
   start := B.pos; p := start; level := 0;
@@ -217,19 +295,21 @@ BEGIN
       OR (p < B.len) & ~B.IsWhite(ch) THEN
     RETURN FALSE
   END;
-  B.pos := B.SkipSpaces(p);
+  B.pos := B.SkipSpaces(p); s := B.pos;
   inl := HeaderInlines(AtxStop);
+  e := B.pos;
   q := AtxClosing(B.pos, a);
   IF q < 0 THEN B.pos := start; RETURN FALSE END;
   B.pos := q;
   RegisterHeader(a, inl);
+  RegisterImplicitHeader(s, e, a.id);
   A.AddBlock(l, A.NewHeader(level, a, inl));
   RETURN TRUE
 END AtxHeader;
 
 (* setextHeader *)
 PROCEDURE SetextHeader(VAR l: A.Blocks): BOOLEAN;
-  VAR p, q, start: LONGINT; level: INTEGER; inl: A.Inline; a: A.Attr;
+  VAR p, q, start, s, e: LONGINT; level: INTEGER; inl: A.Inline; a: A.Attr;
     ch: CHAR;
 BEGIN
   start := B.pos;
@@ -238,8 +318,9 @@ BEGIN
   q := p;
   WHILE (B.C(q) = "=") OR (B.C(q) = "-") DO INC(q) END;
   IF (q = p) OR (B.BlankLine(q) < 0) THEN RETURN FALSE END;
-  B.pos := B.SkipSpaces(start);
+  B.pos := B.SkipSpaces(start); s := B.pos;
   inl := HeaderInlines(SetextStop);
+  e := B.pos;
   q := SetextEnd(B.pos, a);
   IF q >= 0 THEN
     ch := B.C(q);
@@ -250,6 +331,7 @@ BEGIN
         IF ch = "=" THEN level := 1 ELSE level := 2 END;
         B.pos := q;
         RegisterHeader(a, inl);
+        RegisterImplicitHeader(s, e, a.id);
         A.AddBlock(l, A.NewHeader(level, a, inl));
         RETURN TRUE
       END
@@ -366,7 +448,8 @@ BEGIN
   RETURN PutBlanks(b, p)
 END ListContinuation;
 
-(* taskListItemFromAscii *)
+(* taskListItemFromAscii, applied to the item's blocks after resolving,
+   as pandoc applies it *)
 PROCEDURE TaskItem(blocks: A.Block);
   VAR i, n: A.Inline; check: A.Inline;
 BEGIN
@@ -395,7 +478,7 @@ END TaskItem;
 
 (* listItem at B.pos: its blocks in items *)
 PROCEDURE ListItem(VAR items: A.BlockList; kind, style, delim: INTEGER): BOOLEAN;
-  VAR b: B.Buf; p, q, ci: LONGINT; old: INTEGER; blocks: A.Block;
+  VAR b: B.Buf; p, q, ci: LONGINT; old: INTEGER; blocks: A.Block; it: Item;
 BEGIN
   old := B.context; B.context := B.ListItemState;
   B.InitBuf(b);
@@ -406,8 +489,9 @@ BEGIN
   B.pos := p;
   blocks := BlocksOf(b);
   B.context := old;
-  TaskItem(blocks);
   NEW(items); items.blocks := blocks; items.next := NIL;
+  NEW(it); it.item := items; it.next := listItems;
+  listItems := it;
   RETURN TRUE
 END ListItem;
 
@@ -438,7 +522,7 @@ BEGIN
   WHILE last.next # NIL DO
     others := others OR HasPara(last.blocks); last := last.next
   END;
-  final := A.LastBlock(last.blocks);
+  IF last.blocks # NIL THEN final := A.LastBlock(last.blocks) ELSE final := NIL END;
   IF (final # NIL) & (final.kind = A.Para) & ~others THEN
     b := last.blocks;
     WHILE (b # final) & (b.kind # A.Para) DO b := b.next END;
@@ -545,42 +629,6 @@ BEGIN
   RETURN -1
 END Closer;
 
-(* The attributes of an HTML tag as a div's: id, class split into
-   words, and the others *)
-PROCEDURE DivAttr(VAR tag: B.Tag): A.Attr;
-  VAR a: A.Attr; h: B.HtmlAttr; p, i, j: LONGINT; key, value: A.Rope;
-    b: B.Buf;
-BEGIN
-  a := A.NewAttr(NIL);
-  p := tag.attrStart;
-  WHILE (p < tag.end) & B.NextHtmlAttr(p, h) DO
-    key := NIL;
-    FOR i := h.nameStart TO h.nameStart + h.nameLen - 1 DO
-      key := Ropes.AppendChar(key, B.Lower(B.t[i]))
-    END;
-    IF h.valStart >= 0 THEN value := B.Rope(h.valStart, h.valStart + h.valLen)
-    ELSE value := NIL
-    END;
-    IF Ropes.EqualString(key, "id") THEN
-      a.id := value
-    ELSIF Ropes.EqualString(key, "class") THEN
-      B.InitBuf(b);
-      IF h.valStart >= 0 THEN B.Put(b, h.valStart, h.valStart + h.valLen) END;
-      i := 0;
-      WHILE i < b.len DO
-        WHILE (i < b.len) & B.IsWhite(b.t[i]) DO INC(i) END;
-        j := i;
-        WHILE (j < b.len) & ~B.IsWhite(b.t[j]) DO INC(j) END;
-        IF j > i THEN A.AddClass(a, Ropes.FromSubchars(b.t^, i, j - i)) END;
-        i := j
-      END
-    ELSE
-      A.AddKeyVal(a, key, value)
-    END;
-    p := h.end
-  END;
-  RETURN a
-END DivAttr;
 
 (* Blocks up to the end of the text, or until stop holds at B.pos (or
    no block can be read) *)
@@ -610,7 +658,7 @@ BEGIN
   q := Closer(B.pos, "div");
   IF q >= 0 THEN B.pos := q END;
   B.htmlBlock := old;
-  A.AddBlock(l, A.NewDiv(DivAttr(tag), blocks));
+  A.AddBlock(l, A.NewDiv(B.HtmlTagAttr(tag), blocks));
   RETURN TRUE
 END DivHtml;
 
@@ -789,7 +837,136 @@ BEGIN
   RETURN TRUE
 END LineBlock;
 
+(* Notes and reference keys *)
+
+(* rawLines at p, appended to b with their new lines: the position
+   after them, or -1 *)
+PROCEDURE RawLines(VAR b: B.Buf; p: LONGINT): LONGINT;
+  VAR q, e, n: LONGINT;
+BEGIN
+  e := B.AnyLine(p);
+  IF e < 0 THEN RETURN -1 END;
+  B.Put(b, p, e); p := e;
+  LOOP
+    IF (B.BlankLine(p) >= 0) OR B.DivCloser(p) THEN EXIT END;
+    q := B.NonindentSpaces(p, n);
+    IF (q >= 0) & (I.NoteMarker(q) >= 0) THEN EXIT END;
+    q := B.IndentSpaces(p);
+    IF q < 0 THEN q := p END;
+    e := B.AnyLine(q);
+    IF e < 0 THEN EXIT END;
+    B.Put(b, q, e); p := e
+  END;
+  RETURN p
+END RawLines;
+
+(* noteBlock: a note's text, [^ref]: text, kept for its references *)
+PROCEDURE NoteBlock(): BOOLEAN;
+  VAR p, q, r, n, sp, st: LONGINT; b: B.Buf; nt: Note;
+BEGIN
+  p := B.NonindentSpaces(B.pos, n);
+  IF p < 0 THEN RETURN FALSE END;
+  q := I.NoteMarker(p);
+  IF (q < 0) OR (B.C(q) # ":") THEN RETURN FALSE END;
+  NEW(nt); nt.ref := B.Rope(p + 2, q - 1);
+  p := q + 1;
+  r := B.BlankLine(p);
+  IF r >= 0 THEN p := r END;
+  r := B.IndentSpaces(p);
+  IF r >= 0 THEN p := r END;
+  B.InitBuf(b);
+  p := RawLines(b, p);
+  IF p < 0 THEN RETURN FALSE END;
+  B.PutChar(b, 0AX);
+  LOOP
+    r := B.BlankLines(p);
+    IF r < 0 THEN EXIT END;
+    r := B.IndentSpaces(r);
+    IF r < 0 THEN EXIT END;
+    r := RawLines(b, r);
+    IF r < 0 THEN EXIT END;
+    B.PutChar(b, 0AX); p := r
+  END;
+  B.PutChar(b, 0AX);
+  r := B.BlankLines(p);
+  IF r >= 0 THEN p := r END;
+  B.pos := p;
+  sp := B.lastStrPos; st := B.lastStrText; B.lastStrPos := -1;
+  nt.blocks := BlocksOf(b);
+  B.lastStrPos := sp; B.lastStrText := st;
+  nt.next := notes; notes := nt;
+  RETURN TRUE
+END NoteBlock;
+
+(* referenceKey *)
+PROCEDURE ReferenceKey(): BOOLEAN;
+  VAR k: Key;
+BEGIN
+  NEW(k);
+  IF ~I.ReferenceKey(k.key, k.url, k.title, k.attr) THEN RETURN FALSE END;
+  k.next := keys; keys := k;
+  RETURN TRUE
+END ReferenceKey;
+
 (* Paragraphs *)
+
+(* B.text: the inlines of the text r, its words separated by spaces
+   and soft breaks *)
+PROCEDURE TextInlines(r: A.Rope): A.Inline;
+  VAR l: A.Inlines; b: B.Buf; i, n: LONGINT; ch: CHAR; nl, sp: BOOLEAN;
+BEGIN
+  A.InitInlines(l); B.InitBuf(b);
+  n := Ropes.Length(r); i := 0;
+  WHILE i < n DO
+    ch := Ropes.Fetch(r, i);
+    IF (ch = " ") OR (ch = 09X) OR (ch = 0AX) OR (ch = 0DX) THEN
+      nl := FALSE; sp := TRUE;
+      WHILE (i < n) & sp DO
+        ch := Ropes.Fetch(r, i);
+        sp := (ch = " ") OR (ch = 09X) OR (ch = 0AX) OR (ch = 0DX);
+        IF sp THEN nl := nl OR (ch = 0AX); INC(i) END
+      END;
+      IF b.len > 0 THEN A.Append(l, A.NewStr(B.BufRope(b))); B.InitBuf(b) END;
+      IF nl THEN A.Append(l, A.NewSimple(A.SoftBreak))
+      ELSE A.Append(l, A.NewSimple(A.Space))
+      END
+    ELSE
+      B.PutChar(b, ch); INC(i)
+    END
+  END;
+  IF b.len > 0 THEN A.Append(l, A.NewStr(B.BufRope(b))) END;
+  RETURN l.first
+END TextInlines;
+
+(* implicitFigure: a Plain or Para of inl, whose only inline is an image
+   with a description, as a Figure; else NIL *)
+PROCEDURE Figure(inl: A.Inline): A.Block;
+  VAR img: A.LinkInl; alt: A.Inline; fa, ia: A.Attr; kv: A.KeyVal;
+    v: A.Rope; found: BOOLEAN;
+BEGIN
+  IF (inl = NIL) OR (inl.next # NIL) OR (inl.kind # A.Image)
+      OR (inl(A.LinkInl).content = NIL) THEN
+    RETURN NIL
+  END;
+  img := inl(A.LinkInl);
+  v := A.GetKeyVal(img.attr, "alt", found);
+  IF found THEN alt := TextInlines(v) ELSE alt := A.CopyInlines(img.content) END;
+  fa := A.NewAttr(img.attr.id);
+  v := A.GetKeyVal(img.attr, "latex-placement", found);
+  IF found THEN A.AddKeyVal(fa, A.S("latex-placement"), v) END;
+  ia := A.NewAttr(NIL); ia.classes := img.attr.classes;
+  kv := img.attr.attrs;
+  WHILE kv # NIL DO
+    IF ~Ropes.EqualString(kv.key, "alt")
+        & ~Ropes.EqualString(kv.key, "latex-placement") THEN
+      A.AddKeyVal(ia, kv.key, kv.value)
+    END;
+    kv := kv.next
+  END;
+  RETURN A.NewFigure(fa, A.NewInlinesBlock(A.Plain, img.content),
+    A.NewInlinesBlock(A.Plain,
+      A.NewLink(A.Image, ia, alt, img.url, img.title)))
+END Figure;
 
 (* para and plain *)
 PROCEDURE Para(VAR l: A.Blocks): BOOLEAN;
@@ -813,6 +990,648 @@ BEGIN
   RETURN TRUE
 END Para;
 
+(* Tables *)
+
+(* isWS: a space, tab, carriage return or new line *)
+PROCEDURE IsWS(ch: CHAR): BOOLEAN;
+BEGIN
+  RETURN (ch = " ") OR (ch = 09X) OR (ch = 0DX) OR (ch = 0AX)
+END IsWS;
+
+(* trim: t[from .. to-1] without the white space around it *)
+PROCEDURE TrimRange(VAR from, to: LONGINT);
+BEGIN
+  WHILE (from < to) & IsWS(B.t[from]) DO INC(from) END;
+  WHILE (to > from) & IsWS(B.t[to - 1]) DO DEC(to) END
+END TrimRange;
+
+(* realLength: the width of t[from .. to-1] *)
+PROCEDURE RealLength(from, to: LONGINT): LONGINT;
+  VAR w, q: LONGINT;
+BEGIN
+  w := 0;
+  WHILE from < to DO INC(w, I.CharWidth(from, q)); from := q END;
+  RETURN w
+END RealLength;
+
+(* The number of characters in t[from .. to-1] *)
+PROCEDURE CharCount(from, to: LONGINT): LONGINT;
+  VAR n: LONGINT;
+BEGIN
+  n := 0;
+  WHILE from < to DO
+    IF (ORD(B.t[from]) < 80H) OR (ORD(B.t[from]) >= 0C0H) THEN INC(n) END;
+    INC(from)
+  END;
+  RETURN n
+END CharCount;
+
+(* splitAtWidth: where the first part of width w of t[p .. e-1] ends *)
+PROCEDURE SplitAt(p, e, w: LONGINT): LONGINT;
+  VAR n, q: LONGINT;
+BEGIN
+  n := 0;
+  WHILE (n < w) & (p < e) DO INC(n, I.CharWidth(p, q)); p := q END;
+  IF p > e THEN p := e END;
+  RETURN p
+END SplitAt;
+
+(* Sets a[i] to v, making a longer if it must be *)
+PROCEDURE SetLong(VAR a: Longs; i, v: LONGINT);
+  VAR b: Longs; k: LONGINT;
+BEGIN
+  IF a = NIL THEN NEW(a, 8) END;
+  IF i >= LEN(a^) THEN
+    NEW(b, 2 * LEN(a^));
+    FOR k := 0 TO LEN(a^) - 1 DO b[k] := a[k] END;
+    a := b
+  END;
+  a[i] := v
+END SetLong;
+
+(* A new line of no cells *)
+PROCEDURE NewRawLine(): RawLine;
+  VAR r: RawLine;
+BEGIN
+  NEW(r); r.s := NIL; r.f := NIL; r.m := 0; r.next := NIL;
+  RETURN r
+END NewRawLine;
+
+PROCEDURE AddRawCell(r: RawLine; from, to: LONGINT);
+BEGIN
+  SetLong(r.s, r.m, from); SetLong(r.f, r.m, to); INC(r.m)
+END AddRawCell;
+
+(* splitTextByIndices (init indices), drop 1: t[p .. e-1] split into
+   c.n cells *)
+PROCEDURE SplitLine(p, e: LONGINT; VAR c: Columns): RawLine;
+  VAR r: RawLine; k, q: LONGINT;
+BEGIN
+  r := NewRawLine();
+  p := SplitAt(p, e, c.index[0]);
+  FOR k := 0 TO c.n - 1 DO
+    IF k < c.n - 1 THEN q := SplitAt(p, e, c.index[k + 1] - c.index[k])
+    ELSE q := e
+    END;
+    AddRawCell(r, p, q); p := q
+  END;
+  RETURN r
+END SplitLine;
+
+(* alignType: a column's alignment, from its header's lines, cell k of
+   each of the lines l, and len, the length of its dashes *)
+PROCEDURE AlignType(l: RawLine; k, len: LONGINT): INTEGER;
+  VAR s, e, bs, be, bn, n: LONGINT; left, right: BOOLEAN;
+BEGIN
+  bs := -1; bn := 0; be := 0;
+  WHILE l # NIL DO
+    s := l.s[k]; e := l.f[k];
+    WHILE (e > s) & IsWS(B.t[e - 1]) DO DEC(e) END;
+    IF e > s THEN
+      n := CharCount(s, e);
+      IF (bs < 0) OR (n < bn) THEN bs := s; be := e; bn := n END
+    END;
+    l := l.next
+  END;
+  IF bs < 0 THEN RETURN A.AlignDefault END;
+  left := B.IsSpace(B.t[bs]); right := RealLength(bs, be) < len;
+  IF left & right THEN RETURN A.AlignCenter
+  ELSIF left THEN RETURN A.AlignRight
+  ELSIF right THEN RETURN A.AlignLeft
+  END;
+  RETURN A.AlignDefault
+END AlignType;
+
+(* parseFromString' (mconcat <$> many plain): a cell of the text in b *)
+PROCEDURE CellOf(VAR b: B.Buf): A.Cell;
+  VAR c: A.Cell; sp, st: LONGINT; inl: A.Inline;
+BEGIN
+  NEW(c); c.attr := NIL; c.align := A.AlignDefault;
+  c.rowSpan := 1; c.colSpan := 1; c.blocks := NIL; c.next := NIL;
+  IF b.len > 0 THEN
+    sp := B.lastStrPos; st := B.lastStrText; B.lastStrPos := -1;
+    inl := InlinesOf(b);
+    B.lastStrPos := sp; B.lastStrText := st;
+    IF inl # NIL THEN c.blocks := A.NewInlinesBlock(A.Plain, inl) END
+  END;
+  RETURN c
+END CellOf;
+
+(* A cell of t[from .. to-1], trimmed *)
+PROCEDURE RangeCell(from, to: LONGINT): A.Cell;
+  VAR b: B.Buf;
+BEGIN
+  TrimRange(from, to);
+  B.InitBuf(b); B.Put(b, from, to);
+  RETURN CellOf(b)
+END RangeCell;
+
+(* A row of the cells of l, trimmed, at most n of them *)
+PROCEDURE LineRow(l: RawLine; n: LONGINT): A.Row;
+  VAR r: A.Row; c, last: A.Cell; k: LONGINT;
+BEGIN
+  NEW(r); r.attr := NIL; r.cells := NIL; r.next := NIL; last := NIL;
+  k := 0;
+  WHILE (k < l.m) & (k < n) DO
+    c := RangeCell(l.s[k], l.f[k]);
+    IF last = NIL THEN r.cells := c ELSE last.next := c END;
+    last := c; INC(k)
+  END;
+  RETURN r
+END LineRow;
+
+(* Whether all of r's cells are empty *)
+PROCEDURE EmptyRow(r: A.Row): BOOLEAN;
+  VAR c: A.Cell;
+BEGIN
+  c := r.cells;
+  WHILE (c # NIL) & (c.blocks = NIL) DO c := c.next END;
+  RETURN c = NIL
+END EmptyRow;
+
+(* Makes r n cells long, as pandoc's table builder does *)
+PROCEDURE PadRow(r: A.Row; n: LONGINT);
+  VAR c: A.Cell; b: B.Buf; k: LONGINT;
+BEGIN
+  B.InitBuf(b);
+  IF n = 0 THEN r.cells := NIL; RETURN END;
+  IF r.cells = NIL THEN r.cells := CellOf(b) END;
+  c := r.cells; k := 1;
+  WHILE k < n DO
+    IF c.next = NIL THEN c.next := CellOf(b) END;
+    c := c.next; INC(k)
+  END;
+  c.next := NIL
+END PadRow;
+
+(* The rows in l, a list in the reverse order, in order, each made c.n
+   cells long *)
+PROCEDURE Rows(l: A.Row; n: LONGINT): A.Row;
+  VAR r, next: A.Row;
+BEGIN
+  r := NIL;
+  WHILE l # NIL DO
+    next := l.next; PadRow(l, n); l.next := r; r := l; l := next
+  END;
+  RETURN r
+END Rows;
+
+(* a / b in LONGREAL; a / b of two integers is only a REAL *)
+PROCEDURE Ratio(a, b: LONGINT): LONGREAL;
+  VAR x: LONGREAL;
+BEGIN
+  x := a;
+  RETURN x / b
+END Ratio;
+
+(* toTableComponents' NormalizeHeader: the table of the columns c, the
+   header row head (NIL for none) and the rows rows, in the reverse
+   order *)
+PROCEDURE MakeTable(VAR c: Columns; head, rows: A.Row): A.TableBlk;
+  VAR t: A.TableBlk; cs, last: A.ColSpec; tb: A.TableBody; k: LONGINT;
+    total: LONGREAL;
+BEGIN
+  t := A.NewTable(NIL);
+  total := 0;
+  FOR k := 0 TO c.n - 1 DO total := total + c.width[k] END;
+  last := NIL;
+  FOR k := 0 TO c.n - 1 DO
+    NEW(cs); cs.align := SHORT(c.align[k]); cs.next := NIL;
+    IF total >= 1 THEN cs.width := c.width[k] / total
+    ELSE cs.width := c.width[k]
+    END;
+    cs.hasWidth := cs.width > 0;
+    IF last = NIL THEN t.colSpecs := cs ELSE last.next := cs END;
+    last := cs
+  END;
+  IF (head # NIL) & ~EmptyRow(head) THEN
+    PadRow(head, c.n); t.head.rows := head
+  END;
+  NEW(tb); tb.attr := NIL; tb.rowHeadColumns := 0; tb.head := NIL;
+  tb.body := Rows(rows, c.n); tb.next := NIL;
+  t.bodies := tb;
+  RETURN t
+END MakeTable;
+
+(* blanklines' *)
+PROCEDURE BlankLinesP(p: LONGINT): LONGINT;
+  VAR q: LONGINT;
+BEGIN
+  q := B.BlankLines(p);
+  IF (q < 0) & (B.divLevel >= 1) & (B.DivFenceEnd(p) >= 0) THEN q := p END;
+  RETURN q
+END BlankLinesP;
+
+(* nonindentSpaces, many1 (dashedLine '-'), newline: where they end,
+   or -1. If fill, c.len and c.index are set. *)
+PROCEDURE DashRow(p: LONGINT; VAR c: Columns; fill: BOOLEAN): LONGINT;
+  VAR sp, n, q: LONGINT;
+BEGIN
+  p := B.NonindentSpaces(p, sp);
+  IF p < 0 THEN RETURN -1 END;
+  IF fill THEN c.index[0] := sp END;
+  n := 0;
+  WHILE B.C(p) = "-" DO
+    q := p;
+    WHILE B.C(p) = "-" DO INC(p) END;
+    IF fill THEN c.len[n] := p - q END;
+    WHILE B.IsSpace(B.C(p)) DO INC(p) END;
+    IF fill THEN c.index[n + 1] := c.index[n] + p - q END;
+    INC(n)
+  END;
+  IF (n = 0) OR (B.C(p) # 0AX) THEN RETURN -1 END;
+  c.n := n;
+  RETURN p + 1
+END DashRow;
+
+(* The dashed line under a simple or multiline table's header, at p:
+   where it ends, or -1. Sets c. *)
+PROCEDURE Dashes(p: LONGINT; VAR c: Columns): LONGINT;
+  VAR q, k: LONGINT;
+BEGIN
+  q := DashRow(p, c, FALSE);
+  IF q >= 0 THEN
+    NEW(c.len, c.n); NEW(c.index, c.n + 1);
+    NEW(c.align, c.n); NEW(c.width, c.n);
+    FOR k := 0 TO c.n - 1 DO c.align[k] := A.AlignDefault; c.width[k] := 0 END;
+    q := DashRow(p, c, TRUE)
+  END;
+  RETURN q
+END Dashes;
+
+(* tableFooter *)
+PROCEDURE TableFooter(p: LONGINT): LONGINT;
+  VAR sp: LONGINT;
+BEGIN
+  p := B.NonindentSpaces(p, sp);
+  IF (p < 0) OR (B.C(p) # "-") THEN RETURN -1 END;
+  WHILE (B.C(p) = "-") OR B.IsSpace(B.C(p)) DO INC(p) END;
+  RETURN BlankLinesP(p)
+END TableFooter;
+
+(* rawTableLine: a line of a simple or multiline table, at p, split
+   into l; where it ends, or -1 *)
+PROCEDURE RawTableLine(p: LONGINT; VAR c: Columns; VAR l: RawLine): LONGINT;
+  VAR q: LONGINT;
+BEGIN
+  IF (BlankLinesP(p) >= 0) OR (TableFooter(p) >= 0) THEN RETURN -1 END;
+  q := B.AnyLine(p);
+  IF q >= 0 THEN l := SplitLine(p, q - 1, c) END;
+  RETURN q
+END RawTableLine;
+
+(* widthsFromIndices 72 *)
+PROCEDURE WidthsFromIndices(VAR c: Columns);
+  VAR len: Longs; k, total, cols: LONGINT; q: LONGREAL;
+BEGIN
+  NEW(len, c.n + 1);
+  len[0] := c.index[0];
+  FOR k := 1 TO c.n DO len[k] := c.index[k] - c.index[k - 1] END;
+  IF (c.n >= 1) & (len[c.n] < len[c.n - 1])
+      & (len[c.n - 1] - len[c.n] <= 2) THEN
+    len[c.n] := len[c.n - 1]
+  END;
+  cols := 72;
+  IF c.index[c.n] > cols THEN cols := c.index[c.n] END;
+  total := 0;
+  FOR k := 0 TO c.n DO INC(total, len[k]) END;
+  IF total > cols THEN q := total ELSE q := cols END;
+  FOR k := 0 TO c.n - 1 DO c.width[k] := len[k + 1] / q END
+END WidthsFromIndices;
+
+(* simpleTable headless at p: where it ends, or -1; the table in t *)
+PROCEDURE SimpleTable(p: LONGINT; headless: BOOLEAN; VAR t: A.TableBlk): LONGINT;
+  VAR c: Columns; q, k: LONGINT; heads, l: RawLine; head, rows, r: A.Row;
+BEGIN
+  IF headless THEN
+    q := Dashes(p, c);
+    IF q < 0 THEN RETURN -1 END;
+    k := B.AnyLine(q);
+    IF k < 0 THEN RETURN -1 END;
+    heads := SplitLine(q, k - 1, c)
+  ELSE
+    k := B.AnyLine(p);
+    IF k < 0 THEN RETURN -1 END;
+    q := Dashes(k, c);
+    IF q < 0 THEN RETURN -1 END;
+    heads := SplitLine(p, k - 1, c)
+  END;
+  FOR k := 0 TO c.n - 1 DO c.align[k] := AlignType(heads, k, c.len[k]) END;
+  rows := NIL;
+  LOOP
+    k := RawTableLine(q, c, l);
+    IF k < 0 THEN EXIT END;
+    r := LineRow(l, c.n); r.next := rows; rows := r; q := k
+  END;
+  IF rows = NIL THEN RETURN -1 END;
+  k := TableFooter(q);
+  IF (k < 0) & ~headless THEN k := BlankLinesP(q) END;
+  IF k < 0 THEN RETURN -1 END;
+  IF headless THEN head := NIL ELSE head := LineRow(heads, c.n) END;
+  FOR q := 0 TO c.n - 1 DO c.width[q] := 0 END;
+  t := MakeTable(c, head, rows);
+  RETURN k
+END SimpleTable;
+
+(* A multiline cell: cell k of each of the lines l, trimmed, each
+   followed by a new line; if trim, the whole trimmed too *)
+PROCEDURE MultilineCell(l: RawLine; k: LONGINT; trim: BOOLEAN): A.Cell;
+  VAR b: B.Buf; s, e: LONGINT;
+BEGIN
+  B.InitBuf(b);
+  WHILE l # NIL DO
+    s := l.s[k]; e := l.f[k]; TrimRange(s, e);
+    IF ~trim OR (b.len > 0) OR (e > s) THEN
+      B.Put(b, s, e); B.PutChar(b, 0AX)
+    END;
+    l := l.next
+  END;
+  IF trim THEN
+    WHILE (b.len > 0) & IsWS(b.t[b.len - 1]) DO DEC(b.len) END;
+    b.t[b.len] := 0X
+  END;
+  RETURN CellOf(b)
+END MultilineCell;
+
+(* Appends l to the list first .. last *)
+PROCEDURE AppendLine(VAR first, last: RawLine; l: RawLine);
+BEGIN
+  l.next := NIL;
+  IF last = NIL THEN first := l ELSE last.next := l END;
+  last := l
+END AppendLine;
+
+(* A multiline row of the lines l *)
+PROCEDURE MultilineRow(l: RawLine; VAR c: Columns; trim: BOOLEAN): A.Row;
+  VAR r: A.Row; cell, last: A.Cell; k: LONGINT;
+BEGIN
+  NEW(r); r.attr := NIL; r.cells := NIL; r.next := NIL; last := NIL;
+  FOR k := 0 TO c.n - 1 DO
+    cell := MultilineCell(l, k, trim);
+    IF last = NIL THEN r.cells := cell ELSE last.next := cell END;
+    last := cell
+  END;
+  RETURN r
+END MultilineRow;
+
+(* multilineTable headless at p: where it ends, or -1; the table in t *)
+PROCEDURE MultilineTable(p: LONGINT; headless: BOOLEAN; VAR t: A.TableBlk): LONGINT;
+  VAR c: Columns; q, k, n: LONGINT; starts: Longs;
+    heads, hlast, lines, llast, l: RawLine; head, rows, r: A.Row;
+BEGIN
+  heads := NIL; hlast := NIL;
+  IF headless THEN
+    q := Dashes(p, c);
+    IF q < 0 THEN RETURN -1 END;
+    INC(c.index[c.n]);
+    k := B.AnyLine(q);
+    IF k < 0 THEN RETURN -1 END;
+    heads := SplitLine(q, k - 1, c)
+  ELSE
+    q := DashRow(p, c, FALSE);
+    IF (q < 0) OR (B.BlankLine(q) >= 0) THEN RETURN -1 END;
+    n := 0; starts := NIL;
+    WHILE DashRow(q, c, FALSE) < 0 DO
+      SetLong(starts, n, q); INC(n);
+      q := B.AnyLine(q);
+      IF q < 0 THEN RETURN -1 END
+    END;
+    IF n = 0 THEN RETURN -1 END;
+    q := Dashes(q, c);
+    INC(c.index[c.n]);
+    FOR k := 0 TO n - 1 DO
+      AppendLine(heads, hlast,
+        SplitLine(starts[k], B.LineEnd(starts[k]), c))
+    END
+  END;
+  FOR k := 0 TO c.n - 1 DO c.align[k] := AlignType(heads, k, c.len[k]) END;
+  rows := NIL;
+  LOOP
+    lines := NIL; llast := NIL;
+    LOOP
+      k := RawTableLine(q, c, l);
+      IF k < 0 THEN EXIT END;
+      AppendLine(lines, llast, l); q := k
+    END;
+    IF lines = NIL THEN EXIT END;
+    r := MultilineRow(lines, c, FALSE); r.next := rows; rows := r;
+    k := B.BlankLines(q);
+    IF k < 0 THEN EXIT END;
+    q := k
+  END;
+  IF rows = NIL THEN RETURN -1 END;
+  k := TableFooter(q);
+  IF k < 0 THEN RETURN -1 END;
+  IF headless THEN head := NIL ELSE head := MultilineRow(heads, c, TRUE) END;
+  WidthsFromIndices(c);
+  t := MakeTable(c, head, rows);
+  RETURN k
+END MultilineTable;
+
+(* scanForPipe: whether the line at p has a pipe *)
+PROCEDURE ScanForPipe(p: LONGINT): BOOLEAN;
+BEGIN
+  WHILE (p < B.len) & (B.t[p] # 0AX) & (B.t[p] # "|") DO INC(p) END;
+  RETURN B.C(p) = "|"
+END ScanForPipe;
+
+(* pipeTableRow at p, its raw cells in l: where it ends, or -1 *)
+PROCEDURE PipeTableRow(p: LONGINT; VAR l: RawLine): LONGINT;
+  VAR open: BOOLEAN; s, q: LONGINT; ch: CHAR;
+BEGIN
+  IF ~ScanForPipe(p) THEN RETURN -1 END;
+  p := B.SkipSpaces(p);
+  open := B.C(p) = "|";
+  IF open THEN INC(p) END;
+  l := NewRawLine();
+  LOOP
+    s := p;
+    LOOP
+      ch := B.C(p);
+      IF (p >= B.len) OR (ch = "|") OR (ch = 0AX) OR (ch = 0DX) THEN EXIT END;
+      q := I.Chunk(p);
+      IF q > p THEN p := q ELSE INC(p) END
+    END;
+    AddRawCell(l, s, p);
+    IF B.C(p) # "|" THEN EXIT END;
+    INC(p)
+  END;
+  IF (l.m = 1) & ~open THEN RETURN -1 END;
+  RETURN B.BlankLine(p)
+END PipeTableRow;
+
+(* pipeTableHeaderPart at p: where it ends, or -1; its alignment and
+   length in c's column k *)
+PROCEDURE PipeHeaderPart(p: LONGINT; VAR c: Columns; k: LONGINT): LONGINT;
+  VAR left, right: BOOLEAN; s: LONGINT; al: INTEGER;
+BEGIN
+  p := B.SkipSpaces(p);
+  left := B.C(p) = ":";
+  IF left THEN INC(p) END;
+  IF B.C(p) # "-" THEN RETURN -1 END;
+  s := p;
+  WHILE B.C(p) = "-" DO INC(p) END;
+  SetLong(c.len, k, p - s);
+  right := B.C(p) = ":";
+  IF right THEN INC(p) END;
+  IF left THEN INC(c.len[k]) END;
+  IF right THEN INC(c.len[k]) END;
+  IF left & right THEN al := A.AlignCenter
+  ELSIF left THEN al := A.AlignLeft
+  ELSIF right THEN al := A.AlignRight
+  ELSE al := A.AlignDefault
+  END;
+  SetLong(c.align, k, al);
+  RETURN B.SkipSpaces(p)
+END PipeHeaderPart;
+
+(* pipeBreak at p: where it ends, or -1; the columns in c *)
+PROCEDURE PipeBreak(p: LONGINT; VAR c: Columns): LONGINT;
+  VAR sp, q: LONGINT; open: BOOLEAN; ch: CHAR;
+BEGIN
+  c.len := NIL; c.align := NIL; c.n := 0;
+  p := B.NonindentSpaces(p, sp);
+  IF p < 0 THEN RETURN -1 END;
+  open := B.C(p) = "|";
+  IF open THEN INC(p) END;
+  p := PipeHeaderPart(p, c, 0);
+  IF p < 0 THEN RETURN -1 END;
+  c.n := 1;
+  LOOP
+    ch := B.C(p);
+    IF ((ch = "|") OR (ch = "+")) & (B.BlankLine(p + 1) < 0) THEN
+      q := PipeHeaderPart(p + 1, c, c.n);
+      IF q < 0 THEN EXIT END;
+      p := q; INC(c.n)
+    ELSE
+      EXIT
+    END
+  END;
+  IF B.C(p) = "|" THEN INC(p)
+  ELSIF (c.n = 1) & ~open THEN RETURN -1
+  END;
+  RETURN B.BlankLine(p)
+END PipeBreak;
+
+(* The width of the first n raw cells of l *)
+PROCEDURE LineWidth(l: RawLine; n: LONGINT): LONGINT;
+  VAR k, w: LONGINT;
+BEGIN
+  w := 0; k := 0;
+  WHILE (k < l.m) & (k < n) DO INC(w, RealLength(l.s[k], l.f[k])); INC(k) END;
+  RETURN w
+END LineWidth;
+
+(* pipeTable at p: where it ends, or -1; the table in t *)
+PROCEDURE PipeTable(p: LONGINT; VAR t: A.TableBlk): LONGINT;
+  VAR c: Columns; sp, k, sum, max, w: LONGINT; heads, lines, l: RawLine;
+    rows, r, head: A.Row; ch: CHAR;
+BEGIN
+  p := B.NonindentSpaces(p, sp);
+  IF p < 0 THEN RETURN -1 END;
+  ch := B.C(p);
+  IF (p >= B.len) OR IsWS(ch) THEN RETURN -1 END;
+  p := PipeTableRow(p, heads);
+  IF p < 0 THEN RETURN -1 END;
+  p := PipeBreak(p, c);
+  IF p < 0 THEN RETURN -1 END;
+  lines := NIL;
+  LOOP
+    k := PipeTableRow(p, l);
+    IF k < 0 THEN EXIT END;
+    l.next := lines; lines := l; p := k
+  END;
+  sum := 0;
+  FOR k := 0 TO c.n - 1 DO INC(sum, c.len[k]) END;
+  max := LineWidth(heads, c.n);
+  l := lines;
+  WHILE l # NIL DO
+    w := LineWidth(l, c.n);
+    IF w > max THEN max := w END;
+    l := l.next
+  END;
+  IF sum > max THEN max := sum END;
+  NEW(c.width, c.n);
+  FOR k := 0 TO c.n - 1 DO
+    IF max + c.n + 1 > 72 THEN c.width[k] := Ratio(c.len[k], sum)
+    ELSE c.width[k] := 0
+    END
+  END;
+  rows := NIL; l := lines; (* both in the reverse order *)
+  WHILE l # NIL DO
+    r := LineRow(l, c.n); r.next := rows; rows := r; l := l.next
+  END;
+  (* rows is in order; MakeTable wants it reversed *)
+  lines := NIL; r := rows; rows := NIL;
+  WHILE r # NIL DO head := r.next; r.next := rows; rows := r; r := head END;
+  t := MakeTable(c, LineRow(heads, c.n), rows);
+  RETURN p
+END PipeTable;
+
+(* Whether attributes and blank lines follow at p: a caption's
+   inlines stop there *)
+PROCEDURE CaptionStop(p: LONGINT): BOOLEAN;
+  VAR a: A.Attr; q: LONGINT;
+BEGIN
+  q := B.Attributes(p, a);
+  RETURN (q >= 0) & (B.BlankLines(q) >= 0)
+END CaptionStop;
+
+(* tableCaption at p: where it ends, or -1; its inlines and
+   attributes *)
+PROCEDURE TableCaption(p: LONGINT; VAR inl: A.Inline; VAR attr: A.Attr): LONGINT;
+  VAR sp, sv, st, q: LONGINT; l: A.Inlines; a: A.Attr; ok: BOOLEAN;
+BEGIN
+  p := B.NonindentSpaces(p, sp);
+  IF p < 0 THEN RETURN -1 END;
+  IF (B.C(p) = ":") & ~I.PunctAt(p + 1) THEN INC(p)
+  ELSIF ((B.C(p) = "T") OR (B.C(p) = "t")) & B.Looking(p + 1, "able:") THEN
+    INC(p, 6)
+  ELSE
+    RETURN -1
+  END;
+  sv := B.pos; sp := B.lastStrPos; st := B.lastStrText;
+  B.pos := p; A.InitInlines(l);
+  ok := I.Inlines(l, CaptionStop);
+  inl := I.Trim(l); q := B.pos; attr := NIL;
+  B.pos := sv;
+  p := B.Attributes(q, a);
+  IF p >= 0 THEN attr := a; q := p END;
+  q := B.BlankLines(q);
+  IF q < 0 THEN B.lastStrPos := sp; B.lastStrText := st END;
+  RETURN q
+END TableCaption;
+
+(* table: a pipe, multiline or simple table, with an optional caption
+   before or after it *)
+PROCEDURE Table(VAR l: A.Blocks): BOOLEAN;
+  VAR p, q, r, sp, st: LONGINT; t: A.TableBlk; inl: A.Inline;
+    attr: A.Attr; front: BOOLEAN;
+BEGIN
+  p := B.pos; sp := B.lastStrPos; st := B.lastStrText;
+  q := TableCaption(p, inl, attr); front := q >= 0;
+  IF ~front THEN q := p END;
+  r := -1;
+  IF ScanForPipe(q) THEN r := PipeTable(q, t) END;
+  IF r < 0 THEN r := MultilineTable(q, FALSE, t) END;
+  IF r < 0 THEN r := SimpleTable(q, TRUE, t) END;
+  IF r < 0 THEN r := SimpleTable(q, FALSE, t) END;
+  IF r < 0 THEN r := MultilineTable(q, TRUE, t) END;
+  IF r < 0 THEN
+    B.lastStrPos := sp; B.lastStrText := st;
+    RETURN FALSE
+  END;
+  r := B.SkipBlankLines(r);
+  IF ~front THEN
+    q := TableCaption(r, inl, attr);
+    IF q >= 0 THEN r := q ELSE inl := NIL; attr := NIL END
+  END;
+  t.attr := attr;
+  IF inl # NIL THEN t.caption.blocks := A.NewInlinesBlock(A.Plain, inl) END;
+  A.AddBlock(l, t); B.pos := r;
+  RETURN TRUE
+END Table;
+
 (* block: one block at B.pos, added to l (blank lines add nothing);
    FALSE if there is none *)
 PROCEDURE Block(VAR l: A.Blocks): BOOLEAN;
@@ -823,7 +1642,7 @@ BEGIN
   IF q >= 0 THEN B.pos := q; RETURN TRUE END;
   IF FencedCode(l) OR BulletList(l) OR DivHtml(l) OR DivFenced(l)
       OR SetextHeader(l) OR AtxHeader(l) OR HtmlBlock(l)
-      OR IndentedCode(l) OR LineBlock(l) OR BlockQuote(l) THEN
+      OR Table(l) OR IndentedCode(l) OR LineBlock(l) OR BlockQuote(l) THEN
     RETURN TRUE
   END;
   q := B.Hrule(B.pos);
@@ -831,8 +1650,122 @@ BEGIN
     A.AddBlock(l, A.NewHorizontalRule()); B.pos := q;
     RETURN TRUE
   END;
-  RETURN OrderedList(l) OR DefinitionList(l) OR Para(l)
+  RETURN OrderedList(l) OR DefinitionList(l) OR NoteBlock()
+    OR ReferenceKey() OR Para(l)
 END Block;
+
+(* Resolving *)
+
+PROCEDURE HasClass(a: A.Attr; c: A.Rope): BOOLEAN;
+  VAR p: A.StrList;
+BEGIN
+  p := a.classes;
+  WHILE (p # NIL) & ~Ropes.Equal(p.s, c) DO p := p.next END;
+  RETURN p # NIL
+END HasClass;
+
+(* combineAttr a b: a, with b's identifier if it has none, b's classes
+   and b's attributes it lacks *)
+PROCEDURE CombineAttr(a, b: A.Attr): A.Attr;
+  VAR r: A.Attr; c: A.StrList; kv, k2: A.KeyVal; found: BOOLEAN;
+BEGIN
+  IF b = NIL THEN RETURN a END;
+  r := A.NewAttr(a.id);
+  IF r.id = NIL THEN r.id := b.id END;
+  c := a.classes;
+  WHILE c # NIL DO
+    IF ~HasClass(r, c.s) THEN A.AddClass(r, c.s) END;
+    c := c.next
+  END;
+  c := b.classes;
+  WHILE c # NIL DO
+    IF ~HasClass(r, c.s) THEN A.AddClass(r, c.s) END;
+    c := c.next
+  END;
+  kv := b.attrs;
+  WHILE kv # NIL DO
+    found := FALSE;
+    k2 := a.attrs;
+    WHILE ~found & (k2 # NIL) DO found := Ropes.Equal(k2.key, kv.key); k2 := k2.next END;
+    k2 := kv.next;
+    WHILE ~found & (k2 # NIL) DO found := Ropes.Equal(k2.key, kv.key); k2 := k2.next END;
+    IF ~found THEN A.AddKeyVal(r, kv.key, kv.value) END;
+    kv := kv.next
+  END;
+  kv := a.attrs;
+  WHILE kv # NIL DO A.AddKeyVal(r, kv.key, kv.value); kv := kv.next END;
+  RETURN r
+END CombineAttr;
+
+PROCEDURE FindNote(ref: A.Rope): Note;
+  VAR n: Note;
+BEGIN
+  n := notes;
+  WHILE (n # NIL) & ~Ropes.Equal(n.ref, ref) DO n := n.next END;
+  RETURN n
+END FindNote;
+
+(* A reference link or a note reference as what it refers to *)
+PROCEDURE (r: Resolver) Inline*(i: A.Inline): A.Inline;
+  VAR ri: I.RefInl; k: Key; n: Note; kind: INTEGER; b: B.Buf;
+BEGIN
+  IF i.kind = I.NoteRefKind THEN
+    IF ~r.inNote THEN
+      n := FindNote(i(I.NoteRefInl).ref);
+      IF n # NIL THEN RETURN A.NewNote(n.blocks) END
+    END;
+    B.InitBuf(b); B.PutString(b, "[^");
+    i := A.NewStr(Ropes.Cat(Ropes.Cat(B.BufRope(b), i(I.NoteRefInl).ref), A.S("]")))
+  ELSIF i.kind = I.RefKind THEN
+    ri := i(I.RefInl);
+    IF ri.image THEN kind := A.Image ELSE kind := A.Link END;
+    k := FindKey(keys, ri.key);
+    IF k # NIL THEN
+      i := A.NewLink(kind, CombineAttr(ri.attr, k.attr), ri.content, k.url, k.title)
+    ELSE
+      k := FindKey(headerKeys, ri.key);
+      IF k # NIL THEN
+        i := A.NewLink(kind, ri.attr, ri.content, k.url, k.title)
+      ELSE
+        i := A.WalkInlines(r, ri.fallback)
+      END
+    END
+  END;
+  RETURN i
+END Inline;
+
+(* Plain, Para and Header trimmed again, as pandoc trims them after
+   resolving; implicit figures *)
+PROCEDURE (r: Resolver) Block*(b: A.Block): A.Block;
+  VAR l: A.Inlines; fig: A.Block;
+BEGIN
+  IF (b.kind = A.Plain) OR (b.kind = A.Para) OR (b.kind = A.Header) THEN
+    l.first := b(A.InlinesBlk).inlines; l.last := NIL;
+    b(A.InlinesBlk).inlines := I.Trim(l);
+    IF b.kind # A.Header THEN
+      fig := Figure(b(A.InlinesBlk).inlines);
+      IF fig # NIL THEN b := fig END
+    END
+  END;
+  RETURN b
+END Block;
+
+(* Resolves the references in the blocks d: notes first, then the
+   rest *)
+PROCEDURE Resolve(d: A.Doc);
+  VAR r: Resolver; n: Note; old: BOOLEAN;
+BEGIN
+  old := A.mergeWalk; A.mergeWalk := TRUE;
+  NEW(r); r.inNote := TRUE;
+  n := notes;
+  WHILE n # NIL DO n.blocks := A.WalkBlocks(r, n.blocks); n := n.next END;
+  r.inNote := FALSE;
+  d.blocks := A.WalkBlocks(r, d.blocks);
+  A.mergeWalk := old;
+  WHILE listItems # NIL DO
+    TaskItem(listItems.item.blocks); listItems := listItems.next
+  END
+END Resolve;
 
 (* Reading *)
 
@@ -848,9 +1781,12 @@ BEGIN
   FOR i := 0 TO n - 1 DO t[i] := text[i] END;
   FOR i := n TO n + 2 - k DO t[i] := 0AX END;
   B.Start(t, n + 3 - k, tabStop);
-  ids := NIL;
+  ids := NIL; keys := NIL; headerKeys := NIL; notes := NIL; listItems := NIL;
+  I.Reset;
   d := A.NewDoc();
   d.blocks := ParseBlocks();
+  Resolve(d);
+  keys := NIL; headerKeys := NIL; notes := NIL;
   RETURN d
 END Read;
 

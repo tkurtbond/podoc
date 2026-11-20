@@ -384,6 +384,9 @@ TYPE
 
 VAR
   doInlines, doBlocks: BOOLEAN; (* which methods the walk calls now *)
+  (* Whether WalkInlines joins what the walker returns with Append, as
+     pandoc's Inlines monoid joins inlines, rather than AddInline *)
+  mergeWalk*: BOOLEAN;
 
 (* Strings *)
 
@@ -708,6 +711,79 @@ BEGIN
   END
 END AddInline;
 
+PROCEDURE IsBreak(k: INTEGER): BOOLEAN;
+BEGIN
+  RETURN (k = Space) OR (k = SoftBreak) OR (k = LineBreak)
+END IsBreak;
+
+PROCEDURE Mergeable(k: INTEGER): BOOLEAN;
+BEGIN
+  RETURN (k = Emph) OR (k = Underline) OR (k = Strong)
+    OR (k = Subscript) OR (k = Superscript) OR (k = Strikeout)
+END Mergeable;
+
+(* Appends the list i to l, the last of l and the first of i joined as
+   pandoc-types' Inlines monoid joins them: two Strs become one, two
+   spaces or breaks one (the stronger), and two emphases of one kind
+   one, their contents joined likewise. *)
+PROCEDURE Append*(VAR l: Inlines; i: Inline);
+  VAR x, rest: Inline; c: Inlines;
+BEGIN
+  IF i = NIL THEN RETURN END;
+  IF l.last = NIL THEN AddInline(l, i); RETURN END;
+  x := l.last; rest := i.next;
+  IF IsBreak(x.kind) & IsBreak(i.kind) THEN
+    IF (x.kind = LineBreak) & (i.kind = LineBreak) THEN
+      AddInline(l, i); RETURN
+    ELSIF (x.kind = LineBreak) OR (i.kind = LineBreak) THEN
+      x.kind := LineBreak
+    ELSIF (x.kind = SoftBreak) OR (i.kind = SoftBreak) THEN
+      x.kind := SoftBreak
+    END
+  ELSIF (x.kind = Str) & (i.kind = Str) THEN
+    x(StrInl).text := Ropes.Cat(x(StrInl).text, i(StrInl).text)
+  ELSIF (x.kind = i.kind) & Mergeable(x.kind) THEN
+    c.first := x(ContInl).content; c.last := NIL;
+    IF c.first # NIL THEN c.last := LastInline(c.first) END;
+    Append(c, i(ContInl).content);
+    x(ContInl).content := c.first
+  ELSE
+    AddInline(l, i); RETURN
+  END;
+  IF rest # NIL THEN AddInline(l, rest) END
+END Append;
+
+(* A copy of the list of inlines i and of the inlines in them. The
+   blocks of notes and the citations of cites are shared, not copied;
+   an inline of a type declared outside PdAst is copied as its base. *)
+PROCEDURE CopyInlines*(i: Inline): Inline;
+  VAR l: Inlines; n: Inline; s: StrInl; q: QuotedInl; ci: CiteInl;
+    lk: LinkInl; sp: SpanInl; c: ContInl; cd: CodeInl; m: MathInl;
+    r: RawInl; nt: NoteInl; x: Inline;
+BEGIN
+  InitInlines(l);
+  WHILE i # NIL DO
+    WITH
+      i: StrInl DO NEW(s); s^ := i^; n := s
+    | i: QuotedInl DO NEW(q); q^ := i^; n := q
+    | i: CiteInl DO NEW(ci); ci^ := i^; n := ci
+    | i: LinkInl DO NEW(lk); lk^ := i^; n := lk
+    | i: SpanInl DO NEW(sp); sp^ := i^; n := sp
+    | i: ContInl DO NEW(c); c.kind := i.kind; c.content := i.content; n := c
+    | i: CodeInl DO NEW(cd); cd^ := i^; n := cd
+    | i: MathInl DO NEW(m); m^ := i^; n := m
+    | i: RawInl DO NEW(r); r^ := i^; n := r
+    | i: NoteInl DO NEW(nt); nt^ := i^; n := nt
+    ELSE NEW(x); x.kind := i.kind; n := x
+    END;
+    IF n IS ContInl THEN n(ContInl).content := CopyInlines(n(ContInl).content) END;
+    n.next := NIL;
+    AddInline(l, n);
+    i := i.next
+  END;
+  RETURN l.first
+END CopyInlines;
+
 (* Empties l. *)
 PROCEDURE InitBlocks*(VAR l: Blocks);
 BEGIN
@@ -899,7 +975,8 @@ BEGIN
   WHILE i # NIL DO
     next := i.next; i.next := NIL;
     WalkInlineContents(w, i);
-    IF doInlines THEN AddInline(l, w.Inline(i)) ELSE AddInline(l, i) END;
+    IF doInlines THEN i := w.Inline(i) END;
+    IF mergeWalk THEN Append(l, i) ELSE AddInline(l, i) END;
     i := next
   END;
   RETURN l.first
@@ -984,5 +1061,5 @@ BEGIN
 END WalkDoc;
 
 BEGIN
-  doInlines := TRUE; doBlocks := TRUE
+  doInlines := TRUE; doBlocks := TRUE; mergeWalk := FALSE
 END PdAst.
