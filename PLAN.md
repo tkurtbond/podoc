@@ -983,3 +983,24 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
   found (47). `make install` and `make uninstall` checked with a
   `DESTDIR` and `PREFIX=/usr/local`. docs/user/podoc.md written; README
   and AGENTS.md updated.
+- 2026-11-20: podoc on yishana (NetBSD 11.0, i386, the first 32-bit
+  machine), with poc 0.15.0 and pkgsrc's groff 1.24.1 in
+  `/usr/pkg/bin` (the base groff 1.19.2 in `/usr/bin` comes first on
+  its PATH, so `/usr/pkg/bin` was put first). ArgParser, Ropes and
+  pounicode installed there; podoc built, and `make test` passed under
+  `-O2` and `-OC` (168 of 168 case tests, 23 of 23 round trips).
+  `--pdf-engine=groff` made 14 PDFs (ms-features, ms-pdf,
+  ms-standalone, inlines, lists and tables with `-s -N --toc`, and
+  ms-features with `-V papersize=a4l`, under each model), all with
+  status 0; `-O2` and `-OC` gave the same `pdftotext`, and its words
+  were the same as those of podoc's PDFs made on atla with groff
+  1.23.0. Only the layout differed: pkgsrc's groff defaults to A4,
+  and 1.24 spaces table-of-contents leaders differently; it also warns
+  that font `C` is deprecated and of an unbalanced `.RE`. pkgsrc's
+  groff has no `pdfroff`, so `--pdf-engine=pdfroff` there ends with 47.
+  Found on the way: display math that pandoc cannot convert to `eqn`
+  is written as `.RS 3`, the TeX, then `.RE` with the following text
+  on the same line, which groff drops; podoc, which never converts
+  math, always writes this fallback, byte for byte pandoc's, so the
+  text after display math is lost in ms PDF as in pandoc's. Left as
+  pandoc does it; the user's documents use no display math.
