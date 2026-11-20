@@ -23,10 +23,10 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
     1.19.2, as in NetBSD's base system, does not. groff 1.24.2 and
     1.25.0 work with `--pdf-engine=groff` (with pandoc's ms output,
     1.25.0 prints a stray `.pdfbookmark` line after each heading and
-    makes no bookmarks; see differences.md). Since groff 1.24, `pdfroff` is not part of groff: with
-    the pdfmark macros, it is now the separate groff-pdfmark package.
-    An older `pdfroff` left on the PATH may then make an empty PDF
-    without reporting an error;
+    makes no bookmarks; see differences.md). Since groff 1.24,
+    `pdfroff` is not part of groff: with the pdfmark macros, it is now
+    the separate groff-pdfmark package. An older `pdfroff` left on the
+    PATH may then make an empty PDF without reporting an error;
   - for `context`: ConTeXt LMTX;
   - for SVG images in ConTeXt: `rsvg-convert` (optional).
 
@@ -74,8 +74,8 @@ The formats are inferred from the file names as pandoc infers them:
 `-o book.html` writes HTML, and `-o book.pdf` makes PDF. For PDF,
 `--pdf-engine` chooses the engine (`pdfroff` or `groff`, which take
 ms, or `context`), and the engine implies the writer; `-t ms` alone
-uses `pdfroff`, and `-t context` alone uses `context`. PDF needs one
-of these. pandoc's default, LaTeX, is not available.
+uses `groff`, as pandoc does, and `-t context` alone uses `context`.
+PDF needs one of these. pandoc's default, LaTeX, is not available.
 
 ### Examples
 
