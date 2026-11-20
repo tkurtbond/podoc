@@ -707,7 +707,7 @@ writer to test it.
   on every case without tables that need grid tables, or each
   difference listed in docs/user/differences.md.
 
-### Phase 16.2: Grid tables in the reader
+### Phase 16.2: Grid tables in the reader [done]
 
 - `PdMarkdown` reads grid tables as pandoc 3.10 does: its
   `Parsing/GridTable.hs` (308 lines) over the `gridtables` package
@@ -824,9 +824,10 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   its blocks (only the JSON writer reads them so far, so nothing
   shows); compactify runs before implicit figures exist; the
   contents of Strikeout, Quoted and Link are not trimmed again after
-  resolving; character widths for tables (`realLength`) are an
-  approximation of pandoc's `charWidth` (2 for East Asian wide and
-  full-width, 0 for combining marks, 1 otherwise).
+  resolving; character widths (`PdWidth`, doclayout's table) do not
+  treat emoji sequences as doclayout does (an emoji followed by U+200D,
+  U+FE0F or a skin tone modifier and what it joins count as one wide
+  character there).
 - Citations, `--citeproc`.
 - Image conversion for ConTeXt beyond SVG.
 - The ms writer: TeX math to `eqn` (texmath's `writeEqn`), and
@@ -1380,3 +1381,37 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   read, and math; it was not added as a case. `--wrap=preserve` the
   same as pandoc's on `plain-features`. There is no `tools/mkcase`.
   Phase 16.2 next.
+- 2026-11-20: Phase 16.2 done. `PdGridTable` follows the
+  `gridtables` package (the character grid, `toCharGrid` with a
+  zero-width character absorbing the next, the outline, `=` header
+  and footer separators, `:` alignments, row and column spans) and
+  `PdMarkdown` pandoc's `Parsing/GridTable.hs` (cells parsed as
+  blocks, widths from the dashes against 72 columns, captions,
+  indented tables). Character widths for all tables are now
+  doclayout 0.5.0.3's (`PdWidth`, written by the new `tools/mkwidth`
+  from doclayout's `unicodeWidth.inc` with `updateMatchStateNarrow`'s
+  shortcut ranges laid over it: 797 ranges; the shortcuts differ from
+  the table on 22 characters), with a combining character first in a
+  cell counting 1 as in `realLength`. `grid_tables` is the one
+  extension `-f markdown±grid_tables` turns on or off (`PdOptions`);
+  every other one still ends podoc with 23. A table's lookahead
+  (`TableAt`) now restores header identifiers and implicit header
+  keys, which cells had registered twice. The ms writer now places
+  spanned cells as pandoc's `toLegacyTable` does (`PdShared.LegacyRows`,
+  `placeCutCells`), for 16.3's writers too. Two reader fixes from
+  pandoc's `many1Till`, found through the SRD's tables: `$$$` is text,
+  not math, and `"""`, `'''`, `""a"` and the like give pandoc's
+  quotes. New cases: `grid-tables` (samples of its own and the grid tables of
+  pandoc's `test/markdown-reader-more.txt`; `.json` pandoc's, `.html`,
+  `.ms` and `.context` the same as pandoc's `--wrap=none`),
+  `grid-tables-off`, `opt-from-ext2`, `math-dollars` and
+  `quotes-empty`. `make test` passed under `-O2` and `-OC`: 220 case
+  tests and 23 round trips. The 8 `test/command/*.md` with grid tables
+  that podoc reads: JSON the same as pandoc's, byte for byte, both
+  models. `make compare`: the same 193 differences as before the width
+  change. Acceptance: `pandoc -r rst -w markdown` writes the Minimal
+  OpenD6 SRD's tables as multiline tables at both 72 and 110 columns,
+  so its JSON (the same as pandoc's on both models) has no grid
+  tables; the SRD's 12 grid tables were taken from the reST into a
+  markdown file instead, and give pandoc's JSON byte for byte on both
+  models. Phase 16.3 next.

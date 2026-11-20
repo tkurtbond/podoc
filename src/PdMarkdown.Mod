@@ -7,9 +7,9 @@ MODULE PdMarkdown;
    setext and ATX headings (with attributes and identifiers), raw HTML
    blocks, indented code, line blocks, block quotes, horizontal rules,
    notes, reference keys, paragraphs (with implicit figures) and plain
-   text, pipe, simple and multiline tables, and YAML metadata blocks.
-   The title block, grid tables and raw TeX blocks are in PLAN.md's
-   Later.
+   text, pipe, simple, multiline and grid tables (PdGridTable), and
+   YAML metadata blocks. The title block and raw TeX blocks are in
+   PLAN.md's Later.
 
    A YAML block's strings are read as markdown, as pandoc reads them
    (Text.Pandoc.Readers.Metadata); ReadMetaFile reads a metadata file
@@ -19,7 +19,7 @@ MODULE PdMarkdown;
    document has been read, as pandoc resolves them (its F monad). *)
 
 IMPORT Ropes, PdIO, PdSource, A := PdAst, B := PdMdBase, I := PdMdInline,
-  Y := PdYaml;
+  G := PdGridTable, Y := PdYaml;
 
 CONST
   (* what starts a list item *)
@@ -88,6 +88,8 @@ TYPE
   END;
 
 VAR
+  gridTables*: BOOLEAN; (* the grid_tables extension: grid tables are
+    read; TRUE unless podoc is told otherwise *)
   ids: A.StrList; (* the header identifiers used so far *)
   keys: Key; (* the reference keys; the last defined first *)
   headerKeys: Key; (* the implicit header references *)
@@ -836,14 +838,19 @@ END DefinitionItem;
 
 PROCEDURE^ Table(VAR l: A.Blocks): BOOLEAN;
 
-(* Whether a table starts at p *)
+(* Whether a table starts at p; the identifiers and implicit
+   references of headings in its cells (a grid table's) are forgotten
+   again *)
 PROCEDURE TableAt(p: LONGINT): BOOLEAN;
   VAR save, sp, st: LONGINT; tmp: A.Blocks; found: BOOLEAN;
+    saveIds: A.StrList; saveKeys: Key;
 BEGIN
-  save := B.pos; sp := B.lastStrPos; st := B.lastStrText;
+  save := B.pos; sp := B.lastStrPos; st := B.lastStrText; saveIds := ids;
+  saveKeys := headerKeys;
   B.pos := p; A.InitBlocks(tmp);
   found := Table(tmp);
-  B.pos := save; B.lastStrPos := sp; B.lastStrText := st;
+  B.pos := save; B.lastStrPos := sp; B.lastStrText := st; ids := saveIds;
+  headerKeys := saveKeys;
   RETURN found
 END TableAt;
 
@@ -1261,6 +1268,9 @@ PROCEDURE RealLength(from, to: LONGINT): LONGINT;
   VAR w, q: LONGINT;
 BEGIN
   w := 0;
+  IF (from < to) & I.CombiningAt(from) THEN (* doclayout counts it 1 *)
+    w := 1 (* its own width is 0 *)
+  END;
   WHILE from < to DO INC(w, I.CharWidth(from, q)); from := q END;
   RETURN w
 END RealLength;
@@ -1819,6 +1829,150 @@ BEGIN
   RETURN p
 END PipeTable;
 
+(* Grid tables *)
+
+(* An empty cell, as pandoc's table builder adds *)
+PROCEDURE EmptyCell(): A.Cell;
+  VAR c: A.Cell;
+BEGIN
+  NEW(c); c.attr := NIL; c.align := A.AlignDefault;
+  c.rowSpan := 1; c.colSpan := 1; c.blocks := NIL; c.next := NIL;
+  RETURN c
+END EmptyCell;
+
+(* normalizeHeaderSection width: the rows r, in order, clipped
+   (clipRows) and placed on a grid width columns wide
+   (placeRowSection), as pandoc's table builder does *)
+PROCEDURE PlaceRows(r: A.Row; width: LONGINT);
+  VAR hang, newHang: Longs; n, k, pos, w, m: LONGINT; x: A.Row;
+    c, next, last: A.Cell;
+BEGIN
+  n := 0; x := r;
+  WHILE x # NIL DO INC(n); x := x.next END;
+  NEW(hang, width + 1); NEW(newHang, width + 1);
+  FOR k := 0 TO width - 1 DO hang[k] := 1 END;
+  WHILE r # NIL DO
+    c := r.cells;
+    WHILE c # NIL DO
+      IF c.rowSpan < 1 THEN c.rowSpan := 1 END;
+      IF c.rowSpan > n THEN c.rowSpan := n END;
+      c := c.next
+    END;
+    c := r.cells; r.cells := NIL; last := NIL; pos := 0;
+    WHILE pos < width DO
+      IF hang[pos] > 1 THEN newHang[pos] := hang[pos] - 1; INC(pos)
+      ELSE
+        IF c = NIL THEN c := EmptyCell() END;
+        next := c.next;
+        w := c.colSpan; IF w < 1 THEN w := 1 END;
+        m := 0;
+        WHILE (m < w) & (pos + m < width) & (hang[pos + m] = 1) DO INC(m) END;
+        c.colSpan := m; c.next := NIL;
+        FOR k := pos TO pos + m - 1 DO newHang[k] := c.rowSpan END;
+        IF last = NIL THEN r.cells := c ELSE last.next := c END;
+        last := c; INC(pos, m); c := next
+      END
+    END;
+    FOR k := 0 TO width - 1 DO hang[k] := newHang[k] END;
+    DEC(n); r := r.next
+  END
+END PlaceRows;
+
+(* The rows of t, from row from to row to-1, in order *)
+PROCEDURE GridRows(VAR t: G.Table; from, to: LONGINT): A.Row;
+  VAR first, last, r: A.Row; c, clast: A.Cell; x: G.Cell; i, j: LONGINT;
+    b: A.Block;
+BEGIN
+  first := NIL; last := NIL;
+  FOR i := from TO to - 1 DO
+    NEW(r); r.attr := NIL; r.cells := NIL; r.next := NIL; clast := NIL;
+    FOR j := 0 TO t.cols - 1 DO
+      x := t.cells[i * t.cols + j];
+      IF x # NIL THEN
+        c := EmptyCell(); c.rowSpan := x.rowSpan; c.colSpan := x.colSpan;
+        b := MetaBlocksOf(x.text);
+        (* plainify *)
+        IF (b # NIL) & (b.next = NIL) & (b IS A.InlinesBlk)
+            & (b(A.InlinesBlk).kind = A.Para) THEN
+          b := A.NewInlinesBlock(A.Plain, b(A.InlinesBlk).inlines)
+        END;
+        c.blocks := b;
+        IF clast = NIL THEN r.cells := c ELSE clast.next := c END;
+        clast := c
+      END
+    END;
+    IF last = NIL THEN first := r ELSE last.next := r END;
+    last := r
+  END;
+  RETURN first
+END GridRows;
+
+(* Whether the row r has a cell and only empty cells *)
+PROCEDURE NullHeader(r: A.Row): BOOLEAN;
+  VAR c: A.Cell;
+BEGIN
+  c := r.cells;
+  IF c = NIL THEN RETURN TRUE END;
+  WHILE c # NIL DO
+    IF (c.blocks # NIL) OR (c.rowSpan # 1) OR (c.colSpan # 1) THEN
+      RETURN FALSE
+    END;
+    c := c.next
+  END;
+  RETURN TRUE
+END NullHeader;
+
+(* gridTable (gridTableWith' NormalizeHeader parseBlocks) at p: where
+   it ends, or -1; the table in t *)
+PROCEDURE GridTable(p: LONGINT; VAR t: A.TableBlk): LONGINT;
+  VAR g: G.Table; q, indent, k, bodyEnd: LONGINT; cs, last: A.ColSpec;
+    tb: A.TableBody; total, norm: LONGINT;
+BEGIN
+  q := B.NonindentSpaces(p, indent);
+  IF q < 0 THEN RETURN -1 END;
+  q := G.Trace(p, q - p, g);
+  IF q < 0 THEN RETURN -1 END;
+  t := A.NewTable(NIL);
+  (* fractionalColumnWidths 72 *)
+  total := 0;
+  FOR k := 0 TO g.cols - 1 DO INC(total, g.width[k] + 1) END;
+  norm := total + g.cols - 2;
+  IF norm < 72 THEN norm := 72 END;
+  last := NIL;
+  FOR k := 0 TO g.cols - 1 DO
+    NEW(cs); cs.next := NIL;
+    CASE g.align[k] OF
+      G.AlignLeft: cs.align := A.AlignLeft
+    | G.AlignRight: cs.align := A.AlignRight
+    | G.AlignCenter: cs.align := A.AlignCenter
+    ELSE cs.align := A.AlignDefault
+    END;
+    cs.width := Ratio(g.width[k] + 1, norm); cs.hasWidth := TRUE;
+    IF last = NIL THEN t.colSpecs := cs ELSE last.next := cs END;
+    last := cs
+  END;
+  IF g.headLen > g.rows THEN g.headLen := g.rows END;
+  t.head.rows := GridRows(g, 0, g.headLen);
+  IF g.foot >= 0 THEN
+    bodyEnd := g.foot - 1;
+    IF bodyEnd < g.headLen THEN bodyEnd := g.headLen END;
+    IF bodyEnd > g.rows THEN bodyEnd := g.rows END
+  ELSE
+    bodyEnd := g.rows
+  END;
+  NEW(tb); tb.attr := NIL; tb.rowHeadColumns := 0; tb.head := NIL;
+  tb.body := GridRows(g, g.headLen, bodyEnd); tb.next := NIL;
+  t.bodies := tb;
+  t.foot.rows := GridRows(g, bodyEnd, g.rows);
+  IF (t.head.rows # NIL) & (t.head.rows.next = NIL) & NullHeader(t.head.rows) THEN
+    t.head.rows := NIL
+  END;
+  PlaceRows(t.head.rows, g.cols);
+  PlaceRows(tb.body, g.cols);
+  PlaceRows(t.foot.rows, g.cols);
+  RETURN q
+END GridTable;
+
 (* Whether attributes and blank lines follow at p: a caption's
    inlines stop there *)
 PROCEDURE CaptionStop(p: LONGINT): BOOLEAN;
@@ -1853,7 +2007,7 @@ BEGIN
   RETURN q
 END TableCaption;
 
-(* table: a pipe, multiline or simple table, with an optional caption
+(* table: a pipe, multiline, simple or grid table, with an optional caption
    before or after it *)
 PROCEDURE Table(VAR l: A.Blocks): BOOLEAN;
   VAR p, q, r, sp, st: LONGINT; t: A.TableBlk; inl: A.Inline;
@@ -1868,6 +2022,7 @@ BEGIN
   IF r < 0 THEN r := SimpleTable(q, TRUE, t) END;
   IF r < 0 THEN r := SimpleTable(q, FALSE, t) END;
   IF r < 0 THEN r := MultilineTable(q, TRUE, t) END;
+  IF (r < 0) & gridTables THEN r := GridTable(q, t) END;
   IF r < 0 THEN
     B.lastStrPos := sp; B.lastStrText := st;
     RETURN FALSE
@@ -2176,5 +2331,5 @@ BEGIN
 END ReadMetaFile;
 
 BEGIN
-  ids := NIL
+  ids := NIL; gridTables := TRUE
 END PdMarkdown.

@@ -18,9 +18,9 @@ in PLAN.md) is listed by the writer.
   messages are podoc's own wording, starting with "podoc: ".
 - `-t source` writes the input as the reader would see it (joined,
   CRs removed, tabs expanded); pandoc has no such format.
-- podoc reads only `markdown`, and does not turn its extensions on or
-  off: `-f markdown+smart` or `-f markdown-smart` ends podoc with exit
-  status 23, and `-f rst`, or an input whose extension names another
+- podoc reads only `markdown`, and turns only `grid_tables` on or
+  off: any other extension, such as `-f markdown+smart` or
+  `-f markdown-smart`, ends podoc with exit status 23, and `-f rst`, or an input whose extension names another
   format (`.rst`, `.tex`, ...) when there is no `-f`, with 21. Inputs
   and `-o` imply formats as in pandoc, with pandoc's warnings when an
   extension names none.
@@ -114,7 +114,7 @@ differ in these ways:
 podoc reads the markdown the user's documents use. It does not yet
 read:
 
-- grid tables, or table cells that hold blank lines;
+- table cells that hold blank lines, but for grid tables;
 - the `%` title block;
 - raw TeX blocks, LaTeX environments and macros, and the commands
   pandoc's LaTeX reader reads specially (podoc keeps every `\command`
@@ -122,9 +122,9 @@ read:
 - citations, example references (`@label`), wikilinks and base64
   data URIs.
 
-A table's column widths count East Asian wide and full-width
-characters as two and combining marks as none, which approximates
-pandoc's character widths.
+A table's column widths count characters as pandoc's doclayout does
+(its `charWidth` table), but emoji sequences joined by U+200D or
+followed by U+FE0F are not counted as one wide character.
 
 ## YAML metadata
 

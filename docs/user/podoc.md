@@ -98,13 +98,15 @@ podoc reads pandoc's markdown with its default extensions, among them:
   blocks, horizontal rules, line blocks and definition lists;
 - emphasis, links, images with attributes, footnotes, strikeout,
   superscript, subscript, and smart punctuation;
-- YAML metadata blocks, pipe, simple and multiline tables, raw blocks
+- YAML metadata blocks, pipe, simple, multiline and grid tables
+  (with row and column spans), raw blocks
   and inlines, raw HTML, fenced divs, bracketed spans, and automatic
   header identifiers.
 
-Grid tables, the `%` title block, raw TeX blocks, and citations are
-not read. Extensions cannot be turned on or off. The full list of what
-is not read is in [differences.md](differences.md).
+The `%` title block, raw TeX blocks, and citations are not read. Of
+the extensions, only `grid_tables` can be turned off, with
+`-f markdown-grid_tables`. The full list of what is not read is in
+[differences.md](differences.md).
 
 podoc reads only markdown. A reStructuredText document can be
 translated once with pandoc, where pandoc is installed:
@@ -112,7 +114,8 @@ translated once with pandoc, where pandoc is installed:
     pandoc -s -r rst -w markdown-grid_tables --columns=110 \
       -o book.md book.rst
 
-Grid tables then become multiline tables, which podoc reads; a wide
+podoc reads grid tables too; `-grid_tables` has pandoc write
+multiline tables in their place. A wide
 `--columns` keeps a wide table's column proportions. A multiline
 table's column widths come from its dashes, so widths reST gives
 exactly (`:widths:`) may come out a little different. On the Minimal

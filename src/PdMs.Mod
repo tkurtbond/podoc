@@ -992,13 +992,13 @@ BEGIN
   RETURN Above3(Lit("T{"), d, Lit("T}"))
 END MakeRow;
 
-(* A table, as toLegacyTable makes it: the first row of the head as
-   the header, the other rows as the body *)
+(* A table, as toLegacyTable makes it (PdShared.LegacyRows): the first
+   row of the head as the header, the other rows as the body, their
+   spans cut into empty pieces *)
 PROCEDURE Table(t: A.TableBlk): L.Doc;
   VAR il: A.Inlines; simple, allNull: BOOLEAN; caption, colheadings, body, d, desc: L.Doc;
     cs: A.ColSpec; ncols, k: LONGINT; s: Rope; cols, lastCol: Docs;
-    widths: POINTER TO ARRAY OF LONGREAL; c: A.Cell; row: A.Row; b: A.TableBody;
-    pass: INTEGER;
+    widths: POINTER TO ARRAY OF LONGREAL; head, rows: Sh.LegacyRow;
 BEGIN
   A.InitInlines(il);
   Sh.BlocksToInlines(il, t.caption.blocks);
@@ -1020,40 +1020,30 @@ BEGIN
     INC(k); cs := cs.next
   END;
   desc := L.Literal(CatC(s, "."));
+  Sh.LegacyRows(t, head, rows);
   (* the header *)
   colheadings := NIL;
-  IF t.head.rows # NIL THEN
-    cols := NIL; lastCol := NIL; allNull := TRUE; c := t.head.rows.cells;
-    WHILE c # NIL DO
-      IF c.blocks # NIL THEN allNull := FALSE END;
-      d := Blocks(c.blocks);
-      AddDoc(cols, lastCol, d); c := c.next
+  IF head # NIL THEN
+    cols := NIL; lastCol := NIL; allNull := TRUE;
+    FOR k := 0 TO head.n - 1 DO
+      IF head.cells[k] # NIL THEN allNull := FALSE END;
+      AddDoc(cols, lastCol, Blocks(head.cells[k]))
     END;
     IF ~allNull THEN colheadings := Above(MakeRow(cols), L.Char("_")) END
   END;
-  (* the rows: the head's others, each body's head and body, the foot *)
+  (* the rows, each zipped with the widths *)
   body := NIL;
-  IF t.head.rows # NIL THEN row := t.head.rows.next ELSE row := NIL END;
-  b := t.bodies; pass := 0;
-  LOOP
-    WHILE row # NIL DO
-      cols := NIL; lastCol := NIL; c := row.cells; k := 0;
-      WHILE (c # NIL) & (k < ncols) DO
-        d := Blocks(c.blocks);
-        IF ~simple THEN
-          d := Above(L.Literal(CatS(Cat(R(".nr LL "), Sh.Fixed(widths[k] * 70, 1)), "n")), d)
-        END;
-        AddDoc(cols, lastCol, d);
-        c := c.next; INC(k)
+  WHILE rows # NIL DO
+    cols := NIL; lastCol := NIL; k := 0;
+    WHILE (k < rows.n) & (k < ncols) DO
+      d := Blocks(rows.cells[k]);
+      IF ~simple THEN
+        d := Above(L.Literal(CatS(Cat(R(".nr LL "), Sh.Fixed(widths[k] * 70, 1)), "n")), d)
       END;
-      body := Above(body, MakeRow(cols));
-      row := row.next
+      AddDoc(cols, lastCol, d); INC(k)
     END;
-    IF pass = 1 THEN row := b.body; pass := 2; b := b.next
-    ELSIF b # NIL THEN row := b.head; pass := 1
-    ELSIF pass # 3 THEN row := t.foot.rows; pass := 3
-    ELSE EXIT
-    END
+    body := Above(body, MakeRow(cols));
+    rows := rows.next
   END;
   firstPara := TRUE;
   d := Above3(Lit(".PP"), caption, Lit(".na"));

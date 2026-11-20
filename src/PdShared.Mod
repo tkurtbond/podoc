@@ -16,12 +16,24 @@ TYPE
   LevelWalkerDesc = RECORD (A.WalkerDesc)
     min: INTEGER
   END;
+  Pieces* = POINTER TO ARRAY OF A.Block;
+  (* A row of toLegacyTable: its pieces, cells[0 .. n-1]; a piece is a
+     cell's blocks, or NIL for a place a span covers *)
+  LegacyRow* = POINTER TO LegacyRowDesc;
+  LegacyRowDesc* = RECORD
+    n*: LONGINT;
+    cells*: Pieces;
+    next*: LegacyRow
+  END;
+  Longs = POINTER TO ARRAY OF LONGINT;
 
 VAR
   numbering: BOOLEAN; (* MakeSections: whether sections are numbered *)
   baseLevel: INTEGER; (* MakeSections: the level of the top sections; < 0 if they keep theirs *)
   minLevel: INTEGER; (* the lowest header level in the document *)
   lastNum: ARRAY MaxLevels OF LONGINT; (* the last section number *)
+  pend: Longs; (* LegacyRows: the pieces still to place in each column *)
+  npend: LONGINT; (* the columns pend holds *)
   lastLen: INTEGER; (* its components *)
 
 (* stringify *)
@@ -640,5 +652,84 @@ BEGIN
   END;
   RETURN TRUE
 END IsTightList;
+
+(* toLegacyTable's rows *)
+
+PROCEDURE AddPiece(r: LegacyRow; b: A.Block);
+  VAR a: Pieces; i: LONGINT;
+BEGIN
+  IF r.n >= LEN(r.cells^) THEN
+    NEW(a, 2 * LEN(r.cells^));
+    FOR i := 0 TO r.n - 1 DO a[i] := r.cells[i] END;
+    r.cells := a
+  END;
+  r.cells[r.n] := b; INC(r.n)
+END AddPiece;
+
+PROCEDURE SetPend(k, v: LONGINT);
+  VAR a: Longs; i: LONGINT;
+BEGIN
+  IF k >= LEN(pend^) THEN
+    NEW(a, 2 * k + 2);
+    FOR i := 0 TO npend - 1 DO a[i] := pend[i] END;
+    pend := a
+  END;
+  WHILE npend < k DO pend[npend] := 0; INC(npend) END;
+  pend[k] := v;
+  IF npend <= k THEN npend := k + 1 END
+END SetPend;
+
+(* placeCutCells: the row's cells cut into pieces, a cell spanning w
+   columns giving its blocks and w-1 empty pieces, and leaving h-1
+   empty pieces for the rows below it in each of its columns *)
+PROCEDURE CutRow(row: A.Row): LegacyRow;
+  VAR r: LegacyRow; c: A.Cell; k, w, h, i: LONGINT;
+BEGIN
+  NEW(r); r.n := 0; NEW(r.cells, 8); r.next := NIL;
+  c := row.cells; k := 0;
+  LOOP
+    IF (k < npend) & (pend[k] > 0) THEN
+      AddPiece(r, NIL); DEC(pend[k]); INC(k)
+    ELSIF c # NIL THEN
+      h := c.rowSpan; w := c.colSpan; IF w < 1 THEN w := 1 END;
+      AddPiece(r, c.blocks);
+      FOR i := 1 TO w - 1 DO AddPiece(r, NIL) END;
+      FOR i := 0 TO w - 1 DO
+        IF h > 1 THEN SetPend(k + i, h - 1) ELSE SetPend(k + i, 0) END
+      END;
+      INC(k, w); c := c.next
+    ELSE
+      npend := k; EXIT
+    END
+  END;
+  RETURN r
+END CutRow;
+
+(* toLegacyTable: the table's rows with their spans cut into pieces;
+   head is the first row of the head, NIL if there is none; rows the
+   others, of the head, each body's head and body, and the foot *)
+PROCEDURE LegacyRows*(t: A.TableBlk; VAR head, rows: LegacyRow);
+  VAR row: A.Row; b: A.TableBody; last, r: LegacyRow; pass: INTEGER;
+BEGIN
+  NEW(pend, 16); npend := 0;
+  head := NIL; rows := NIL; last := NIL;
+  IF t.head.rows # NIL THEN head := CutRow(t.head.rows); row := t.head.rows.next
+  ELSE row := NIL
+  END;
+  b := t.bodies; pass := 0;
+  LOOP
+    WHILE row # NIL DO
+      r := CutRow(row);
+      IF last = NIL THEN rows := r ELSE last.next := r END;
+      last := r; row := row.next
+    END;
+    IF pass = 1 THEN row := b.body; pass := 2; b := b.next
+    ELSIF b # NIL THEN row := b.head; pass := 1
+    ELSIF pass # 3 THEN row := t.foot.rows; pass := 3
+    ELSE EXIT
+    END
+  END;
+  pend := NIL
+END LegacyRows;
 
 END PdShared.

@@ -1,0 +1,544 @@
+\startplacetable[title={Sample grid table.}]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.22\textwidth}] Fruit \stopxcell
+\startxcell[width={0.22\textwidth}] Price \stopxcell
+\startxcell[width={0.29\textwidth}] Advantages \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.22\textwidth}] Bananas \stopxcell
+\startxcell[width={0.22\textwidth}] \$1.34 \stopxcell
+\startxcell[width={0.29\textwidth}] \startitemize[packed]
+\item
+  built-in wrapper
+\item
+  bright color
+\stopitemize
+
+ \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.22\textwidth}] Oranges \stopxcell
+\startxcell[width={0.22\textwidth}] \$2.10 \stopxcell
+\startxcell[width={0.29\textwidth}] \startitemize[packed]
+\item
+  cures scurvy
+\item
+  tasty
+\stopitemize
+
+ \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left,width={0.22\textwidth}] Right \stopxcell
+\startxcell[align=right,width={0.22\textwidth}] Left \stopxcell
+\startxcell[align=middle,width={0.29\textwidth}] Centered \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left,width={0.22\textwidth}] Bananas \stopxcell
+\startxcell[align=right,width={0.22\textwidth}] \$1.34 \stopxcell
+\startxcell[align=middle,width={0.29\textwidth}] built-in wrapper \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left,width={0.22\textwidth}] Right \stopxcell
+\startxcell[align=right,width={0.22\textwidth}] Left \stopxcell
+\startxcell[align=middle,width={0.29\textwidth}] Centered \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.31\textwidth},nc=2] Property \stopxcell
+\startxcell[width={0.15\textwidth}] Earth \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.19\textwidth},nr=3] Temperature 1961-1990 \stopxcell
+\startxcell[width={0.11\textwidth}] min \stopxcell
+\startxcell[width={0.15\textwidth}] -89.2 °C \stopxcell
+\stopxrow
+\startxrow
+\startxcell[width={0.11\textwidth}] mean \stopxcell
+\startxcell[width={0.15\textwidth}] 14 °C \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.11\textwidth}] max \stopxcell
+\startxcell[width={0.15\textwidth}] 56.7 °C \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.19\textwidth}] head \stopxcell
+\startxcell[width={0.11\textwidth}] b \stopxcell
+\startxcell[width={0.15\textwidth}] c \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.19\textwidth}] body \stopxcell
+\startxcell[width={0.11\textwidth}] x \stopxcell
+\startxcell[width={0.15\textwidth}] y \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.19\textwidth}] foot \stopxcell
+\startxcell[width={0.11\textwidth}] z \stopxcell
+\startxcell[width={0.15\textwidth}] w \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.06\textwidth}] a \stopxcell
+\startxcell[width={0.06\textwidth}] b \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.06\textwidth}] 1 \stopxcell
+\startxcell[width={0.06\textwidth}] 2 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.10\textwidth}] 日本 \stopxcell
+\startxcell[width={0.10\textwidth}] x \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startsectionlevel[title={Grid Tables},reference={grid-tables}]
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.26\textwidth}] col 1 \stopxcell
+\startxcell[width={0.17\textwidth}] col 2 \stopxcell
+\startxcell[width={0.18\textwidth}] col 3 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.26\textwidth}] r1 a r1 bis \stopxcell
+\startxcell[width={0.17\textwidth}] b b 2 \stopxcell
+\startxcell[width={0.18\textwidth}] c c 2 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.26\textwidth}] r2 d \stopxcell
+\startxcell[width={0.17\textwidth}] e \stopxcell
+\startxcell[width={0.18\textwidth}] f \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Headless
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.26\textwidth}] r1 a r1 bis \stopxcell
+\startxcell[width={0.17\textwidth}] b b 2 \stopxcell
+\startxcell[width={0.18\textwidth}] c c 2 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.26\textwidth}] r2 d \stopxcell
+\startxcell[width={0.17\textwidth}] e \stopxcell
+\startxcell[width={0.18\textwidth}] f \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+With alignments
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left,width={0.26\textwidth}] col 1 \stopxcell
+\startxcell[align=right,width={0.17\textwidth}] col 2 \stopxcell
+\startxcell[align=middle,width={0.18\textwidth}] col 3 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=left,width={0.26\textwidth}] r1 a r1 bis \stopxcell
+\startxcell[align=right,width={0.17\textwidth}] b b 2 \stopxcell
+\startxcell[align=middle,width={0.18\textwidth}] c c 2 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left,width={0.26\textwidth}] r2 d \stopxcell
+\startxcell[align=right,width={0.17\textwidth}] e \stopxcell
+\startxcell[align=middle,width={0.18\textwidth}] f \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Headless with alignments
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[align=left,width={0.26\textwidth}] r1 a r1 bis \stopxcell
+\startxcell[align=right,width={0.17\textwidth}] b b 2 \stopxcell
+\startxcell[align=middle,width={0.18\textwidth}] c c 2 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[align=left,width={0.26\textwidth}] r2 d \stopxcell
+\startxcell[align=right,width={0.17\textwidth}] e \stopxcell
+\startxcell[align=middle,width={0.18\textwidth}] f \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Spaces at ends of lines
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.26\textwidth}] r1 a r1 bis \stopxcell
+\startxcell[width={0.17\textwidth}] b b 2 \stopxcell
+\startxcell[width={0.18\textwidth}] c c 2 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.26\textwidth}] r2 d \stopxcell
+\startxcell[width={0.17\textwidth}] e \stopxcell
+\startxcell[width={0.18\textwidth}] f \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Multiple blocks in a cell
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.26\textwidth}] \
+
+col 1
+
+ \stopxcell
+\startxcell[width={0.17\textwidth}] \
+
+col 2
+
+ \stopxcell
+\startxcell[width={0.18\textwidth}] \
+
+col 3
+
+ \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.26\textwidth}] r1 a
+
+r1 bis
+
+ \stopxcell
+\startxcell[width={0.17\textwidth}] \startitemize[packed]
+\item
+  b
+\item
+  b 2
+\item
+  b 2
+\stopitemize
+
+ \stopxcell
+\startxcell[width={0.18\textwidth}] c c 2 c 2 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+East Asian characters have double width
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.04\textwidth}] 魚 \stopxcell
+\startxcell[width={0.07\textwidth}] fish \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Zero-width space in German
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.11\textwidth}] German \stopxcell
+\startxcell[width={0.11\textwidth}] English \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.11\textwidth}] Auf‌lage \stopxcell
+\startxcell[width={0.11\textwidth}] edition \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Zero-width non-joiner in Persian
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.11\textwidth}] می‌خواهم \stopxcell
+\startxcell[width={0.14\textwidth}] I want to \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Empty cells
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.06\textwidth}]  \stopxcell
+\startxcell[width={0.06\textwidth}]  \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Table with cells spanning multiple rows or columns:
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.31\textwidth},nc=2] Property \stopxcell
+\startxcell[width={0.15\textwidth}] Earth \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.19\textwidth},nr=3] Temperature 1961-1990 \stopxcell
+\startxcell[width={0.11\textwidth}] min \stopxcell
+\startxcell[width={0.15\textwidth}] -89.2 °C \stopxcell
+\stopxrow
+\startxrow
+\startxcell[width={0.11\textwidth}] mean \stopxcell
+\startxcell[width={0.15\textwidth}] 14 °C \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.11\textwidth}] min \stopxcell
+\startxcell[width={0.15\textwidth}] 56.7 °C \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+Table with complex header:
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrow
+\startxcell[width={0.31\textwidth},nr=2] Location \stopxcell
+\startxcell[width={0.33\textwidth},nc=3] Temperature 1961-1990 in degree Celsius \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.11\textwidth}] min \stopxcell
+\startxcell[width={0.11\textwidth}] mean \stopxcell
+\startxcell[width={0.11\textwidth}] max \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.31\textwidth}] Antarctica \stopxcell
+\startxcell[width={0.11\textwidth}] -89.2 \stopxcell
+\startxcell[width={0.11\textwidth}] N/A \stopxcell
+\startxcell[width={0.11\textwidth}] 19.8 \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.31\textwidth}] Earth \stopxcell
+\startxcell[width={0.11\textwidth}] -89.2 \stopxcell
+\startxcell[width={0.11\textwidth}] 14 \stopxcell
+\startxcell[width={0.11\textwidth}] 56.7 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\stopsectionlevel

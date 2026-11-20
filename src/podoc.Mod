@@ -64,6 +64,7 @@ END RunFilters;
 PROCEDURE ReadDoc(text: PdIO.Text; len: LONGINT): A.Doc;
   VAR m: A.MetaMapV; f: O.File; d: A.Doc;
 BEGIN
+  PdMarkdown.gridTables := O.gridTables;
   m := A.NewMetaMap();
   f := O.metaFiles;
   WHILE f # NIL DO

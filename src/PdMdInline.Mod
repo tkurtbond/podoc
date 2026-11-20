@@ -16,7 +16,7 @@ MODULE PdMdInline;
    citations, example references, wikilinks, base64 data URIs. *)
 
 IMPORT Ropes, Utf8, Unicode, A := PdAst, B := PdMdBase, W := PdWords,
-  PdEntities;
+  CW := PdWidth, PdEntities;
 
 CONST
   (* the quote context *)
@@ -118,7 +118,9 @@ BEGIN
   RETURN q
 END RuneOf;
 
-PROCEDURE RuneAt(p: LONGINT; VAR r: Utf8.Rune): LONGINT;
+(* The character at p of the current text in r; returns where the next
+   starts *)
+PROCEDURE RuneAt*(p: LONGINT; VAR r: Utf8.Rune): LONGINT;
 BEGIN
   RETURN RuneOf(B.t^, p, B.len, r)
 END RuneAt;
@@ -130,23 +132,25 @@ BEGIN
   RETURN RuneAt(p, r)
 END RuneEnd;
 
-(* doclayout's charWidth for the character at p, whose end is put in
-   q: 2 for East Asian wide and full-width characters, 0 for
-   combining marks, else 1 *)
+(* doclayout's charWidth (PdWidth) for the character at p, whose end
+   is put in q: 2 for wide characters, 0 for control and combining
+   ones, else 1 *)
 PROCEDURE CharWidth*(p: LONGINT; VAR q: LONGINT): INTEGER;
-  VAR r: Utf8.Rune; w, c: INTEGER;
+  VAR r: Utf8.Rune;
 BEGIN
   q := RuneAt(p, r);
   IF q <= p THEN q := p + 1 END;
-  (* doclayout: control characters and the soft hyphen have width 0 *)
-  IF (r < 20H) OR (r >= 7FH) & (r <= 9FH) OR (r = 0ADH) THEN RETURN 0 END;
-  IF r < 300H THEN RETURN 1 END;
-  w := Unicode.EastAsianWidth(r);
-  IF (w = Unicode.widthW) OR (w = Unicode.widthF) THEN RETURN 2 END;
-  c := Unicode.Category(r);
-  IF (c = Unicode.Mn) OR (c = Unicode.Me) THEN RETURN 0 END;
-  RETURN 1
+  RETURN CW.Width(r)
 END CharWidth;
+
+(* Whether the character at p is a combining one, which realLength
+   counts as 1 at the start of a text *)
+PROCEDURE CombiningAt*(p: LONGINT): BOOLEAN;
+  VAR r: Utf8.Rune; q: LONGINT;
+BEGIN
+  q := RuneAt(p, r);
+  RETURN CW.Class(r) = CW.combining
+END CombiningAt;
 
 (* isAlphaNum: whether the character at p is a letter or a number *)
 PROCEDURE AlnumAt(p: LONGINT): BOOLEAN;
@@ -1546,7 +1550,10 @@ BEGIN
   INC(B.pos);
   Save(m); old := quote; quote := ctx;
   A.InitInlines(cont);
-  ok := Inline(cont);
+  (* many1Till: the closing quote may not come first *)
+  IF (B.C(B.pos) = c) & ((c = 22X) OR ~AlnumAt(B.pos + 1)) THEN ok := FALSE
+  ELSE ok := Inline(cont)
+  END;
   LOOP
     IF ~ok THEN EXIT END;
     IF (B.C(B.pos) = c) & ((c = 22X) OR ~AlnumAt(B.pos + 1)) THEN EXIT END;
@@ -1685,7 +1692,8 @@ BEGIN
   p := B.pos;
   IF B.C(p) # "$" THEN RETURN FALSE END;
   B.InitBuf(b);
-  IF B.C(p + 1) = "$" THEN
+  (* many1Till: the closing delimiter may not come first *)
+  IF (B.C(p + 1) = "$") & ~B.Looking(p + 2, "$$") THEN
     q := DisplayItem(p + 2, b);
     WHILE (q >= 0) & ~B.Looking(q, "$$") DO q := DisplayItem(q, b) END;
     IF q >= 0 THEN
@@ -1695,7 +1703,8 @@ BEGIN
     END;
     B.InitBuf(b)
   END;
-  IF (p + 1 >= B.len) OR SpaceAt(p + 1) OR B.IsWhite(B.C(p + 1)) THEN
+  IF (p + 1 >= B.len) OR SpaceAt(p + 1) OR B.IsWhite(B.C(p + 1))
+     OR (B.C(p + 1) = "$") THEN
     RETURN FALSE
   END;
   q := InlineItem(p + 1, b);

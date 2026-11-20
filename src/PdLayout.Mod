@@ -17,7 +17,7 @@ MODULE PdLayout;
    and links. Widths count East Asian wide and full-width characters as
    two and combining marks as none, as doclayout's realLength does. *)
 
-IMPORT Ropes, Utf8, Unicode, PdIO;
+IMPORT Ropes, Utf8, Unicode, W := PdWidth, PdIO;
 
 CONST
   text = 0; prefixed = 1; beforeNonBlank = 2; flush = 3;
@@ -59,9 +59,9 @@ VAR
 
 (* The width of s[i .. n-1] *)
 PROCEDURE CharsWidth(VAR s: ARRAY OF CHAR; i, n: LONGINT): LONGINT;
-  VAR w, q: LONGINT; r: Utf8.Rune; eaw, c: INTEGER;
+  VAR w, q, first: LONGINT; r: Utf8.Rune; k: INTEGER;
 BEGIN
-  w := 0;
+  w := 0; first := i;
   WHILE i < n DO
     IF ORD(s[i]) < 80H THEN
       (* doclayout: control characters have width 0 *)
@@ -72,17 +72,12 @@ BEGIN
       IF ~Utf8.Decode(s, q, r) OR (q <= i) OR (q > n) THEN
         r := 0FFFDH; q := i + 1
       END;
-      i := q;
-      IF (r <= 9FH) OR (r = 0ADH) THEN (* control characters, the soft hyphen: 0 *)
-      ELSIF r < 300H THEN INC(w)
-      ELSE
-        eaw := Unicode.EastAsianWidth(r);
-        IF (eaw = Unicode.widthW) OR (eaw = Unicode.widthF) THEN INC(w, 2)
-        ELSE
-          c := Unicode.Category(r);
-          IF (c # Unicode.Mn) & (c # Unicode.Me) THEN INC(w) END
-        END
-      END
+      k := W.Class(r);
+      (* realLength: a combining character first is 1 *)
+      IF (k = W.combining) & (i = first) THEN INC(w)
+      ELSE INC(w, W.Width(r))
+      END;
+      i := q
     END
   END;
   RETURN w

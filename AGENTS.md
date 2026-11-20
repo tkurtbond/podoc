@@ -39,7 +39,9 @@ is finished:
   docs/user/podoc.md.
 
 Phase 16 (plain text, grid and pipe tables) and Phase 17 (wrapping)
-are under way. Further work is in PLAN.md's "Later". See PLAN.md's
+are under way: 16.1 (`-t plain`) and 16.2 (grid tables in the reader,
+`PdGridTable`; character widths from doclayout's table, `PdWidth`) are
+done. Further work is in PLAN.md's "Later". See PLAN.md's
 State.
 
 ## Reference material

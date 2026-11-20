@@ -50,6 +50,8 @@ VAR
   cmdMeta*: A.MetaMapV; (* -M *)
   output*: String; (* -o; "" for standard output *)
   from*: String; (* -f; "" until Resolve *)
+  gridTables*: BOOLEAN; (* the grid_tables extension: TRUE unless -f
+    markdown-grid_tables *)
   to*: String; (* -t; the writer after Resolve *)
   pdf*: BOOLEAN; (* after Resolve: the output is PDF *)
   pdfEngine*: String; (* --pdf-engine, or after Resolve the engine for PDF *)
@@ -584,9 +586,11 @@ BEGIN
 END CouldNotDeduce;
 
 (* Ends podoc if the reader is not markdown: 21 for another format, 23
-   for an extension of markdown, which podoc does not turn on or off *)
+   for an extension of markdown that podoc does not turn on or off.
+   grid_tables is the one it does: +grid_tables or -grid_tables, the
+   last one given wins, sets gridTables *)
 PROCEDURE CheckReader;
-  VAR i, j: LONGINT; name, ext: String;
+  VAR i, j: LONGINT; name, ext: String; on: BOOLEAN;
 BEGIN
   i := 0;
   WHILE (from[i] # 0X) & (from[i] # "+") & (from[i] # "-") DO
@@ -596,14 +600,18 @@ BEGIN
   IF name # "markdown" THEN
     PdIO.Message3("Unknown input format '", name, "'");
     PdIO.Exit(PdIO.UnknownReader)
-  ELSIF from[i] # 0X THEN
-    INC(i); j := 0;
+  END;
+  WHILE from[i] # 0X DO
+    on := from[i] = "+"; INC(i); j := 0;
     WHILE (from[i] # 0X) & (from[i] # "+") & (from[i] # "-") DO
       ext[j] := from[i]; INC(i); INC(j)
     END;
     ext[j] := 0X;
-    PdIO.Message3("The extension '", ext, "' is not supported by podoc.");
-    PdIO.Exit(PdIO.UnsupportedExtension)
+    IF ext = "grid_tables" THEN gridTables := on
+    ELSE
+      PdIO.Message3("The extension '", ext, "' is not supported by podoc.");
+      PdIO.Exit(PdIO.UnsupportedExtension)
+    END
   END
 END CheckReader;
 
@@ -713,7 +721,8 @@ END Resolve;
 BEGIN
   files := NIL; lastFile := NIL; metaFiles := NIL; lastMetaFile := NIL;
   cmdMeta := A.NewMetaMap();
-  output := ""; from := ""; to := ""; pdf := FALSE; pdfEngine := "";
+  output := ""; from := ""; gridTables := TRUE; to := ""; pdf := FALSE;
+  pdfEngine := "";
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;
   standalone := FALSE; template := "";
