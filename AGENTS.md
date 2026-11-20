@@ -24,19 +24,21 @@ there.
 
 ## Status
 
-As of 2026-11-20: Phases 1 to 14 done (the build, the tests, a `podoc`
-that joins its inputs as pandoc does, the AST, the JSON writer, the
-markdown reader's blocks and inlines, `-t json`, YAML metadata with
-`-M` and `--metadata-file`, templates with `-s`, `--template`, `-V`,
-`-H`, `-B`, `-A`, and the HTML writer, `PdHtml`, with `--toc`, `-N`,
-`--css`, `--id-prefix` and `--wrap`, the ms writer, `PdMs`, with
-`--pdf-engine`, the ConTeXt writer, `PdConTeXt`, and the markdown
-writer, `PdMdWriter`, with its round-trip test, and the command line,
-`PdOptions`, with the formats inferred as pandoc does), and Phase 12,
-includes, `PdInclude`, with Python's globs in `PdGlob`, and Phase 13, the
-native filters, `PdFilters`, and Phase 14, PDF output, `PdRun` and
-`PdPdf`). Phase 15, the finished proof of concept, next.
-See PLAN.md's State.
+As of 2026-11-20, Phases 1 to 15 are done and the proof of concept
+is finished:
+
+- the reader, `PdMarkdown`, and YAML metadata, `PdYaml`;
+- the writers: JSON, HTML (`PdHtml`), ms (`PdMs`), ConTeXt
+  (`PdConTeXt`) and markdown (`PdMdWriter`), with templates
+  (`PdTemplate`);
+- the command line, `PdOptions`;
+- includes, `PdInclude`, with globs in `PdGlob`;
+- the built-in filters, `PdFilters`;
+- PDF output, `PdRun` and `PdPdf`;
+- builds and tests on FreeBSD and NetBSD, `make install`, and
+  docs/user/podoc.md.
+
+Further work is in PLAN.md's "Later". See PLAN.md's State.
 
 ## Reference material
 
@@ -62,8 +64,8 @@ private directories wholesale.
 
 ## The compiler
 
-- **Use the installed `poc`**: `/usr/bin/poc`, version 0.14.0 (a410135)
-  as of 2026-11-19. Its libraries are in `/usr/lib/poc`, and libraries
+- **Use the installed `poc`**: `/usr/bin/poc`, version 0.15.0 (39d2137)
+  as of 2026-11-20. Its libraries are in `/usr/lib/poc`, and libraries
   installed by the user in `~/.local/lib/poc/<triple>/{O2,OC}`. Check
   what the compiler accepts by running it, not by reading its source.
 - **`~/Repos/Oberon/Peaseblossom` is reference only.** Read its
@@ -124,6 +126,11 @@ reinstall after upgrading poc.
   (decision 3).
 - `make compare` runs pandoc and podoc side by side, where pandoc is
   installed.
+- `make install` installs the `-OC` podoc and `subs2yaml` (`PREFIX`,
+  `~/.local` by default; `MODEL`, `DESTDIR`); `make uninstall`.
+- Tested on Fedora (atla), FreeBSD (alerik) and NetBSD (artos); on the
+  VMs, copy clean checkouts (`git archive`) of podoc and its libraries
+  to a scratch directory, `gmake`, and remove it afterwards.
 - The reader is checked against `pandoc -f markdown -t json`, byte for
   byte; the writers against `pandoc --wrap=none -t html|ms|context`,
   for equivalence; the markdown writer by the round trip (its output

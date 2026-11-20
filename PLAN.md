@@ -587,18 +587,35 @@ names, no `--verbose` log) are in docs/user/differences.md.
 
 ## Phase 15: The proof of concept, finished
 
-### Phase 15.1: Portability
+### Phase 15.1: Portability [done]
 
 - Build and test on at least one BSD.
 - Record what a minimal system needs: poc, the libraries, groff
   and/or ConTeXt.
 
-### Phase 15.2: Installing and documenting
+As done: built and tested on the VMs alerik (FreeBSD 15.1, amd64) and
+artos (NetBSD 11.0, amd64), with poc 0.15.0, after installing
+ArgParser, Ropes and pounicode there in `~/.local/lib/poc`. What a
+minimal system needs is in docs/user/podoc.md: poc, those libraries,
+GNU make and `/bin/sh` to build and run; for PDF, `mkdir`, `cp`, `rm`
+and the engine. NetBSD's base groff, 1.19.2, has neither `-k` nor
+`gropdf`, so ms PDF there needs a newer groff (1.23.0 works); podoc
+reports the engine's failure as pandoc would (43; 47 for a missing
+`pdfroff`).
+
+### Phase 15.2: Installing and documenting [done]
 
 - `make install` (`PREFIX`, as the other projects), and
   `docs/user/podoc.md`: the supported subset, the options, the
   substitutions format, and `docs/user/differences.md`.
 - README and AGENTS.md updated.
+
+As done: `make install` installs `build/$(MODEL)/podoc` (`-OC` by
+default) and `tools/subs2yaml` in `BINDIR`, and README, LICENSE, the
+user documentation and the templates' licence (`templates-LICENSE`,
+which a binary distribution must carry) in `DOCDIR`; `PREFIX`
+defaults to `~/.local`, and `DESTDIR` is honoured. `POCLIBDIR` no
+longer follows `PREFIX`. `make uninstall` removes what it installed.
 
 ## Later, not scheduled
 
@@ -957,3 +974,12 @@ names, no `--verbose` log) are in docs/user/differences.md.
   own warnings, which pandoc's has too. No temporary directories were
   left. `FILTERDIR=... make compare` gave 1037 of 1152 the same.
   Phase 15 next.
+- 2026-11-20: Phase 15 done; the proof of concept is finished. podoc
+  built, and `make test` passed under `-O2` and `-OC` (the unit
+  tests, 168 of 168 case tests, 23 of 23 round trips), on FreeBSD 15.1
+  (alerik) and NetBSD 11.0 (artos), amd64, with poc 0.15.0, as on
+  Fedora (atla). On NetBSD, `--pdf-engine=groff` failed with the base
+  groff 1.19.2 (`invalid option -- k`, status 43) and `pdfroff` was not
+  found (47). `make install` and `make uninstall` checked with a
+  `DESTDIR` and `PREFIX=/usr/local`. docs/user/podoc.md written; README
+  and AGENTS.md updated.

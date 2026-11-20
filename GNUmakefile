@@ -7,15 +7,22 @@
 # such file); then it runs the case tests, test/cases/, with each podoc
 # (tools/runcases), and the markdown writer's round trip on the cases
 # test/roundtrip.txt names (tools/roundtrip). None of it needs pandoc.
-# `make clean` removes build/.
+# `make install` installs the podoc built under $(MODEL), -OC by default
+# (32-bit INTEGER, 64-bit LONGINT), with tools/subs2yaml, in $(BINDIR),
+# and the user documentation and the templates' licence in $(DOCDIR),
+# under $(PREFIX), ~/.local by default, or $(DESTDIR)$(PREFIX) for a
+# package; `make uninstall` removes them. `make clean` removes build/.
 #
 # The libraries podoc uses (ArgParser, Ropes, pounicode) are found in
 # $(POCLIBDIR), ~/.local/lib/poc by default, where their own makefiles
-# install them.
+# install them. It does not follow PREFIX.
 
 POC ?= poc
 PREFIX ?= $(HOME)/.local
-POCLIBDIR ?= $(PREFIX)/lib/poc
+POCLIBDIR ?= $(HOME)/.local/lib/poc
+BINDIR ?= $(PREFIX)/bin
+DOCDIR ?= $(PREFIX)/share/doc/podoc
+MODEL ?= OC
 BUILD := build
 
 # An installed library on POC_LIBRARY_PATH would be taken in place of the
@@ -27,7 +34,7 @@ SRCS := $(wildcard src/*.Mod)
 TESTS := $(patsubst test/%.Mod,%,$(wildcard test/*Test.Mod))
 CASES := $(wildcard test/cases/*)
 
-.PHONY: all test test-o2 test-oc compare clean FORCE
+.PHONY: all test test-o2 test-oc compare install uninstall clean FORCE
 .SECONDEXPANSION:
 
 all: $(MODELS:%=$(BUILD)/%/podoc)
@@ -80,6 +87,21 @@ $(BUILD)/%/cases.passed: $(BUILD)/%/podoc $(CASES) tools/runcases
 $(BUILD)/%/roundtrip.passed: $(BUILD)/%/podoc $(CASES) test/roundtrip.txt tools/roundtrip
 	tools/roundtrip $(BUILD)/$*/podoc $(BUILD)/$*/roundtrip
 	touch $@
+
+install: $(BUILD)/$(MODEL)/podoc
+	install -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(DOCDIR)
+	install -m 755 $(BUILD)/$(MODEL)/podoc $(DESTDIR)$(BINDIR)/podoc
+	install -m 755 tools/subs2yaml $(DESTDIR)$(BINDIR)/subs2yaml
+	install -m 644 README.md LICENSE docs/user/podoc.md \
+	  docs/user/differences.md $(DESTDIR)$(DOCDIR)
+	install -m 644 data/templates/README $(DESTDIR)$(DOCDIR)/templates-LICENSE
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/podoc $(DESTDIR)$(BINDIR)/subs2yaml
+	rm -f $(DESTDIR)$(DOCDIR)/README.md $(DESTDIR)$(DOCDIR)/LICENSE \
+	  $(DESTDIR)$(DOCDIR)/podoc.md $(DESTDIR)$(DOCDIR)/differences.md \
+	  $(DESTDIR)$(DOCDIR)/templates-LICENSE
+	-rmdir $(DESTDIR)$(DOCDIR)
 
 clean:
 	rm -rf $(BUILD)
