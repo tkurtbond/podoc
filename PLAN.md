@@ -1120,3 +1120,24 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
   wrapping ends a line after `Speck!”`, where groff adds sentence
   space, which is page 66's difference. The SRD's files were not
   changed.
+- 2026-11-20: the SRD's markdown on erekose and terhali, with groff
+  1.25.0 first in the PATH, and on atla the same way: a clean archive
+  of HEAD, `gmake build/OC/podoc`, then the `.stmt.ms.pdf` options.
+  Every build and podoc run ended with status 0; each PDF has 83
+  pages and 301 bookmarks and no stray lines, and the three give the
+  same `pdftotext` text. Against atla's groff 1.23.0 PDF, 1.25.0
+  repeats a word in each of three headings that wrap to a second
+  line ("Minimal OpenD6 OpenD6 &", "Ideas? Ideas?", "from from").
+  That is groff 1.25.0's ms: `.nr LL 3i`, an `.SH 1` (or `.NH 1`)
+  with "Converting Between Minimal OpenD6 & Traditional OpenD6", and
+  `.LP` give, with no podoc output and no template, a spaced-out
+  first line and "Traditional Traditional OpenD6", under `-Tpdf` and
+  `-Tps`; 1.23.0 and 1.24.2 set it correctly. Its `.SH` and `.NH`
+  box the heading and end the box with a trap one line down
+  (`dt 1v @NH-end`), which springs while the second line is being
+  filled. pandoc's ms is hit the same way; podoc does nothing about
+  it. The template's `.special S Symbola` fails under 1.25.0 on all
+  three hosts (Symbola is installed only for atla's 1.23.0); it does
+  no harm, as the 1.23.0 PDF uses only Palatino and Symbol. 1.25.0's
+  tables are also a little narrower in places. Temporary directories
+  removed on all three hosts.
