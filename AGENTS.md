@@ -24,7 +24,7 @@ there.
 
 ## Status
 
-As of 2026-11-20: Phases 1 to 13 done (the build, the tests, a `podoc`
+As of 2026-11-20: Phases 1 to 14 done (the build, the tests, a `podoc`
 that joins its inputs as pandoc does, the AST, the JSON writer, the
 markdown reader's blocks and inlines, `-t json`, YAML metadata with
 `-M` and `--metadata-file`, templates with `-s`, `--template`, `-V`,
@@ -34,7 +34,8 @@ markdown reader's blocks and inlines, `-t json`, YAML metadata with
 writer, `PdMdWriter`, with its round-trip test, and the command line,
 `PdOptions`, with the formats inferred as pandoc does), and Phase 12,
 includes, `PdInclude`, with Python's globs in `PdGlob`, and Phase 13, the
-native filters, `PdFilters`). Phase 14, PDF output, next.
+native filters, `PdFilters`, and Phase 14, PDF output, `PdRun` and
+`PdPdf`). Phase 15, the finished proof of concept, next.
 See PLAN.md's State.
 
 ## Reference material

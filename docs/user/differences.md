@@ -9,10 +9,11 @@ in PLAN.md) is listed by the writer.
 - An unknown option, or an option missing its argument, ends podoc
   with exit status 2 (ArgParser's), where pandoc's is 6. Every other
   error uses pandoc's exit status: 1 for a file that cannot be read or
-  written, 4 for PDF output podoc cannot make, 6 for a bad `--wrap` or
+  written, 4 for PDF output podoc cannot make or PDF to a terminal,
+  6 for a bad `--wrap` or
   `--pdf-engine`, 21 for an input format other than markdown, 22 for
-  an unknown output format, 23 for a markdown extension, 83 for a
-  filter.
+  an unknown output format, 23 for a markdown extension, 43 and 47
+  for a PDF engine that fails or is not there, 83 for a filter.
 - `--help` lists podoc's options in ArgParser's form, and error
   messages are podoc's own wording, starting with "podoc: ".
 - `-t source` writes the input as the reader would see it (joined,
@@ -205,6 +206,30 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
 - Output is not wrapped, as for HTML.
 - Raw blocks and inlines are passed through for the formats `context`
   and `tex` only.
+
+## PDF output
+
+podoc makes PDF as pandoc 3.10 does with `pdfroff`, `groff` and
+`context`: the same arguments, `--pdf-engine-opt` and `-V papersize`,
+the same messages and exit statuses (43 when the engine fails, 47 when
+it is not there, 4 for PDF to a terminal). It differs in these ways.
+
+- The programs run through `/bin/sh`, each argument quoted, so podoc
+  needs a POSIX shell, `mkdir`, `cp` and `rm`. The temporary directory
+  is `podoc<pid>-<n>` under `TMPDIR`, or `/tmp`.
+- Images are copied into the temporary directory as `img<n>` with
+  their extension, where pandoc names them by the SHA1 of their
+  contents, or keeps a relative path.
+- Images are found relative to the working directory only (pandoc's
+  default `--resource-path`); `%`-escapes in their paths are not
+  decoded. An image with a URL (`http:`, `data:`, ...) is not fetched
+  and is left for the engine.
+- For ConTeXt, SVG images are converted to PDF with `rsvg-convert`, as
+  pandoc does; images in other formats than PNG, JPEG, PDF, EPS and
+  SVG (GIF, BMP, ...), which pandoc converts to PNG itself, are left
+  as they are.
+- The engine's log is not shown with `--verbose`, which podoc does not
+  have.
 
 ## The markdown writer
 

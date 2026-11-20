@@ -19,6 +19,7 @@ TYPE
 VAR
   (* options *)
   numberSections, preserve, wantToc: BOOLEAN;
+  ligatures: BOOLEAN; (* whether dashes and apostrophes become ligatures *)
   tocDepth: INTEGER;
 
   (* the writer's state *)
@@ -121,7 +122,7 @@ END Comma;
 
 (* Escapes *)
 
-(* stringToConTeXt, with ligatures *)
+(* stringToConTeXt, with ligatures unless SetLigatures(FALSE) *)
 PROCEDURE Escape(r: Rope): Rope;
   VAR b: Buf; n, i, start: LONGINT; out: Rope; ch: CHAR; rep: ARRAY 24 OF CHAR; k: INTEGER;
 BEGIN
@@ -143,9 +144,9 @@ BEGIN
     | 0E2X:
       IF b[i + 1] = 80X THEN
         CASE b[i + 2] OF
-          94X: rep := "---"; k := 3
-        | 93X: rep := "--"; k := 3
-        | 99X: rep := "'"; k := 3
+          94X: IF ligatures THEN rep := "---"; k := 3 END
+        | 93X: IF ligatures THEN rep := "--"; k := 3 END
+        | 99X: IF ligatures THEN rep := "'"; k := 3 END
         | 0A6X: rep := "\ldots{}"; k := 3
         ELSE
         END
@@ -848,6 +849,14 @@ BEGIN
   numberSections := number; preserve := preserveBreaks; wantToc := toc; tocDepth := depth
 END SetOptions;
 
+(* Sets whether em and en dashes and right single quotes are written as
+   the ligatures ---, -- and ', as they are unless the smart extension
+   is off, as it is when pandoc makes PDF with context *)
+PROCEDURE SetLigatures*(on: BOOLEAN);
+BEGIN
+  ligatures := on
+END SetLigatures;
+
 (* The text of the simple value of key in ctx; found FALSE if it is
    not there or not simple *)
 PROCEDURE Field(ctx: T.Value; key: ARRAY OF CHAR; VAR found: BOOLEAN): Rope;
@@ -963,5 +972,6 @@ END WriteDoc;
 
 BEGIN
   numberSections := FALSE; preserve := FALSE; wantToc := FALSE; tocDepth := 3;
-  nextRef := 1; listLevel := 0; cslRefs := FALSE; cslHanging := FALSE
+  nextRef := 1; listLevel := 0; cslRefs := FALSE; cslHanging := FALSE;
+  ligatures := TRUE
 END PdConTeXt.

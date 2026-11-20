@@ -1,0 +1,12 @@
+ok   - a space stays in the word
+ok   - a quote stays in the word
+ok   - a dollar sign is not expanded
+ok   - two quotes
+ok   - a star is not a glob
+ok   - exit status 3
+ok   - exit status 255
+ok   - killed by signal 9
+ok   - sh is found
+ok   - /no/where/sh is not found
+ok   - the temporary directory is made
+ok   - the temporary directory is removed

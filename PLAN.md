@@ -544,7 +544,7 @@ filters, so that pandoc finds them.
 
 ## Phase 14: PDF output
 
-### Phase 14.1: `PdRun`
+### Phase 14.1: `PdRun` [done]
 
 - Make and remove a temporary directory under `TMPDIR`.
 - Run a program with arguments, standard input from a file or buffer,
@@ -553,7 +553,14 @@ filters, so that pandoc finds them.
   is built for `-OC` only, and podoc must build under both models
   (2026-11-20). pounix stays a possible `-OC` refinement.
 
-### Phase 14.2: The engines
+As done: `PdRun` builds a command as text for `/bin/sh`, each argument
+in single quotes, and runs it with `Platform.System`; a signal gives
+128 and its number, as the shell reports it. The temporary directory
+is `podoc<pid>-<n>` under `TMPDIR` or `/tmp`, made with `mkdir -m 700`
+and removed with `rm -rf`; images are copied with `cp`. Standard input
+and output are redirections in the command, not buffers.
+
+### Phase 14.2: The engines [done]
 
 - `pdfroff`, `groff` and `context` with the arguments of §7, plus
   `--pdf-engine-opt` and `papersize`.
@@ -563,6 +570,20 @@ filters, so that pandoc finds them.
 - Acceptance: every PDF target of Lost-Worlds and
   Galactic-Bounty-Hunters builds with `PANDOC=podoc`, and its
   `pdftotext` matches that of pandoc's PDF.
+
+As done: `PdPdf` chooses the engine by the program's base name, as
+pandoc does, and runs it with pandoc's arguments: pdfroff and groff
+read the ms from standard input (`-U` when it has `.PDFPIC`), context
+runs on `input.tex` in the temporary directory with `--batchmode`.
+For every engine, an image that is not there is replaced by its
+description with pandoc's warning; for context, images are copied into
+the temporary directory as `img<n>` and SVGs converted with
+`rsvg-convert`, and smart ligatures (`---`, `--`, `'`) are off, as
+pandoc's TeX output for PDF. Errors and statuses are pandoc's: 43 with
+the engine's output (context: its first `tex error` line), 47 for an
+engine not found, 4 for PDF to a terminal. The differences (images
+found from the working directory only, URLs not fetched, `img<n>`
+names, no `--verbose` log) are in docs/user/differences.md.
 
 ## Phase 15: The proof of concept, finished
 
@@ -917,3 +938,22 @@ filters, so that pandoc finds them.
   make compare` gave 1015 of 1134 the same: Phase 12's 75, and 44
   where podoc deliberately differs (`general`'s messages,
   `filter-subs-missing`; docs/user/differences.md). Phase 14 next.
+- 2026-11-20: Phase 14 done. `PdRun` runs programs through
+  `/bin/sh` and `Platform.System`; `PdPdf` makes PDF with pdfroff,
+  groff and context. `make test` passed under `-O2` and `-OC`: the new
+  `PdRunTest` (12 checks: quoting, exit statuses, signals, finding
+  programs, the temporary directory), 168 of 168 case tests (new:
+  `pdf-engine-missing`, `pdf-image-missing`, whose messages and
+  statuses are pandoc's) and 23 of 23 round trips. By hand, against
+  pandoc 3.10: the same `pdftotext` for pdfroff and groff (with
+  `papersize=a4l` and a PDF image), and for context (Unicode dashes
+  and quotes, a PNG, an SVG, a missing image); the same messages and
+  statuses for a groff failure and a TeX error (43), a missing engine
+  (47), and PDF to a terminal (4); `-t pdf -o -` to standard output.
+  Acceptance, under both models: Lost-Worlds' 27 PDF targets (12 ctx,
+  12 digest-ctx, 2 ms, the combined digest) and Galactic-Bounty-Hunters'
+  6 (ctx, the one-shot with its JPEG and SVG maps) gave `pdftotext`
+  output the same as pandoc's; podoc's standard error had only groff's
+  own warnings, which pandoc's has too. No temporary directories were
+  left. `FILTERDIR=... make compare` gave 1037 of 1152 the same.
+  Phase 15 next.

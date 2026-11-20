@@ -20,10 +20,13 @@ MODULE podoc;
 
 IMPORT Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt, PdMdWriter,
-  PdInclude, PdFilters, O := PdOptions;
+  PdInclude, PdFilters, PdPdf, O := PdOptions;
 
 CONST
   PandocVersion = "3.10"; (* the pandoc podoc follows *)
+
+VAR
+  doc: A.Doc; (* the document, once it is read *)
 
 (* Running *)
 
@@ -74,6 +77,13 @@ BEGIN
   RETURN d
 END ReadDoc;
 
+(* The document read from text, read once *)
+PROCEDURE Doc(text: PdIO.Text; len: LONGINT): A.Doc;
+BEGIN
+  IF doc = NIL THEN doc := ReadDoc(text, len) END;
+  RETURN doc
+END Doc;
+
 (* Adds the contents of the files to the list variable key *)
 PROCEDURE AddFiles(key: ARRAY OF CHAR; f: O.File);
 BEGIN
@@ -103,15 +113,11 @@ END SetVariables;
 
 PROCEDURE Run;
   VAR text: PdIO.Text; len: LONGINT; f: O.File; tmpl: T.Template;
-    to: O.String;
+    to: O.String; src: ARRAY 4096 OF CHAR;
 BEGIN
   O.Resolve;
-  COPY(O.to, to);
-  IF O.pdf THEN
-    (* Phase 14 runs the engine *)
-    PdIO.Message("podoc cannot make PDF yet");
-    PdIO.Exit(PdIO.PDFError)
-  END;
+  COPY(O.to, to); doc := NIL;
+  IF O.pdf THEN PdPdf.CheckTerminal END;
   f := O.metaFiles;
   WHILE f # NIL DO
     IF ~PdIO.Exists(f.name^) THEN
@@ -139,10 +145,18 @@ BEGIN
       f := f.next
     END
   END;
-  PdIO.OpenOutput(O.output);
+  IF O.pdf THEN
+    (* the engine's source goes to the temporary directory, ConTeXt's
+       without ligatures, as pandoc writes it for a TeX engine *)
+    PdPdf.Prepare(Doc(text, len), to = "context");
+    PdConTeXt.SetLigatures(to # "context");
+    PdPdf.Source(src); PdIO.OpenOutput(src)
+  ELSE
+    PdIO.OpenOutput(O.output)
+  END;
   IF to = "json" THEN
-    IF O.standalone THEN PdJson.WriteDocNoNl(ReadDoc(text, len))
-    ELSE PdJson.WriteDoc(ReadDoc(text, len))
+    IF O.standalone THEN PdJson.WriteDocNoNl(Doc(text, len))
+    ELSE PdJson.WriteDoc(Doc(text, len))
     END
   ELSIF to = "html" THEN
     IF O.files = NIL THEN
@@ -150,21 +164,22 @@ BEGIN
     ELSE
       PdHtml.SetOptions(O.idPrefix, O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth, O.files.name^)
     END;
-    PdHtml.WriteDoc(ReadDoc(text, len), tmpl)
+    PdHtml.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "ms" THEN
     PdMs.SetOptions(O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth);
-    PdMs.WriteDoc(ReadDoc(text, len), tmpl)
+    PdMs.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "context" THEN
     PdConTeXt.SetOptions(O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth);
-    PdConTeXt.WriteDoc(ReadDoc(text, len), tmpl)
+    PdConTeXt.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "markdown" THEN
     PdHtml.SetOptions(O.idPrefix, O.numberSections, FALSE, FALSE, O.tocDepth, "-");
     PdMdWriter.SetOptions(O.wrap = "preserve", O.toc, O.tocDepth, O.numberSections, O.idPrefix);
-    PdMdWriter.WriteDoc(ReadDoc(text, len), tmpl)
+    PdMdWriter.WriteDoc(Doc(text, len), tmpl)
   ELSIF len > 0 THEN
     PdIO.WriteChars(text^, 0, len)
   END;
-  PdIO.CloseOutput
+  PdIO.CloseOutput;
+  IF O.pdf THEN PdPdf.Make END
 END Run;
 
 BEGIN

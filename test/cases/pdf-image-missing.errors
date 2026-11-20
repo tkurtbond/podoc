@@ -1,0 +1,2 @@
+podoc: [WARNING] Could not fetch resource no-such-image.png: replacing image with description
+podoc: '/no/where/context' not found. Please select a different --pdf-engine or install '/no/where/context'
