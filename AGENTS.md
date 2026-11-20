@@ -24,7 +24,7 @@ there.
 
 ## Status
 
-As of 2026-11-20: Phases 1 to 10 done (the build, the tests, a `podoc`
+As of 2026-11-20: Phases 1 to 12 done (the build, the tests, a `podoc`
 that joins its inputs as pandoc does, the AST, the JSON writer, the
 markdown reader's blocks and inlines, `-t json`, YAML metadata with
 `-M` and `--metadata-file`, templates with `-s`, `--template`, `-V`,
@@ -32,8 +32,9 @@ markdown reader's blocks and inlines, `-t json`, YAML metadata with
 `--css`, `--id-prefix` and `--wrap`, the ms writer, `PdMs`, with
 `--pdf-engine`, the ConTeXt writer, `PdConTeXt`, and the markdown
 writer, `PdMdWriter`, with its round-trip test, and the command line,
-`PdOptions`, with the formats inferred as pandoc does). Phase 12,
-includes, next.
+`PdOptions`, with the formats inferred as pandoc does), and Phase 12,
+includes, `PdInclude`, with Python's globs in `PdGlob`). Phase 13,
+native filters, next.
 See PLAN.md's State.
 
 ## Reference material
@@ -83,6 +84,8 @@ private directories wholesale.
   `PROCEDURE ["C", "name"]` and a module's C part `<Module>.c`; see
   pofltk for callbacks from C into Oberon. No C `longjmp` may cross an
   Oberon frame.
+- **C parts:** `src/PdGlob.c` (`opendir`, `readdir`, `stat`; POSIX,
+  no library) is podoc's only one.
 - **Module names** must not collide with poc's runtime modules or
   other libraries: Oberon has one global module namespace. podoc's
   modules are prefixed `Pd`.

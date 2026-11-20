@@ -13,11 +13,14 @@ MODULE podoc;
    The template's variables are those of -V, then those podoc sets, as
    pandoc does: sourcefile, outputfile, pandoc-version, pdf-engine,
    include-before (-B), include-after (-A), header-includes (-H) and
-   curdir. *)
+   curdir.
+
+   The filters run in order on the document read: pandoc-include is
+   PdInclude. *)
 
 IMPORT Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt, PdMdWriter,
-  O := PdOptions;
+  PdInclude, O := PdOptions;
 
 CONST
   PandocVersion = "3.10"; (* the pandoc podoc follows *)
@@ -31,6 +34,22 @@ BEGIN
   e := from.entries;
   WHILE e # NIL DO A.SetMeta(to, e.key, e.value); e := e.next END
 END MergeMeta;
+
+(* Runs the filters on the document d *)
+PROCEDURE RunFilters(d: A.Doc);
+  VAR f: O.Filter; n: O.String; i: O.File;
+BEGIN
+  f := O.filters;
+  WHILE f # NIL DO
+    O.FileName(f.name^, n);
+    IF n = "pandoc-include" THEN
+      i := O.files;
+      WHILE i # NIL DO PdInclude.AddInput(i.name^); i := i.next END;
+      PdInclude.Expand(d, f.name^)
+    END;
+    f := f.next
+  END
+END RunFilters;
 
 (* The document in text[0 .. len-1], with the metadata of the metadata
    files and -M *)
@@ -46,6 +65,7 @@ BEGIN
   d := PdMarkdown.Read(text, len, O.tabStop);
   MergeMeta(m, d.meta); MergeMeta(m, O.cmdMeta);
   d.meta := m;
+  RunFilters(d);
   RETURN d
 END ReadDoc;
 

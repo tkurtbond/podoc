@@ -778,6 +778,7 @@ BEGIN
   END;
   classes := Classes(h.attr);
   IF h.level > 6 THEN classes := NewStrL(R("heading"), classes); tag := "p"
+  ELSIF h.level < 1 THEN tag := "p" (* from incrementSection *)
   ELSE tag := "h0"; tag[1] := CHR(ORD("0") + h.level)
   END;
   RETURN CatS(CatS(CatS(Cat(CatS(Cat(CatS(R("<"), tag), AttrStr(Id(h.attr), classes, KVs(h.attr))), ">"),

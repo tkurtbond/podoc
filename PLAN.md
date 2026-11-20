@@ -447,7 +447,7 @@ user's filters end it with status 83.
 
 ## Phase 12: Includes
 
-### Phase 12.1: `PdInclude`
+### Phase 12.1: `PdInclude` [done]
 
 - `!include path` and `` !include`incrementSection=n` path ``, as §5:
   globs in sorted order, recursion, paths relative to the including
@@ -457,6 +457,18 @@ user's filters end it with status 83.
 - Run when `-F pandoc-include` (or `--filter pandoc-include`) is given,
   so that output without it still matches pandoc's.
 - Acceptance: the user's `-whole.md` targets (Phase 10.2).
+
+As done: globs are Python's (`PdGlob`: `glob.glob` with
+`recursive=True`, `fnmatch` sets, natsort's order), as pandoc-include
+finds files. Reading directories needs `opendir`, so `PdGlob` has a
+small POSIX C part, `PdGlob.c` (decision 1: C where it earns its
+place); it needs no library. A cycle, which pandoc-include follows
+forever, ends podoc with status 83, and `tools/compare` stops pandoc
+after 10 seconds where `timeout` is installed. The include line is
+rendered as pandoc-include sees it, `markdown_strict` with `\*` and
+`\_` unescaped, for the escapes that matter to paths (`[` and `]`).
+Headers shifted below level 1 are written as paragraphs in HTML, as
+pandoc writes them.
 
 ## Phase 13: Native filters
 
@@ -837,3 +849,25 @@ user's filters end it with status 83.
   line). `make compare` gave 870 of 927 the same: the 24 differences
   of Phase 10, and 33 from the new cases where podoc deliberately
   differs (docs/user/differences.md). Phase 12 next.
+- 2026-11-20: Phase 12 done. `PdInclude` runs for `-F pandoc-include`:
+  `!include` and `$include` lines, `incrementSection`, globs (`PdGlob`,
+  Python's `glob` and `fnmatch` with natsort's order; its C part,
+  `PdGlob.c`, reads directories), recursion relative to the including
+  file, the working directory as fallback, metadata merged with the
+  outer keys winning, relative image paths rewritten, and cycles ended
+  with status 83. The other keys end podoc with 83; unknown keys warn
+  as pandoc-include does. `PdHtml` writes headers below level 1 as
+  paragraphs, as pandoc. `make test` passed under `-O2` and `-OC`: the
+  new `PdGlobTest` (23 matches against Python 3.14's `fnmatchcase`, 7
+  orderings against natsort's), 146 of 146 cases (11 new `inc-*`
+  cases) and 23 of 23 round trips. Against pandoc with
+  pandoc-include 1.4.4: the JSON of the 5 user documents that include
+  (Lost-Worlds' 001 and 002, Galactic-Bounty-Hunters' one-shot,
+  pre-made characters and villains) is byte for byte pandoc's, and
+  their markdown is `pandoc --wrap=none`'s (the `-whole.md`
+  acceptance), both models. `inc-glob` (`*`, `**`, `?`, a hidden file,
+  natural order, a bracket set) is byte for byte pandoc's. `make
+  compare` gave 942 of 1017 the same: 48 of Phase 11's 57 (its
+  other 9, `opt-filter-later`'s, now match pandoc), and 27 from `inc-cycle`, `inc-self` and
+  `inc-option`, where podoc deliberately differs
+  (docs/user/differences.md). Phase 13 next.

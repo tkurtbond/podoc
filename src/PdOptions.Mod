@@ -607,7 +607,8 @@ END CheckReader;
 (* Checks the filters, by their file names: podoc runs built-in code
    in place of the user's filters, ignores
    pandoc-mermaid-selenium-filter with a warning (decision 4), and ends
-   with pandoc's status for a failed filter, 83, at any other. *)
+   with pandoc's status for a failed filter, 83, at any other. The
+   filters left in filters are those podoc runs: pandoc-include. *)
 PROCEDURE CheckFilters;
   VAR f, next: Filter; n: String; m: ARRAY 4096 OF CHAR;
 BEGIN
@@ -618,6 +619,9 @@ BEGIN
     IF n = "pandoc-mermaid-selenium-filter" THEN
       COPY("[WARNING] podoc ignores the filter ", m); Append(f.name^, m);
       PdIO.Message(m)
+    ELSIF (n = "pandoc-include") & (f.kind = JsonFilter) THEN
+      IF filters = NIL THEN filters := f ELSE lastFilter.next := f END;
+      lastFilter := f
     ELSE
       COPY("Error running filter '", m); Append(f.name^, m); Append("':", m);
       PdIO.Message(m);

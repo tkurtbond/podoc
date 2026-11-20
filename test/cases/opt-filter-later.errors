@@ -1,2 +1,2 @@
-podoc: Error running filter 'pandoc-include':
+podoc: Error running filter 'subs.lua':
 podoc: podoc does not have this filter built in yet

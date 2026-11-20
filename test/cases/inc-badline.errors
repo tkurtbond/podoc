@@ -1,0 +1,2 @@
+podoc: Error running filter 'pandoc-include':
+podoc: Unable to extract info from include line !include

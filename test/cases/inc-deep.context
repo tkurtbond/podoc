@@ -1,0 +1,21 @@
+\startsectionlevel[title={Top},reference={top}]
+
+\startsectionlevel[title={Included heading},reference={included-heading}]
+
+Text of a.
+
+\startsectionlevel[title={Second level},reference={second-level}]
+
+\stopsectionlevel
+
+\stopsectionlevel
+
+\startsectionlevel[title={B heading},reference={b-heading}]
+
+{\externalfigure[include/sub/pic.png]} and {\externalfigure[http://example.com/x.png]} and {\externalfigure[/abs/y.png]}.
+
+Text of c, with {\em emphasis}.
+
+\stopsectionlevel
+
+\stopsectionlevel

@@ -33,10 +33,10 @@ in PLAN.md) is listed by the writer.
   `pdflatex`, and PDF from html, end podoc with status 4.
 - Filters are not run. `--lua-filter` and `-F`/`--filter` name the
   user's filters, by file name (any directory), and podoc runs its
-  built-in code in their place: `subs.lua`, `strip-comments.lua`,
-  `general.lua`, `toc-columns.lua`, `combine-docs.lua` and
-  `pandoc-include` (Phases 12 and 13; until then each ends podoc with
-  status 83). `pandoc-mermaid-selenium-filter` is ignored with a
+  built-in code in their place: `pandoc-include` (see Includes) and,
+  from Phase 13, `subs.lua`, `strip-comments.lua`, `general.lua`,
+  `toc-columns.lua` and `combine-docs.lua` (until then each ends
+  podoc with status 83). `pandoc-mermaid-selenium-filter` is ignored with a
   warning (decision 4). Any other filter ends podoc with status 83.
 - A `--wrap` value other than `auto`, `none` or `preserve` gives
   pandoc's message and status, 6.
@@ -47,6 +47,41 @@ in PLAN.md) is listed by the writer.
   Latin-1, with a warning.
 - Input file names are not URLs: pandoc fetches `http:` and `https:`
   inputs.
+
+## Includes
+
+`-F pandoc-include` runs podoc's own `PdInclude`, which does what
+`pandoc-include` 1.4.4 does with the user's documents. It differs in
+these ways:
+
+- An include cycle (a file that includes itself, directly or not) ends
+  podoc with status 83 and a message naming the file; pandoc-include
+  never ends.
+- There are no `[INFO] including file` lines. The warnings and errors
+  that remain are pandoc-include's, prefixed `podoc: `.
+- Only the `incrementSection` key is supported. The others
+  (`startLine`, `endLine`, `snippetStart`, `snippetEnd`,
+  `includeSnippetDelimiters`, `xslt`, `dedent`, `format`, `raw`) end podoc with status 83 and a message
+  naming the key; a key pandoc-include does not know gets its
+  `[Warn] Invalid config key` warning, as there.
+- `!include-header`, includes in code blocks, and files whose names say
+  they are not markdown end podoc with status 83.
+- The metadata options (`include-order`, `include-resources`,
+  `include-entry`, `rewrite-path`, `process-path`, `pandoc-options`)
+  and the `PANDOC_INCLUDE_*` environment variables are ignored: the
+  order is always natural, and image paths are always rewritten.
+- An include line holding an inline other than text, spaces, code,
+  emphasis, strong emphasis or quotes (a link, say) ends podoc with
+  status 83, where pandoc-include renders it as markdown first.
+  pandoc-include sees the line as `markdown_strict` writes it, with
+  only `\*` and `\_` unescaped; podoc copies that for `[` and `]`, so
+  a glob's `[...]` set never matches, as there, but not for the
+  rarer escapes.
+- Globs follow Python's `glob` (hidden names, `**`, `[...]` sets) but
+  `**` stops 256 directories deep. Files are sorted as natsort sorts
+  them, digit runs by value, except that names natsort holds equal
+  (`x01` and `x1`) are ordered by their bytes, and names are not
+  normalized to Unicode NFD first.
 
 ## The markdown reader
 

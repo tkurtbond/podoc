@@ -1,0 +1,2 @@
+podoc: Error running filter 'pandoc-include':
+podoc: Included file includes itself, directly or not: inc-self.md

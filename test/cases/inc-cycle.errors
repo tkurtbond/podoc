@@ -1,0 +1,2 @@
+podoc: Error running filter 'pandoc-include':
+podoc: Included file includes itself, directly or not: cycle1.md

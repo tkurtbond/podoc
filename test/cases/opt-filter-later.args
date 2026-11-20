@@ -1,1 +1,1 @@
--F pandoc-include
+--lua-filter subs.lua
