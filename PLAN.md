@@ -18,8 +18,8 @@ State section at the end records what was verified.
 ## Goal and scope
 
 - Input: pandoc markdown (§3.1), with YAML metadata blocks (§9).
-- Output: HTML5, `ms`, ConTeXt, markdown, and JSON (pandoc's AST, as
-  the test oracle) (§3.2).
+- Output: HTML5, `ms`, ConTeXt, markdown, plain text (decision 10),
+  and JSON (pandoc's AST, as the test oracle) (§3.2).
 - PDF through `pdfroff`, `groff` or `context` (§7).
 - The command-line options the user's GNUmakefiles pass to pandoc, so
   that `make PANDOC=podoc` works (§2, §4).
@@ -29,9 +29,11 @@ State section at the end records what was verified.
 - Output equivalent to pandoc 3.10's (decision 3): the same AST, and
   writer output that gives the same PDF or rendered HTML.
 
-Not in scope: other input formats, reStructuredText included; grid
-tables; citations; output wrapping; mermaid
-(decision 4); Lua filters (decision 6); VAX/VMS (decision 1).
+Not in scope: other input formats, reStructuredText included;
+citations; mermaid (decision 4); Lua filters (decision 6); VAX/VMS
+(decision 1). Plain text output, grid tables (reader and writers) and
+output wrapping came into scope on 2026-11-20 (decisions 10 to 15,
+Phases 16 and 17).
 
 ## Decisions
 
@@ -63,6 +65,21 @@ Made by the user on 2026-11-20, on the questions of §15.
    without it groff 1.25's `.SH` and `.NH` box the `.pdfhref` lines
    with the heading, print them, and make no bookmarks. Listed in
    docs/user/differences.md.
+10. **Plain text output, with grid tables and wrapping**
+    (2026-11-20). `-t plain` is added (Phase 16), and grid tables in
+    the writer and output wrapping at `--columns`, which it needs to
+    match pandoc's default output, come into scope with it.
+11. **Wrapping for markdown too** (2026-11-20). `--wrap=auto` and
+    `--columns` apply to `-t markdown` as well as to `-t plain`
+    (Phase 17.2).
+12. **The `gutenberg` extension** (2026-11-20): `-t plain+gutenberg`
+    is supported (Phase 16.4).
+13. **Grid tables in the reader** (2026-11-20), as pandoc's markdown
+    reader reads them (Phase 16.2).
+14. **The markdown writer writes grid tables where pandoc does**
+    (2026-11-20), instead of HTML (Phase 16.3).
+15. **The markdown writer writes pipe tables where pandoc does**
+    (2026-11-20), instead of HTML (Phase 16.3).
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -622,6 +639,173 @@ which a binary distribution must carry) in `DOCDIR`; `PREFIX`
 defaults to `~/.local`, and `DESTDIR` is honoured. `POCLIBDIR` no
 longer follows `PREFIX`. `make uninstall` removes what it installed.
 
+## Phase 16: Plain text and grid tables
+
+Planned 2026-11-20 at the user's request; no build of the user's
+uses `-t plain` so far. pandoc's `plain` writer is its markdown writer
+run with `envVariant = PlainText` (`Writers/Markdown.hs`, `writePlain`),
+which changes about 25 places in `Writers/Markdown.hs` and
+`Writers/Markdown/Inline.hs`, and with `plainExtensions`
+(`Extensions.hs`): table captions, implicit figures, simple,
+multiline and grid tables, LaTeX macros, fancy lists, startnum,
+definition lists, example lists, intraword underscores, blank before
+block quote and header, strikeout. So the work is a variant of
+`PdMdWriter` and `PdMdInline`, not a new writer.
+
+Grid tables and wrapping come in with it (decision 10); wrapping
+applies to markdown too (decision 11); `gutenberg` is supported
+(decision 12); grid tables are read (decision 13) and written by the
+markdown writer where pandoc writes them (decision 14), as are pipe
+tables (decision 15). The grid
+table reader comes before the writer: podoc reads only markdown, so
+without it no table with block cells, spans or a footer can reach a
+writer to test it.
+
+### Phase 16.1: The variant, unwrapped
+
+- `-t plain` in `PdOptions` and `podoc`; output extensions stay as
+  pandoc's (`.txt` deduces markdown, not plain). `-s` uses pandoc
+  3.10's `default.plain`, added to `data/templates` and `PdDefaults`
+  by `tools/mktemplates`.
+- `PdMdWriter` and `PdMdInline` gain a plain variant, following each
+  `PlainText` branch:
+  - no escaping of `Str`; smart quotes and dashes left as they are
+    (no `smart` extension), so curly quotes stay curly;
+  - emphasis, strong, underline and spans: their contents only;
+    small caps: their contents in capitals; strikeout `~~...~~` (the
+    `strikeout` extension); code: its text without backticks;
+  - subscripts and superscripts (no `subscript` or `superscript`
+    extension): in Unicode where every character has a form
+    (`toSubscriptInline`, `toSuperscriptInline`), else `_(...)` and
+    `^(...)`. The markdown writer has no such fallback yet, so this
+    is new code, with Unicode's sub- and superscript tables. pandoc's
+    subscript fallback for rendered text calls `toSuperscript`;
+    follow it and note it;
+  - math: TeX math through texmath's `texMathToInlines`, made plainer
+    (`makeMathPlainer`: emphasis to spans). Check how far podoc's
+    math goes now and settle the subset with the user's documents;
+  - links: their text, or the URL for an autolink; images:
+    `[alt]`; notes: `[n]` in the text and `[n] text` at the end (no
+    `footnotes` extension);
+  - headings: the text and a blank line at every level, no `#` and
+    no attributes; divs, fenced or not: their contents, separated
+    from what follows by an empty Plain where markdown uses a
+    comment;
+  - code blocks: indented four spaces, never fenced; block quotes:
+    indented two spaces (`blank_before_blockquote`, no `>`); line
+    blocks: the lines, without `| `, empty ones blank;
+  - raw blocks and inlines: kept only for format `plain`, else
+    dropped, with pandoc's warning;
+  - the title block: title, authors and date, each on its line, a
+    blank line after (`plainTitleBlock`), instead of YAML;
+  - horizontal rules: dashes to `--columns` (72 by default).
+- Tests: cases with `<name>.plain` expected files, `tools/runcases`
+  and `tools/mkcase` taught the extension; pandoc 3.10's
+  `test/writer.plain`, regenerated with `--wrap=none`, as a case;
+  both models.
+- Acceptance: `-t plain --wrap=none` equals pandoc's, byte for byte,
+  on every case without tables that need grid tables, or each
+  difference listed in docs/user/differences.md.
+
+### Phase 16.2: Grid tables in the reader
+
+- `PdMarkdown` reads grid tables as pandoc 3.10 does: its
+  `Parsing/GridTable.hs` (308 lines) over the `gridtables` package
+  (`Text.GridTable`, 0.1.x; the source is in
+  `~/.cabal/packages/hackage.haskell.org/gridtables`, unpacked into
+  the session's scratch directory to read). That means the table's
+  outline, `=` header separators, `:` alignment markers, a footer
+  below a final `=` separator, row and column spans, cells parsed as
+  blocks (lists, paragraphs, code), column widths from the dashes
+  relative to `--columns`, a caption before or after, and indented
+  tables (`test/command/grid-table-indented.md`).
+- Character widths: cells and borders are measured in columns, East
+  Asian wide characters as 2, as for multiline tables; the known
+  `realLength` approximation (Later) applies here too.
+- The `grid_tables` extension: on by default for `markdown`, and
+  turned off by `-f markdown-grid_tables`.
+- Tests: cases from pandoc's `test/markdown-reader-more.txt` grid
+  tables and the `test/command/*.md` that use them, JSON byte for
+  byte, both models. Acceptance: also the Minimal OpenD6 SRD
+  translated from reST with grid tables kept (`-w markdown` without
+  `-grid_tables`) gives pandoc's JSON byte for byte.
+
+### Phase 16.3: Grid and pipe tables in the writers
+
+- pandoc's `gridTable` (`Writers/Shared.hs`, about 40 lines and the
+  helpers it calls) on `PdLayout`: cells as block lists rendered to a
+  width, column widths from the relative widths or the content, row
+  and column spans, header and footer separators, alignments in the
+  `:` markers.
+- The choice of table follows pandoc's order (`Writers/Markdown.hs`):
+  simple, then multiline, then grid (when there are spans or a
+  footer, or `--columns` is at least 8 times the number of columns;
+  72 until Phase 17 adds `--columns`). For `plain` nothing comes
+  after grid. For `markdown`, grid and pipe tables where pandoc
+  writes them (decisions 14 and 15), and HTML only where pandoc falls
+  back to it; the entries in docs/user/differences.md change to
+  match.
+- pandoc's `pipeTable` (`Writers/Markdown/Table.hs`, about 55 lines):
+  the header row (empty when the table has none), the `|---|`
+  separator with `:` for alignment, cells on one line. Cells are
+  padded to the widest in the column (at least 3) only when those
+  widths together fit in `--columns`. The separator's dashes follow
+  the relative widths when the table has them and is wider than
+  `--columns` (markdown only), else the padded widths, else 4 per
+  column. `|` in cells is escaped (`Writers/Markdown/Inline.hs`,
+  with `pipe_tables`). Also the
+  approximate pipe table pandoc writes for spans when raw HTML is
+  off (`-t markdown-raw_html`).
+- Tests: pandoc's `test/tables.plain` and `test/tables.markdown`
+  (regenerated with `--wrap=none`), cases with block cells, spans and
+  footers read by 16.2, both models; the markdown round trip on them.
+  Acceptance as 16.1.
+
+### Phase 16.4: `gutenberg`
+
+- `-t plain+gutenberg` (Project Gutenberg's conventions), as pandoc's
+  `Ext_gutenberg` branches: emphasis between underscores; strong in
+  capitals; level-1 headings in capitals, with three blank lines
+  before and two after; level-2 headings with two blank lines before.
+  Capitals by pandoc's `capitalize` (`T.toUpper` on each `Str`), so
+  a Unicode upper-case mapping: use pounicode's if it has one, else
+  add one generated from UnicodeData.txt as `tools/mk*` do.
+- `+gutenberg` as pandoc 3.10 takes it: for `plain`; for `markdown`,
+  accepted and without effect; for `html`, `ms` and others, exit 23
+  (checked 2026-11-20).
+- Tests: cases with each convention, under both models; acceptance as
+  16.1.
+
+## Phase 17: Wrapping
+
+pandoc wraps `plain` at 72 columns by default (`--wrap=auto`,
+`--columns`). `PdLayout` already wraps at a width as doclayout does
+(`PdLayoutTest`), and `PdMdWriter` writes spaces as `L.Space()`;
+every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
+
+### Phase 17.1: `--wrap=auto` and `--columns` for plain
+
+- `--columns` in `PdOptions` (pandoc: 72 by default; 6 for a bad
+  value); `--wrap=auto` passes it to `L.Write` for `plain`.
+- Check every `NoWrap`, `Prefixed`, `Hang` and `Nest` in the writer
+  against pandoc's, since none has been exercised with a width:
+  headings, list markers, definition lists, block quotes, notes,
+  table cells (which render at their column's width already),
+  links' text.
+- Tests: the `plain` cases again without `--wrap=none`, and
+  `test/writer.plain` and `test/tables.plain` as pandoc ships them;
+  long words, URLs and East Asian text at the margin.
+- Acceptance: byte for byte with pandoc's default `plain` output, or
+  differences listed.
+
+### Phase 17.2: Wrapping for markdown
+
+- The same for `-t markdown` (decision 11), whose expected files are
+  now `--wrap=none`: they keep `--wrap=none` in their `.args`, and
+  new cases check wrapped output; the round trip must hold with
+  wrapping on, and the `-whole.md` targets must still read back to
+  pandoc's AST.
+
 ## Later, not scheduled
 
 - Full YAML through polibfyaml, as `make YAML=libfyaml` (decision 2).
@@ -629,9 +813,8 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
   filter appears that native code does not cover (decision 6).
 - JSON filters: a JSON reader for the AST and `--filter prog` over
   standard input and output (§8.4).
-- Output wrapping at `--columns` as pandoc's `doclayout` does.
-- Grid tables, in the reader and the markdown writer; pipe tables in
-  the markdown writer (written as HTML for now).
+- Output wrapping at `--columns` for the HTML, ms and ConTeXt
+  writers (Phase 17 covers plain and markdown).
 - The markdown reader, not needed by the user's documents so far:
   the `%` title block; raw TeX blocks, environments, macros and the
   commands pandoc's LaTeX reader reads specially; citations and
