@@ -21,6 +21,19 @@ installed under both size models in `~/.local/lib/poc` (`POCLIBDIR`),
 and GNU make. It builds and passes its tests on Linux, FreeBSD and
 NetBSD.
 
+podoc uses these repositories:
+
+| Repository | What it is | Install |
+|---|---|---|
+| [peaseblossom](https://github.com/tkurtbond/peaseblossom) | `poc`, the Peaseblossom Oberon-2 compiler | see its `doc/users-guide.md` |
+| [oberon-argparser](https://github.com/tkurtbond/oberon-argparser) | ArgParser: the command line | `make -f pocGNUmakefile install` |
+| [oberon-ropes](https://github.com/tkurtbond/oberon-ropes) | Ropes: the text of the AST and the output | `make -f pocGNUmakefile install` |
+| [pounicode](https://github.com/tkurtbond/pounicode) | `Utf8`, `Unicode`, `Utf8Strings`, `Utf8Files` | `make install` |
+
+Each library installs itself under both size models in
+`~/.local/lib/poc`. A library records the `poc` that built it, so
+rebuild and reinstall the libraries after upgrading `poc`.
+
     make            # build/O2/podoc and build/OC/podoc
     make test       # the unit and case tests, under both
     make install    # podoc and subs2yaml in ~/.local/bin (PREFIX)
