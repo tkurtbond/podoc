@@ -9,11 +9,37 @@ in PLAN.md) is listed by the writer.
 - An unknown option, or an option missing its argument, ends podoc
   with exit status 2 (ArgParser's), where pandoc's is 6. Every other
   error uses pandoc's exit status: 1 for a file that cannot be read or
-  written, 22 for an unknown output format.
+  written, 4 for PDF output podoc cannot make, 6 for a bad `--wrap` or
+  `--pdf-engine`, 21 for an input format other than markdown, 22 for
+  an unknown output format, 23 for a markdown extension, 83 for a
+  filter.
 - `--help` lists podoc's options in ArgParser's form, and error
-  messages are podoc's own wording.
+  messages are podoc's own wording, starting with "podoc: ".
 - `-t source` writes the input as the reader would see it (joined,
   CRs removed, tabs expanded); pandoc has no such format.
+- podoc reads only `markdown`, and does not turn its extensions on or
+  off: `-f markdown+smart` or `-f markdown-smart` ends podoc with exit
+  status 23, and `-f rst`, or an input whose extension names another
+  format (`.rst`, `.tex`, ...) when there is no `-f`, with 21. Inputs
+  and `-o` imply formats as in pandoc, with pandoc's warnings when an
+  extension names none.
+- podoc writes `html` (`html5`), `ms`, `context`, `markdown`, `json`
+  and PDF; `-t latex`, or `-o x.tex` with no `-t`, ends it with exit
+  status 22.
+- `--pdf-engine` takes only `groff`, `pdfroff` or `context` (by base
+  name, so a path is allowed); anything else ends podoc with status 6,
+  and the message lists only those three. PDF output with neither
+  `-t` nor `--pdf-engine`, which pandoc makes with LaTeX and
+  `pdflatex`, and PDF from html, end podoc with status 4.
+- Filters are not run. `--lua-filter` and `-F`/`--filter` name the
+  user's filters, by file name (any directory), and podoc runs its
+  built-in code in their place: `subs.lua`, `strip-comments.lua`,
+  `general.lua`, `toc-columns.lua`, `combine-docs.lua` and
+  `pandoc-include` (Phases 12 and 13; until then each ends podoc with
+  status 83). `pandoc-mermaid-selenium-filter` is ignored with a
+  warning (decision 4). Any other filter ends podoc with status 83.
+- A `--wrap` value other than `auto`, `none` or `preserve` gives
+  pandoc's message and status, 6.
 
 ## Input
 
@@ -79,9 +105,7 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
   (`\(...\)` and `\[...\]`); pandoc's default output converts it
   with texmath to HTML where it can.
 - Output is not wrapped: `--wrap=auto` behaves as `--wrap=none`;
-  `--wrap=preserve` keeps the input's soft line breaks. A `--wrap`
-  value other than `auto`, `none` or `preserve` ends podoc with exit
-  status 2.
+  `--wrap=preserve` keeps the input's soft line breaks.
 - The media type of an image or link target (for `video`, `audio` and
   `embed`) comes from podoc's built-in table, made from pandoc's.
 - E-mail addresses are not obfuscated (pandoc's default is none too;

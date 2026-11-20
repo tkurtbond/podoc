@@ -18,6 +18,10 @@ CONST
   OptionError* = 6;
   UnknownReader* = 21;
   UnknownWriter* = 22;
+  UnsupportedExtension* = 23;
+  PDFError* = 43;
+  PDFProgramNotFound* = 47;
+  FilterError* = 83;
   ParseError* = 64;
   CouldNotFindDataFile* = 97;
   CouldNotFindMetadataFile* = 98;

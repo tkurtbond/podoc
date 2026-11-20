@@ -28,8 +28,13 @@ The command line is pandoc's:
 
     podoc [OPTIONS] [FILES]
 
-So far (Phase 1) podoc joins its inputs as pandoc does and writes them
-out unchanged, the `source` format.
+podoc reads pandoc markdown with YAML metadata and writes `html`,
+`ms`, `context`, `markdown` or `json` (`-t`, or `-o`'s extension, as
+pandoc infers it), standalone with `-s` and pandoc's templates. `podoc
+--help` lists the options. Not done yet: includes (`-F
+pandoc-include`), the built-in filters and PDF output. Where podoc
+differs from pandoc is in
+[docs/user/differences.md](docs/user/differences.md).
 
 ## License
 

@@ -1,0 +1,35 @@
+ok   - names of a.md
+ok   - names of dir.x/b.TeX
+ok   - names of /usr/bin/pdfroff
+ok   - names of /dev/null
+ok   - names of a.b.c
+ok   - format of a.md
+ok   - format of a.TXT
+ok   - format of a.markdown
+ok   - format of a.html
+ok   - format of a.htm
+ok   - format of a.ms
+ok   - format of a.roff
+ok   - format of a.ctx
+ok   - format of a.context
+ok   - format of a.tex
+ok   - format of a.json
+ok   - format of a.PDF
+ok   - format of a.1
+ok   - format of a.10
+ok   - format of a.zz
+ok   - format of noext
+ok   - format of dir.md/noext
+ok   - pdf from writer '' and engine ''
+ok   - pdf from writer 'ms' and engine ''
+ok   - pdf from writer 'context' and engine ''
+ok   - pdf from writer 'html' and engine ''
+ok   - pdf from writer '' and engine 'pdfroff'
+ok   - pdf from writer '' and engine '/usr/bin/groff'
+ok   - pdf from writer '' and engine 'context'
+ok   - pdf from writer 'ms' and engine 'pdfroff'
+ok   - pdf from writer 'context' and engine '/opt/ctx/context'
+ok   - pdf from writer 'json' and engine ''
+ok   - pdf from writer 'html' and engine 'context'
+ok   - pdf from writer 'ms' and engine 'context'
+ok   - pdf from writer '' and engine 'xyz'

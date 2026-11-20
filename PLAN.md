@@ -422,7 +422,7 @@ Oberon (decision 7).
 
 ## Phase 11: The command line
 
-### Phase 11.1: `PdOptions`
+### Phase 11.1: `PdOptions` [done]
 
 - pandoc's options in pandoc's forms, both `--opt=val` and `--opt val`:
   `-s`, `-f`/`-r`, `-t`/`-w`, `-o`, `-V`, `-M`, `--metadata-file`,
@@ -437,6 +437,13 @@ Oberon (decision 7).
   option.
 - Use ArgParser if it handles these forms; otherwise a small parser of
   podoc's own. Record which.
+
+As done: ArgParser handles every form (`--opt=val`, `--opt val`,
+`-ovalue`, `-o value`, clustered short options), so `PdOptions` uses
+it. Its errors (an unknown option, a missing argument) exit with 2,
+not pandoc's 6. Until Phase 14, PDF output ends podoc with status 43
+once the writer and engine are chosen; until Phases 12 and 13, the
+user's filters end it with status 83.
 
 ## Phase 12: Includes
 
@@ -806,3 +813,27 @@ Oberon (decision 7).
   what pandoc gives for it, except for raw TeX blocks; where the
   round trip fails it fails in pandoc too
   (docs/user/differences.md). Phase 11 next.
+- 2026-11-20: Phase 11 done. `PdOptions` holds the command line (with
+  ArgParser) and works out the formats as pandoc 3.10's
+  `OutputSettings` and `formatFromFilePaths` do: the input format from
+  `-f`/`-r` or the inputs' extensions, the output format from `-t`/`-w`
+  or `-o`'s extension (html by default), with pandoc's "Could not
+  deduce format" warnings; PDF output from `-o *.pdf` or `-t pdf`, the
+  writer and engine as `pdfWriterAndProg` chooses them, standalone,
+  and the `pdf-engine` variable set after `pandoc-version`. New
+  options: `-f`/`-r`, `--pdf-engine-opt`, `--lua-filter`,
+  `-F`/`--filter`. `--wrap` and `--pdf-engine` errors now exit with 6,
+  as pandoc's. `podoc.Mod` keeps only running. `make test` passed
+  under `-O2` and `-OC`: the new `PdOptionsTest` (35 checks: file
+  names, formats from names, PDF writers and engines), 131 of 131
+  cases (8 new: errors for PDF from json, `-f rst`, `-f
+  markdown+smart`, `--wrap=bad`, `--pdf-engine=xyz`, an unknown and a
+  not yet built-in filter, and the mermaid filter ignored) and 23 of
+  23 round trips. By hand, against pandoc: the same statuses and
+  messages for format deduction (`.zz`, `/dev/null`, `-o x.zz`, `-o
+  x.ms`), `markdown+foo` (23), PDF from json and context-with-html
+  (4), `--wrap=bad` (6), `--pdf-engine=xyz` and a path (6, podoc
+  listing only its engines) and unknown filters (83, podoc's second
+  line). `make compare` gave 870 of 927 the same: the 24 differences
+  of Phase 10, and 33 from the new cases where podoc deliberately
+  differs (docs/user/differences.md). Phase 12 next.

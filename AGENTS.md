@@ -31,8 +31,9 @@ markdown reader's blocks and inlines, `-t json`, YAML metadata with
 `-H`, `-B`, `-A`, and the HTML writer, `PdHtml`, with `--toc`, `-N`,
 `--css`, `--id-prefix` and `--wrap`, the ms writer, `PdMs`, with
 `--pdf-engine`, the ConTeXt writer, `PdConTeXt`, and the markdown
-writer, `PdMdWriter`, with its round-trip test). Phase 11, the command
-line, next.
+writer, `PdMdWriter`, with its round-trip test, and the command line,
+`PdOptions`, with the formats inferred as pandoc does). Phase 12,
+includes, next.
 See PLAN.md's State.
 
 ## Reference material
@@ -128,8 +129,10 @@ reinstall after upgrading poc.
 
 Errors the user can cause end podoc with pandoc's exit status for that
 error (`Text.Pandoc.Error`), through `PdIO.Fail` or `PdIO.Exit`: 1
-input or output, 5 template error, 22 unknown output format, 64
-parse error, 97 data file not found, 98 metadata file not found, 99
+input or output, 4 application error (PDF output podoc cannot make),
+5 template error, 6 option error, 21 unknown input format, 22 unknown
+output format, 23 unsupported extension, 43 PDF error, 47 PDF program
+not found, 64 parse error, 83 filter error, 97 data file not found, 98 metadata file not found, 99
 resource not found. ArgParser ends
 with 2 on a bad option (pandoc: 6).
 
