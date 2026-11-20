@@ -52,7 +52,8 @@ VAR
   from*: String; (* -f; "" until Resolve *)
   gridTables*: BOOLEAN; (* the grid_tables extension: TRUE unless -f
     markdown-grid_tables *)
-  to*: String; (* -t; the writer after Resolve *)
+  to*: String; (* -t; the writer after Resolve, without extensions *)
+  gutenberg*: BOOLEAN; (* after Resolve: -t plain+gutenberg *)
   pdf*: BOOLEAN; (* after Resolve: the output is PDF *)
   pdfEngine*: String; (* --pdf-engine, or after Resolve the engine for PDF *)
   pdfEngineOpts*: File; (* --pdf-engine-opt *)
@@ -585,35 +586,87 @@ BEGIN
   PdIO.Message(m)
 END CouldNotDeduce;
 
-(* Ends podoc if the reader is not markdown: 21 for another format, 23
-   for an extension of markdown that podoc does not turn on or off.
-   grid_tables is the one it does: +grid_tables or -grid_tables, the
-   last one given wins, sets gridTables *)
-PROCEDURE CheckReader;
-  VAR i, j: LONGINT; name, ext: String; on: BOOLEAN;
+(* The extensions in spec from i on, as pandoc's parseFlavoredFormat
+   and applyExtensionsDiff take them: each +ext enables ext and each
+   -ext disables it, and an extension enabled anywhere is on, whatever
+   disables it. a and b are the extensions the format takes ("" for
+   none); on is a's state, its default on entry. Returns FALSE, with
+   bad the extension, at the first that is neither a nor b. *)
+PROCEDURE Extensions(spec: ARRAY OF CHAR; i: LONGINT; a, b: ARRAY OF CHAR;
+                     VAR on: BOOLEAN; VAR bad: ARRAY OF CHAR): BOOLEAN;
+  VAR j: LONGINT; ext: String; plus, enabled, disabled: BOOLEAN;
+BEGIN
+  enabled := FALSE; disabled := FALSE;
+  WHILE spec[i] # 0X DO
+    plus := spec[i] = "+"; INC(i); j := 0;
+    WHILE (spec[i] # 0X) & (spec[i] # "+") & (spec[i] # "-") DO
+      ext[j] := spec[i]; INC(i); INC(j)
+    END;
+    ext[j] := 0X;
+    IF (a # "") & (ext = a) THEN
+      IF plus THEN enabled := TRUE ELSE disabled := TRUE END
+    ELSIF (b = "") OR (ext # b) THEN COPY(ext, bad); RETURN FALSE
+    END
+  END;
+  on := enabled OR on & ~disabled;
+  RETURN TRUE
+END Extensions;
+
+(* name := spec up to its first + or -; returns where that is *)
+PROCEDURE FormatName(spec: ARRAY OF CHAR; VAR name: ARRAY OF CHAR): LONGINT;
+  VAR i: LONGINT;
 BEGIN
   i := 0;
-  WHILE (from[i] # 0X) & (from[i] # "+") & (from[i] # "-") DO
-    name[i] := from[i]; INC(i)
+  WHILE (spec[i] # 0X) & (spec[i] # "+") & (spec[i] # "-") DO
+    name[i] := spec[i]; INC(i)
   END;
   name[i] := 0X;
+  RETURN i
+END FormatName;
+
+(* Ends podoc if the reader is not markdown: 21 for another format, 23
+   for an extension of markdown that podoc does not take. grid_tables
+   sets gridTables; gutenberg, which pandoc's reader ignores, is
+   taken and ignored. *)
+PROCEDURE CheckReader;
+  VAR i: LONGINT; name, ext: String;
+BEGIN
+  i := FormatName(from, name);
   IF name # "markdown" THEN
     PdIO.Message3("Unknown input format '", name, "'");
     PdIO.Exit(PdIO.UnknownReader)
   END;
-  WHILE from[i] # 0X DO
-    on := from[i] = "+"; INC(i); j := 0;
-    WHILE (from[i] # 0X) & (from[i] # "+") & (from[i] # "-") DO
-      ext[j] := from[i]; INC(i); INC(j)
-    END;
-    ext[j] := 0X;
-    IF ext = "grid_tables" THEN gridTables := on
-    ELSE
-      PdIO.Message3("The extension '", ext, "' is not supported by podoc.");
-      PdIO.Exit(PdIO.UnsupportedExtension)
-    END
+  IF ~Extensions(from, i, "grid_tables", "gutenberg", gridTables, ext) THEN
+    PdIO.Message3("The extension '", ext, "' is not supported by podoc.");
+    PdIO.Exit(PdIO.UnsupportedExtension)
   END
 END CheckReader;
+
+(* Ends podoc with 23 if toExts, the writer's extensions, has one that
+   podoc does not take: gutenberg for plain, which sets gutenberg, and
+   for markdown, where pandoc ignores it. For another writer gutenberg
+   gets pandoc's message. *)
+PROCEDURE CheckWriter(VAR name, toExts: ARRAY OF CHAR);
+  VAR ext: String; m: ARRAY 4096 OF CHAR; ok: BOOLEAN;
+BEGIN
+  gutenberg := FALSE;
+  IF (to = "plain") OR (to = "markdown") THEN
+    ok := Extensions(toExts, 0, "gutenberg", "", gutenberg, ext);
+    IF to = "markdown" THEN gutenberg := FALSE END
+  ELSE ok := Extensions(toExts, 0, "", "", gutenberg, ext)
+  END;
+  IF ~ok THEN
+    IF ext = "gutenberg" THEN
+      COPY("The extension 'gutenberg' is not supported for ", m);
+      Append(name, m); Append(".", m); PdIO.Message(m);
+      COPY("Use --list-extensions=", m); Append(name, m);
+      Append(" to list supported extensions.", m); PdIO.Message(m)
+    ELSE
+      PdIO.Message3("The extension '", ext, "' is not supported by podoc.")
+    END;
+    PdIO.Exit(PdIO.UnsupportedExtension)
+  END
+END CheckWriter;
 
 (* Checks the filters, by their file names: podoc runs built-in code
    in place of the user's filters (pandoc-include, given with --filter;
@@ -668,7 +721,8 @@ END CheckFilters;
    source) and pdf whether its output is made into PDF, with pdfEngine
    the engine. *)
 PROCEDURE Resolve*;
-  VAR f: File; fmt, exts, w, e: String; err: ARRAY 4096 OF CHAR;
+  VAR f: File; fmt, exts, w, e, toExts: String; err: ARRAY 4096 OF CHAR;
+    i, j: LONGINT;
 BEGIN
   IF from = "" THEN
     f := files; exts := "";
@@ -686,6 +740,10 @@ BEGIN
     END
   END;
   CheckReader;
+  (* -t's extensions apart; checked once the writer is known *)
+  i := FormatName(to, fmt); j := 0;
+  WHILE to[i] # 0X DO toExts[j] := to[i]; INC(i); INC(j) END;
+  toExts[j] := 0X; COPY(fmt, to);
   Extension(output, fmt);
   pdf := (fmt = ".pdf") OR (to = "pdf");
   IF pdf THEN
@@ -715,13 +773,14 @@ BEGIN
     PdIO.Message3("Unknown output format '", to, "'");
     PdIO.Exit(PdIO.UnknownWriter)
   END;
+  CheckWriter(filterFormat, toExts);
   CheckFilters
 END Resolve;
 
 BEGIN
   files := NIL; lastFile := NIL; metaFiles := NIL; lastMetaFile := NIL;
   cmdMeta := A.NewMetaMap();
-  output := ""; from := ""; gridTables := TRUE; to := ""; pdf := FALSE;
+  output := ""; from := ""; gridTables := TRUE; to := ""; gutenberg := FALSE; pdf := FALSE;
   pdfEngine := "";
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;

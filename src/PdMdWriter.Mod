@@ -76,6 +76,7 @@ VAR
   tocDepth: INTEGER;
   idPrefix: Rope;
   plain: BOOLEAN; (* plain text, not markdown *)
+  gutenberg: BOOLEAN; (* plain text with Project Gutenberg's conventions *)
 
   (* the writer's state *)
   notes, lastNote: NoteList; (* stNotes, in order *)
@@ -653,6 +654,7 @@ BEGIN
   | A.Emph:
     c := i(A.ContInl).content;
     IF (c # NIL) & (c.next = NIL) & (c.kind = A.Emph) THEN d := Inlines(c(A.ContInl).content)
+    ELSIF plain & gutenberg THEN d := Delim(c, "_", "_")
     ELSIF plain THEN d := Inlines(c)
     ELSE d := Delim(c, "*", "*")
     END
@@ -662,7 +664,8 @@ BEGIN
     ELSIF c # NIL THEN d := L.Cat3(Lit("["), Inlines(c), Lit("]{.underline}"))
     END
   | A.Strong:
-    IF plain THEN d := Inlines(i(A.ContInl).content)
+    IF plain & gutenberg THEN d := Capitals(i(A.ContInl).content)
+    ELSIF plain THEN d := Inlines(i(A.ContInl).content)
     ELSE d := Delim(i(A.ContInl).content, "**", "**")
     END
   | A.Strikeout: d := Delim(i(A.ContInl).content, "~~", "~~")
@@ -819,8 +822,15 @@ BEGIN
     END
   END;
   save := noBreaks; noBreaks := TRUE;
-  contents := Inlines(h.inlines);
+  IF plain & gutenberg & (h.level = 1) THEN contents := Capitals(h.inlines)
+  ELSE contents := Inlines(h.inlines)
+  END;
   noBreaks := save;
+  IF plain & gutenberg & (h.level = 1) THEN
+    RETURN L.NoWrap(L.Cat3(L.BlankLines(3), contents, L.BlankLines(2)))
+  ELSIF plain & gutenberg & (h.level = 2) THEN
+    RETURN L.NoWrap(L.Cat3(L.BlankLines(2), contents, L.BlankLine()))
+  END;
   IF plain THEN RETURN L.NoWrap(L.Cat(contents, L.BlankLine())) END;
   RETURN L.NoWrap(L.Cat(L.Cat3(Lr(Ropes.Make(h.level, "#")), Lit(" "), contents),
     L.Cat(attr, L.BlankLine())))
@@ -2015,6 +2025,15 @@ BEGIN
   plain := on
 END SetPlain;
 
+(* Sets whether plain text follows Project Gutenberg's conventions
+   (-t plain+gutenberg): emphasis between underscores, strong text and
+   level-1 headings in capitals, more blank lines around level-1 and
+   level-2 headings *)
+PROCEDURE SetGutenberg*(on: BOOLEAN);
+BEGIN
+  gutenberg := on
+END SetGutenberg;
+
 (* A template value as a Doc (doctemplates' FromContext): a simple
    value, or the concatenation of a list's items; NIL if v is neither *)
 PROCEDURE ValDoc(v: T.Value; VAR d: L.Doc): BOOLEAN;
@@ -2103,5 +2122,5 @@ BEGIN
   preserve := FALSE; wantToc := FALSE; numberSections := FALSE; tocDepth := 3; idPrefix := NIL;
   notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ids := NIL;
   inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE;
-  plain := FALSE; upper := FALSE; script := NoScript
+  plain := FALSE; gutenberg := FALSE; upper := FALSE; script := NoScript
 END PdMdWriter.

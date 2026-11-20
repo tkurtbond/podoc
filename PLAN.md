@@ -761,7 +761,7 @@ writer to test it.
   footers read by 16.2, both models; the markdown round trip on them.
   Acceptance as 16.1.
 
-### Phase 16.4: `gutenberg`
+### Phase 16.4: `gutenberg` [done]
 
 - `-t plain+gutenberg` (Project Gutenberg's conventions), as pandoc's
   `Ext_gutenberg` branches: emphasis between underscores; strong in
@@ -1445,4 +1445,25 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   (a12d530) and with this one on the same inputs: 218 and 210
   differences of 1507; the 8 fewer are the grid tables in markdown and
   plain, and none is new. (The 193 recorded for 16.2 was counted
-  before inputs added since.) Phase 16.4 next.
+  before inputs added since.)
+- 2026-11-20: Phase 16.4 done. `-t plain+gutenberg`: emphasis between
+  underscores, strong and level-1 headings in capitals (the writer's
+  existing upper-case mapping, as for small caps, walking into notes),
+  level-1 headings with three blank lines before and two after,
+  level-2 headings with two before. `PdOptions` splits `-t` into the
+  format and its extensions: `plain` takes `gutenberg`, `markdown`
+  takes it without effect, every other writer and every other writer
+  extension ends podoc with 23 (pandoc's message for `gutenberg`,
+  podoc's for others); `-f markdown+gutenberg` is accepted. Fixed a
+  16.2 bug: an extension both enabled and disabled is on, whatever the
+  order, as pandoc's `(default \ disabled) ∪ enabled` (it was the
+  last one). Checked against pandoc 3.10, byte for byte, under both
+  models: `plain+gutenberg` with and without `-s`,
+  `markdown+gutenberg`, `plain-gutenberg`, `plain+gutenberg-gutenberg`
+  and the reverse; exit statuses and messages for `html`, `html5`,
+  `ms`, `context` and `json` `+gutenberg` (23), `foo+gutenberg` (22),
+  `ms+gutenberg -o x.pdf` (23), `plain+gutenberg -o x.pdf` (4), and
+  the three orders of `grid_tables`. New cases: `gutenberg`,
+  `gutenberg-markdown`, `gutenberg-html`, `opt-from-ext3`. `make test`
+  passed under `-O2` and `-OC`: 232 case tests and 23 round trips.
+  Phase 17.1 next.

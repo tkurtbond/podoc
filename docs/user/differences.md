@@ -19,14 +19,19 @@ in PLAN.md) is listed by the writer.
 - `-t source` writes the input as the reader would see it (joined,
   CRs removed, tabs expanded); pandoc has no such format.
 - podoc reads only `markdown`, and turns only `grid_tables` on or
-  off: any other extension, such as `-f markdown+smart` or
+  off (`gutenberg`, which pandoc's reader ignores, it takes and
+  ignores): any other extension, such as `-f markdown+smart` or
   `-f markdown-smart`, ends podoc with exit status 23, and `-f rst`, or an input whose extension names another
   format (`.rst`, `.tex`, ...) when there is no `-f`, with 21. Inputs
   and `-o` imply formats as in pandoc, with pandoc's warnings when an
   extension names none.
 - podoc writes `html` (`html5`), `ms`, `context`, `markdown`,
   `plain`, `json` and PDF; `-t latex`, or `-o x.tex` with no `-t`, ends it with exit
-  status 22.
+  status 22. The one writer extension podoc takes is `gutenberg`,
+  for `plain` (and for `markdown`, where it does nothing, as in
+  pandoc); any other, such as `-t markdown-raw_html`, ends podoc with
+  exit status 23. As in pandoc, an extension both enabled and disabled
+  (`+gutenberg-gutenberg`) is on.
 - `--pdf-engine` takes only `groff`, `pdfroff` or `context` (by base
   name, so a path is allowed); anything else ends podoc with status 6,
   and the message lists only those three. PDF output with neither

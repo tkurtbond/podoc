@@ -177,6 +177,7 @@ BEGIN
     PdHtml.SetOptions(O.idPrefix, O.numberSections, FALSE, FALSE, O.tocDepth, "-");
     PdMdWriter.SetOptions(O.wrap = "preserve", O.toc, O.tocDepth, O.numberSections, O.idPrefix);
     PdMdWriter.SetPlain(to = "plain");
+    PdMdWriter.SetGutenberg(O.gutenberg);
     PdMdWriter.WriteDoc(Doc(text, len), tmpl)
   ELSIF len > 0 THEN
     PdIO.WriteChars(text^, 0, len)

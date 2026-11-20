@@ -1,0 +1,2 @@
+podoc: The extension 'gutenberg' is not supported for html.
+podoc: Use --list-extensions=html to list supported extensions.

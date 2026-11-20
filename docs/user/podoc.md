@@ -61,7 +61,7 @@ when no files are named. `podoc --help` lists the options:
 | Option | Meaning |
 |---|---|
 | `-f`, `-r`, `--from`, `--read` | the input format: `markdown` only |
-| `-t`, `-w`, `--to`, `--write` | `html` (`html5`), `ms`, `context`, `markdown`, `plain`, `json` or `pdf` |
+| `-t`, `-w`, `--to`, `--write` | `html` (`html5`), `ms`, `context`, `markdown`, `plain`, `json` or `pdf`; `plain+gutenberg` for Project Gutenberg's conventions |
 | `-o FILE` | the output file; with no `-t`, its extension names the format |
 | `-s`, `--standalone` | a whole document, through a template |
 | `--template FILE` | the template (implies `-s`) |
@@ -105,7 +105,9 @@ podoc reads pandoc's markdown with its default extensions, among them:
 
 The `%` title block, raw TeX blocks, and citations are not read. Of
 the extensions, only `grid_tables` can be turned off, with
-`-f markdown-grid_tables`. The full list of what is not read is in
+`-f markdown-grid_tables`; as in pandoc, an extension both turned on
+and off (`-f markdown-grid_tables+grid_tables`, in either order) is
+on. The full list of what is not read is in
 [differences.md](differences.md).
 
 podoc reads only markdown. A reStructuredText document can be
