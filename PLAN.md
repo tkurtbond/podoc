@@ -280,9 +280,9 @@ The table is kept in AGENTS.md as codes are assigned.
   (the same as pandoc's with `-yaml_metadata_block`); their metadata
   is Phase 5's acceptance.
 
-## Phase 5: YAML metadata
+## Phase 5: YAML metadata [done]
 
-### Phase 5.1: `PdYaml`
+### Phase 5.1: `PdYaml` [done]
 
 - The subset of §9: block maps and sequences, flow collections of
   scalars, plain, quoted and block scalars, comments. Anything else is
@@ -291,7 +291,7 @@ The table is kept in AGENTS.md as codes are assigned.
 - Unit tests against cases from `yaml-metadata-blocks.md` and the
   user's metadata.
 
-### Phase 5.2: Metadata in the document
+### Phase 5.2: Metadata in the document [done]
 
 - YAML blocks anywhere pandoc accepts them, merged in order.
 - String values parsed as markdown (`MetaInlines` or `MetaBlocks`),
@@ -604,3 +604,29 @@ Oberon (decision 7).
   Simple and multiline tables were brought forward from Later because
   the acceptance needs them (Phase 4.6); grid tables stay there. What
   the reader still lacks is listed in Later. Phase 5 next.
+- 2026-11-20: Phase 5 done. `PdYaml` reads the YAML subset (block
+  maps and sequences, flow collections, plain, quoted, literal and
+  folded scalars with chomping and indentation indicators, comments,
+  YAML 1.1 booleans and nulls, numbers as pandoc's YAML library reads
+  them, duplicate-key warnings); anchors, aliases, tags, directives
+  and complex keys are errors naming the construct. `PdMarkdown`
+  reads YAML metadata blocks where pandoc's `yamlMetaBlock` does
+  (after fenced code), later blocks winning key by key; strings are
+  read as markdown and become `MetaBlocks` or, through
+  `blocksToInlines`, `MetaInlines`; keys ending in `_` are dropped; a
+  block that is not a mapping is read as other blocks. A parse error
+  ends podoc with status 64, naming the file and line as pandoc does
+  (inside a block quote, `f.md_chunk`); duplicate keys are warned of
+  as pandoc does. `podoc` adds `-M`/`--metadata` (booleans as
+  pandoc's `readMetaValue`, repeated keys as lists) and
+  `--metadata-file` (missing: status 98; not a mapping: status 64);
+  the metadata is the files', then the document's, then `-M`'s.
+  `tools/runcases` checks `<name>.status`. `make test` passed under
+  `-O2` and `-OC`: `PdYamlTest` (99 checks) and 21 new `meta-*` cases
+  whose expected JSON is pandoc 3.10's, with expected standard error
+  for the error and warning cases. Acceptance: all 54 markdown files
+  of Lost-Worlds and Galactic-Bounty-Hunters give pandoc's JSON byte
+  for byte, with nothing on standard error; 15 further YAML probes
+  gave pandoc's JSON, and standard error and exit statuses matched
+  pandoc's apart from the wording of YAML parse messages after their
+  location line. Phase 6 next.

@@ -1,0 +1,4 @@
+podoc: [WARNING] YAML warning (meta-warnings.md line 1 column 1): Duplicate key: .c
+podoc: [WARNING] YAML warning (meta-warnings.md line 1 column 1): Duplicate key: .b
+podoc: [WARNING] YAML warning (meta-warnings.md line 10 column 1): Duplicate key: .d
+podoc: [WARNING] YAML warning (meta-warnings.md_chunk line 1 column 1): Duplicate key: .e

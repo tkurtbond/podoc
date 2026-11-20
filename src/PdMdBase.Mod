@@ -82,6 +82,9 @@ VAR
   lastStrText*: LONGINT;
   textId*: LONGINT; (* the current text's id; each Enter makes a new one *)
   texts: LONGINT; (* the ids given out *)
+  depth*: INTEGER; (* how many texts Enter has entered and not left *)
+  outerPos*: LONGINT; (* where in the document's text the first of
+    them was entered *)
   examples: PdAst.KeyVal; (* example labels and their numbers *)
 
 (* Texts *)
@@ -175,13 +178,16 @@ END Rope;
 PROCEDURE Enter*(VAR f: Frame; text: Text; n: LONGINT);
 BEGIN
   f.t := t; f.len := len; f.pos := pos; f.id := textId;
+  IF depth = 0 THEN outerPos := pos END;
+  INC(depth);
   t := text; len := n; pos := 0; INC(texts); textId := texts
 END Enter;
 
 (* Goes back to the text Enter left. *)
 PROCEDURE Leave*(VAR f: Frame);
 BEGIN
-  t := f.t; len := f.len; pos := f.pos; textId := f.id
+  t := f.t; len := f.len; pos := f.pos; textId := f.id;
+  DEC(depth)
 END Leave;
 
 (* Sets the reader up for a new document, the text t[0 .. n-1]. *)
@@ -194,7 +200,8 @@ BEGIN
   IF tabs <= 0 THEN tabStop := 4 ELSE tabStop := tabs END;
   context := NullState; divLevel := 0; htmlBlock := "";
   allowLineBreaks := TRUE; nextExample := 1; examples := NIL;
-  lastStrPos := -1; lastStrText := -1; textId := 0; texts := 0
+  lastStrPos := -1; lastStrText := -1; textId := 0; texts := 0;
+  depth := 0; outerPos := 0
 END Start;
 
 (* Characters *)

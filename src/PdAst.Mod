@@ -1030,7 +1030,7 @@ BEGIN
 END WalkBlocks;
 
 (* Walks the inlines and blocks in the metadata value v. *)
-PROCEDURE WalkMetaValue(w: Walker; v: MetaValue);
+PROCEDURE WalkMetaValue*(w: Walker; v: MetaValue);
   VAR e: MetaEntry; it: MetaItem;
 BEGIN
   WITH

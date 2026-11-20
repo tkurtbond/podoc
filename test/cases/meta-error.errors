@@ -1,0 +1,4 @@
+podoc: Error parsing YAML metadata at "meta-error.md" (line 1, column 1):
+YAML parse exception at line 3, column 2:
+bad indentation of a mapping entry
+Consider enclosing the entire field in 'single quotes'

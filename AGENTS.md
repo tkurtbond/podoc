@@ -24,10 +24,10 @@ there.
 
 ## Status
 
-As of 2026-11-20: Phases 1 to 4 done (the build, the tests, a `podoc`
+As of 2026-11-20: Phases 1 to 5 done (the build, the tests, a `podoc`
 that joins its inputs as pandoc does, the AST, the JSON writer, and
-the markdown reader's blocks and inlines, `-t json`). Phase 5, YAML
-metadata, next.
+the markdown reader's blocks and inlines, `-t json`, and YAML
+metadata with `-M` and `--metadata-file`). Phase 6, templates, next.
 See PLAN.md's State.
 
 ## Reference material

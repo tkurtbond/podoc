@@ -17,6 +17,8 @@ CONST
   OptionError* = 6;
   UnknownReader* = 21;
   UnknownWriter* = 22;
+  ParseError* = 64;
+  CouldNotFindMetadataFile* = 98;
 
   BufSize = 8192;
   ReadChunk = 65536;
@@ -112,6 +114,18 @@ BEGIN
   END;
   RETURN 0
 END ReadHandle;
+
+(* Whether the file name exists (it may still be unreadable). *)
+PROCEDURE Exists*(name: ARRAY OF CHAR): BOOLEAN;
+  VAR h: Platform.FileHandle; e: Platform.ErrorCode;
+    n: ARRAY 4096 OF CHAR;
+BEGIN
+  COPY(name, n);
+  e := Platform.OldRO(n, h);
+  IF e # 0 THEN RETURN ~Platform.Absent(e) END;
+  e := Platform.Close(h);
+  RETURN TRUE
+END Exists;
 
 (* Reads the file name, or standard input when name is "-", whole into
    t; len is its length in bytes. A file that cannot be read ends the

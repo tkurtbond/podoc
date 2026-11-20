@@ -1,0 +1,100 @@
+ok   - empty
+ok   - comments only
+ok   - markers only
+ok   - a scalar document
+ok   - a map
+ok   - later documents are read and dropped
+ok   - an explicit start
+ok   - an empty value
+ok   - an indented map
+ok   - a nested map
+ok   - a sequence
+ok   - a sequence under a key, indented
+ok   - a sequence under a key, not indented
+ok   - compact maps in a sequence
+ok   - a compact sequence
+ok   - an empty entry
+ok   - comments between
+ok   - a plain scalar over lines
+ok   - colons and hashes inside
+ok   - a plain scalar in a sequence over lines
+ok   - trailing spaces
+ok   - single quotes
+ok   - double quotes and escapes
+ok   - quoted folding
+ok   - an escaped line break
+ok   - a single-quoted key
+ok   - a double-quoted key
+ok   - a tab in double quotes
+ok   - a literal scalar
+ok   - a folded scalar
+ok   - strip chomping
+ok   - keep chomping
+ok   - an indentation indicator
+ok   - an empty block scalar
+ok   - a block scalar in a sequence
+ok   - a block scalar with a comment
+ok   - a flow sequence
+ok   - a flow map
+ok   - a flow sequence over lines
+ok   - a single pair in a flow sequence
+ok   - JSON
+ok   - plain flow scalars with spaces
+ok   - duplicate keys
+ok   - a duplicate key in a sequence
+ok   - an anchor
+ok   - an alias
+ok   - a tag
+ok   - a directive
+ok   - a complex key
+ok   - an unclosed flow sequence
+ok   - an unclosed quote
+ok   - a value after a value
+ok   - bad indentation
+ok   - a deeper key
+ok   - a sequence after a key
+ok   - text after a quoted scalar
+ok   - a tab in indentation
+ok   - text after the document
+ok   - a bad escape
+ok   - value of a: ~
+ok   - value of a: NULL
+ok   - value of a:
+ok   - value of a: ''
+ok   - value of a: Yes
+ok   - value of a: y
+ok   - value of a: ON
+ok   - value of a: tRue
+ok   - value of a: off
+ok   - value of a: 'true'
+ok   - value of a: |-$  true
+ok   - value of a: >-$  true
+ok   - value of a: 1
+ok   - value of a: 1.0
+ok   - value of a: 1e3
+ok   - value of a: 0x1F
+ok   - value of a: 0X1F
+ok   - value of a: 0o17
+ok   - value of a: +5
+ok   - value of a: -0
+ok   - value of a: -12
+ok   - value of a: 1.
+ok   - value of a: 1e
+ok   - value of a: .5
+ok   - value of a: 1_000
+ok   - value of a: 1.5e10
+ok   - value of a: 0.001
+ok   - value of a: 0.1
+ok   - value of a: 1.50
+ok   - value of a: 1.5e-3
+ok   - value of a: 123456789.5
+ok   - value of a: 12345678.5
+ok   - value of a: 1234567.5
+ok   - value of a: 99999999999999999999
+ok   - value of a: 9223372036854775807
+ok   - value of a: 9223372036854775808
+ok   - value of a: -9223372036854775808
+ok   - value of a: 1e400
+ok   - value of a: -1E+2
+ok   - value of a: 0xFFFFFFFFFFFFFFFF
+all passed

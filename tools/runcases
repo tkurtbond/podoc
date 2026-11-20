@@ -9,7 +9,8 @@
 #
 # in CASEDIR, and compares its standard output with <name>.<ext> and its
 # standard error with <name>.errors, or with nothing if there is no such
-# file. Results go in OUTDIR. Prints an "ok   - " or "FAIL - " line for
+# file, and its exit status with the number in <name>.status, or with 0
+# if there is no such file. Results go in OUTDIR. Prints an "ok   - " or "FAIL - " line for
 # each, and exits 1 if any failed.
 
 if [ $# -lt 2 ]; then
@@ -41,7 +42,9 @@ for md in *.md; do
     status=$?
     errors=/dev/null
     [ -f "$name.errors" ] && errors=$name.errors
-    if [ $status -eq 0 ] &&
+    want=0
+    [ -f "$name.status" ] && want=$(cat "$name.status")
+    if [ "$status" -eq "$want" ] &&
        diff -u "$name.$ext" "$outdir/$name.$ext" > "$outdir/$name.$ext.diff" &&
        diff -u "$errors" "$outdir/$name.$ext.err" >> "$outdir/$name.$ext.diff"; then
       echo "ok   - $name.$ext"

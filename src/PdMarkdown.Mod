@@ -7,14 +7,19 @@ MODULE PdMarkdown;
    setext and ATX headings (with attributes and identifiers), raw HTML
    blocks, indented code, line blocks, block quotes, horizontal rules,
    notes, reference keys, paragraphs (with implicit figures) and plain
-   text, and pipe, simple and multiline tables. Metadata blocks come
-   in Phase 5; the title block, grid tables and raw TeX blocks are in
-   PLAN.md's Later.
+   text, pipe, simple and multiline tables, and YAML metadata blocks.
+   The title block, grid tables and raw TeX blocks are in PLAN.md's
+   Later.
+
+   A YAML block's strings are read as markdown, as pandoc reads them
+   (Text.Pandoc.Readers.Metadata); ReadMetaFile reads a metadata file
+   so.
 
    Reference links and note references are resolved when the whole
    document has been read, as pandoc resolves them (its F monad). *)
 
-IMPORT Ropes, PdIO, A := PdAst, B := PdMdBase, I := PdMdInline;
+IMPORT Ropes, PdIO, PdSource, A := PdAst, B := PdMdBase, I := PdMdInline,
+  Y := PdYaml;
 
 CONST
   (* what starts a list item *)
@@ -63,6 +68,19 @@ TYPE
     inNote: BOOLEAN (* note references are not resolved *)
   END;
 
+  (* A YAML node in a map being built, waiting to be read *)
+  NodeV = POINTER TO NodeVDesc;
+  NodeVDesc = RECORD (A.MetaValueDesc)
+    node: Y.Node
+  END;
+
+  (* Blocks that become inlines once resolved: normalizeMetaValue's
+     MetaBlocks read as MetaInlines *)
+  PendingV = POINTER TO PendingVDesc;
+  PendingVDesc = RECORD (A.MetaBlocksVDesc) END;
+
+  Message = ARRAY 1024 OF CHAR;
+
   (* A list item, for taskListItemFromAscii after resolving *)
   Item = POINTER TO RECORD
     item: A.BlockList;
@@ -75,6 +93,8 @@ VAR
   headerKeys: Key; (* the implicit header references *)
   notes: Note; (* the notes; the last defined first *)
   listItems: Item; (* the list items *)
+  meta: A.MetaMapV; (* the document's metadata so far *)
+  main: B.Text; (* the document's text, for the places in messages *)
 
 PROCEDURE^ Block(VAR l: A.Blocks): BOOLEAN;
 
@@ -187,6 +207,222 @@ BEGIN
     k.attr := NIL; k.next := headerKeys; headerKeys := k
   END
 END RegisterImplicitHeader;
+
+(* Metadata *)
+
+(* Appends s to the message m. *)
+PROCEDURE Cat(VAR m: ARRAY OF CHAR; s: ARRAY OF CHAR);
+  VAR i, j: LONGINT;
+BEGIN
+  i := 0; WHILE m[i] # 0X DO INC(i) END;
+  j := 0;
+  WHILE (j < LEN(s)) & (s[j] # 0X) & (i < LEN(m) - 1) DO
+    m[i] := s[j]; INC(i); INC(j)
+  END;
+  m[i] := 0X
+END Cat;
+
+(* Appends the number n to the message m. *)
+PROCEDURE CatNum(VAR m: ARRAY OF CHAR; n: LONGINT);
+  VAR d: ARRAY 24 OF CHAR; r: ARRAY 24 OF CHAR; k, i: INTEGER;
+BEGIN
+  k := 0;
+  REPEAT d[k] := CHR(ORD("0") + n MOD 10); n := n DIV 10; INC(k) UNTIL n = 0;
+  i := 0;
+  WHILE k > 0 DO DEC(k); r[i] := d[k]; INC(i) END;
+  r[i] := 0X;
+  Cat(m, r)
+END CatNum;
+
+(* The input and line of the place p in the current text, as pandoc
+   names them: a text read from part of another is a "chunk" of it,
+   its lines counted from its start. *)
+PROCEDURE Where(p: LONGINT; VAR name: ARRAY OF CHAR; VAR line: LONGINT);
+  VAR i: LONGINT; d: INTEGER;
+BEGIN
+  name[0] := 0X; line := 1;
+  IF main = NIL THEN RETURN END;
+  IF B.depth = 0 THEN PdSource.Locate(main^, p, name, line)
+  ELSE
+    PdSource.Locate(main^, B.outerPos, name, line);
+    FOR d := 1 TO B.depth DO Cat(name, "_chunk") END;
+    line := 1;
+    FOR i := 0 TO p - 1 DO
+      IF B.t[i] = 0AX THEN INC(line) END
+    END
+  END
+END Where;
+
+(* Ends podoc with the YAML parse error PdYaml found, in a block or file
+   at line in the input name *)
+PROCEDURE YamlError(name: ARRAY OF CHAR; line: LONGINT);
+  VAR m: Message;
+BEGIN
+  m := "Error parsing YAML metadata at ";
+  IF name # "" THEN Cat(m, 22X); Cat(m, name); Cat(m, '" ') END;
+  Cat(m, "(line "); CatNum(m, line); Cat(m, ", column 1):");
+  Cat(m, 0AX); Cat(m, "YAML parse exception at line "); CatNum(m, Y.errLine);
+  Cat(m, ", column "); CatNum(m, Y.errCol); Cat(m, ":"); Cat(m, 0AX);
+  Cat(m, Y.error);
+  IF Y.error = "bad indentation of a mapping entry" THEN
+    (* libyaml's "did not find expected key", for which pandoc adds: *)
+    Cat(m, 0AX); Cat(m, "Consider enclosing the entire field in 'single quotes'")
+  END;
+  PdIO.Fail("", m, PdIO.ParseError)
+END YamlError;
+
+(* Writes the warnings PdYaml found, for a block or file at line in the
+   input name *)
+PROCEDURE YamlWarnings(name: ARRAY OF CHAR; line: LONGINT);
+  VAR w: Y.Warning; m: Message;
+BEGIN
+  w := Y.warnings;
+  WHILE w # NIL DO
+    m := "YAML warning (";
+    IF name # "" THEN Cat(m, name); Cat(m, " ") END;
+    Cat(m, "line "); CatNum(m, line); Cat(m, " column 1): ");
+    Cat(m, w.text^);
+    PdIO.Warn(m);
+    w := w.next
+  END
+END YamlWarnings;
+
+(* parseFromString' parseBlocks: the blocks of b, read with no last
+   Str *)
+PROCEDURE MetaBlocksOf(VAR b: B.Buf): A.Block;
+  VAR sp, st: LONGINT; r: A.Block;
+BEGIN
+  sp := B.lastStrPos; st := B.lastStrText; B.lastStrPos := -1;
+  r := BlocksOf(b);
+  B.lastStrPos := sp; B.lastStrText := st;
+  RETURN r
+END MetaBlocksOf;
+
+(* normalizeMetaValue: the string s[0 .. len-1] read as markdown. A
+   string that ends in a new line (a block scalar's) is blocks; another
+   is the blocks of it without its leading white space, as inlines. *)
+PROCEDURE MetaText(VAR s: ARRAY OF CHAR; len: LONGINT): A.MetaValue;
+  VAR i, e: LONGINT; b: B.Buf; v: PendingV;
+BEGIN
+  e := len;
+  WHILE (e > 0) & ((s[e - 1] = " ") OR (s[e - 1] = 09X)) DO DEC(e) END;
+  B.InitBuf(b);
+  IF (e > 0) & (s[e - 1] = 0AX) THEN
+    FOR i := 0 TO len - 1 DO B.PutChar(b, s[i]) END;
+    B.PutChar(b, 0AX); B.PutChar(b, 0AX);
+    RETURN A.NewMetaBlocks(MetaBlocksOf(b))
+  END;
+  i := 0;
+  WHILE (i < len) & ((s[i] = " ") OR (s[i] = 09X) OR (s[i] = 0DX) OR (s[i] = 0AX)) DO
+    INC(i)
+  END;
+  WHILE i < len DO B.PutChar(b, s[i]); INC(i) END;
+  NEW(v); v.kind := A.MetaBlocks; v.blocks := MetaBlocksOf(b);
+  RETURN v
+END MetaText;
+
+PROCEDURE^ MetaMapOf(nd: Y.Node): A.MetaMapV;
+
+(* yamlToMetaValue: the YAML node nd as a metadata value *)
+PROCEDURE MetaOf(nd: Y.Node): A.MetaValue;
+  VAR v: A.MetaValue; l: A.MetaListV; p: Y.Pair; s: Y.Text; n: LONGINT;
+    b: BOOLEAN;
+BEGIN
+  IF nd = NIL THEN RETURN A.NewMetaString(NIL) END;
+  CASE nd.kind OF
+    Y.Scalar:
+      CASE Y.Resolve(nd, b) OF
+        Y.Null: v := A.NewMetaString(NIL)
+      | Y.Bool: v := A.NewMetaBool(b)
+      | Y.Number: Y.NumberText(nd, s, n); v := MetaText(s^, n)
+      ELSE
+        IF nd.text = NIL THEN v := A.NewMetaInlines(NIL)
+        ELSE v := MetaText(nd.text^, nd.len)
+        END
+      END
+  | Y.Sequence:
+      l := A.NewMetaList(); p := nd.items;
+      WHILE p # NIL DO A.AddMetaItem(l, MetaOf(p.value)); p := p.next END;
+      v := l
+  | Y.Mapping: v := MetaMapOf(nd)
+  END;
+  RETURN v
+END MetaOf;
+
+(* yamlMap: the YAML mapping nd as a metadata map, without the keys
+   that end in "_". The values are read in the order of their keys, as
+   pandoc reads them. *)
+PROCEDURE MetaMapOf(nd: Y.Node): A.MetaMapV;
+  VAR m: A.MetaMapV; p: Y.Pair; b: B.Buf; i: LONGINT; nv: NodeV;
+    e: A.MetaEntry;
+BEGIN
+  m := A.NewMetaMap(); p := nd.items;
+  WHILE p # NIL DO
+    B.InitBuf(b);
+    IF p.key # NIL THEN
+      FOR i := 0 TO p.key.len - 1 DO B.PutChar(b, p.key.text[i]) END
+    END;
+    IF (b.len = 0) OR (b.t[b.len - 1] # "_") THEN
+      NEW(nv); nv.kind := 0; nv.node := p.value;
+      A.SetMeta(m, B.BufRope(b), nv)
+    END;
+    p := p.next
+  END;
+  e := m.entries;
+  WHILE e # NIL DO e.value := MetaOf(e.value(NodeV).node); e := e.next END;
+  RETURN m
+END MetaMapOf;
+
+(* Whether the YAML document doc is null: no metadata *)
+PROCEDURE IsNull(doc: Y.Node): BOOLEAN;
+  VAR b: BOOLEAN;
+BEGIN
+  RETURN (doc = NIL) OR (doc.kind = Y.Scalar) & (Y.Resolve(doc, b) = Y.Null)
+END IsNull;
+
+(* yamlMetaBlock: a YAML block, its keys set in the document's metadata,
+   replacing those of earlier blocks. One whose YAML is not a mapping
+   (or null) is not a metadata block. *)
+PROCEDURE YamlBlock(): BOOLEAN;
+  VAR p, q, s, e, i, n, line: LONGINT; y: Y.Text; doc: Y.Node;
+    m: A.MetaMapV; en: A.MetaEntry; name: Message;
+BEGIN
+  p := B.pos;
+  IF ~B.Looking(p, "---") THEN RETURN FALSE END;
+  q := B.BlankLine(p + 3);
+  IF (q < 0) OR (B.BlankLine(q) >= 0) THEN RETURN FALSE END;
+  s := q;
+  LOOP
+    IF q >= B.len THEN RETURN FALSE END;
+    IF B.Looking(q, "---") OR B.Looking(q, "...") THEN
+      e := B.BlankLine(q + 3);
+      IF e >= 0 THEN EXIT END
+    END;
+    q := B.LineEnd(q);
+    IF q >= B.len THEN RETURN FALSE END;
+    INC(q)
+  END;
+  (* "---", the lines, and "..." *)
+  n := q - s + 8;
+  NEW(y, n + 1);
+  y[0] := "-"; y[1] := "-"; y[2] := "-"; y[3] := 0AX;
+  FOR i := s TO q - 1 DO y[i - s + 4] := B.t[i] END;
+  y[n - 4] := "."; y[n - 3] := "."; y[n - 2] := "."; y[n - 1] := 0AX;
+  y[n] := 0X;
+  e := B.SkipBlankLines(e);
+  Where(p, name, line);
+  IF ~Y.Parse(y^, n, doc) THEN YamlError(name, line) END;
+  YamlWarnings(name, line);
+  IF ~IsNull(doc) THEN
+    IF doc.kind # Y.Mapping THEN RETURN FALSE END;
+    B.pos := e;
+    m := MetaMapOf(doc);
+    en := m.entries;
+    WHILE en # NIL DO A.SetMeta(meta, en.key, en.value); en := en.next END
+  END;
+  B.pos := e;
+  RETURN TRUE
+END YamlBlock;
 
 (* Code *)
 
@@ -1640,7 +1876,7 @@ BEGIN
   IF B.pos >= B.len THEN RETURN FALSE END;
   q := B.BlankLines(B.pos);
   IF q >= 0 THEN B.pos := q; RETURN TRUE END;
-  IF FencedCode(l) OR BulletList(l) OR DivHtml(l) OR DivFenced(l)
+  IF FencedCode(l) OR YamlBlock() OR BulletList(l) OR DivHtml(l) OR DivFenced(l)
       OR SetextHeader(l) OR AtxHeader(l) OR HtmlBlock(l)
       OR Table(l) OR IndentedCode(l) OR LineBlock(l) OR BlockQuote(l) THEN
     RETURN TRUE
@@ -1750,10 +1986,106 @@ BEGIN
   RETURN b
 END Block;
 
-(* Resolves the references in the blocks d: notes first, then the
-   rest *)
+(* blocksToInlines *)
+
+PROCEDURE^ BlocksInlines(VAR l: A.Inlines; b: A.Block);
+
+(* The inlines of the rows r, each row's after a line break *)
+PROCEDURE RowsInlines(VAR l: A.Inlines; r: A.Row; VAR first: BOOLEAN);
+  VAR c: A.Cell;
+BEGIN
+  WHILE r # NIL DO
+    IF ~first THEN A.Append(l, A.NewSimple(A.LineBreak)) END;
+    first := FALSE;
+    c := r.cells;
+    WHILE c # NIL DO BlocksInlines(l, c.blocks); c := c.next END;
+    r := r.next
+  END
+END RowsInlines;
+
+(* blockToInlines: the block b as inlines, appended to l *)
+PROCEDURE BlockInlines(VAR l: A.Inlines; b: A.Block);
+  VAR ln: A.InlineList; it: A.BlockList; d: A.DefItem; tb: A.TableBody;
+    first: BOOLEAN;
+BEGIN
+  CASE b.kind OF
+    A.Plain, A.Para, A.Header: A.Append(l, b(A.InlinesBlk).inlines)
+  | A.LineBlock:
+      ln := b(A.LineBlk).lines; first := TRUE;
+      WHILE ln # NIL DO
+        IF ~first THEN A.Append(l, A.NewSimple(A.LineBreak)) END;
+        first := FALSE;
+        A.Append(l, ln.inlines); ln := ln.next
+      END
+  | A.CodeBlock:
+      A.Append(l, A.NewCode(b(A.CodeBlk).attr, b(A.CodeBlk).text))
+  | A.RawBlock:
+      A.Append(l, A.NewRawInline(b(A.RawBlk).format, b(A.RawBlk).text))
+  | A.BlockQuote, A.Div, A.Figure: BlocksInlines(l, b(A.BlocksBlk).blocks)
+  | A.OrderedList, A.BulletList:
+      it := b(A.ListBlk).items;
+      WHILE it # NIL DO BlocksInlines(l, it.blocks); it := it.next END
+  | A.DefinitionList:
+      d := b(A.DefListBlk).items;
+      WHILE d # NIL DO
+        A.Append(l, d.term);
+        A.Append(l, A.NewStr(A.S(":"))); A.Append(l, A.NewSimple(A.Space));
+        it := d.defs;
+        WHILE it # NIL DO BlocksInlines(l, it.blocks); it := it.next END;
+        d := d.next
+      END
+  | A.Table:
+      first := TRUE;
+      RowsInlines(l, b(A.TableBlk).head.rows, first);
+      tb := b(A.TableBlk).bodies;
+      WHILE tb # NIL DO
+        RowsInlines(l, tb.head, first); RowsInlines(l, tb.body, first);
+        tb := tb.next
+      END;
+      RowsInlines(l, b(A.TableBlk).foot.rows, first)
+  ELSE (* HorizontalRule: nothing *)
+  END
+END BlockInlines;
+
+(* blocksToInlines': the blocks b as inlines, a line break between
+   each two, appended to l *)
+PROCEDURE BlocksInlines(VAR l: A.Inlines; b: A.Block);
+  VAR next: A.Block; first: BOOLEAN;
+BEGIN
+  first := TRUE;
+  WHILE b # NIL DO
+    next := b.next;
+    IF ~first THEN A.Append(l, A.NewSimple(A.LineBreak)) END;
+    first := FALSE;
+    BlockInlines(l, b);
+    b := next
+  END
+END BlocksInlines;
+
+(* The metadata value v with its pending blocks made inlines *)
+PROCEDURE Finish(v: A.MetaValue): A.MetaValue;
+  VAR e: A.MetaEntry; it: A.MetaItem; l: A.Inlines;
+BEGIN
+  IF v = NIL THEN RETURN v END;
+  WITH
+    v: PendingV DO
+      A.InitInlines(l); BlocksInlines(l, v.blocks);
+      RETURN A.NewMetaInlines(l.first)
+  | v: A.MetaMapV DO
+      e := v.entries;
+      WHILE e # NIL DO e.value := Finish(e.value); e := e.next END
+  | v: A.MetaListV DO
+      it := v.items;
+      WHILE it # NIL DO it.value := Finish(it.value); it := it.next END
+  ELSE
+  END;
+  RETURN v
+END Finish;
+
+(* Resolves the references in the blocks and metadata of d: notes
+   first, then the rest *)
 PROCEDURE Resolve(d: A.Doc);
-  VAR r: Resolver; n: Note; old: BOOLEAN;
+  VAR r: Resolver; n: Note; old: BOOLEAN; v: A.MetaValue;
 BEGIN
   old := A.mergeWalk; A.mergeWalk := TRUE;
   NEW(r); r.inNote := TRUE;
@@ -1761,16 +2093,25 @@ BEGIN
   WHILE n # NIL DO n.blocks := A.WalkBlocks(r, n.blocks); n := n.next END;
   r.inNote := FALSE;
   d.blocks := A.WalkBlocks(r, d.blocks);
+  A.WalkMetaValue(r, d.meta);
   A.mergeWalk := old;
   WHILE listItems # NIL DO
     TaskItem(listItems.item.blocks); listItems := listItems.next
-  END
+  END;
+  v := Finish(d.meta)
 END Resolve;
 
 (* Reading *)
 
+(* Sets the reader's state up for a new text *)
+PROCEDURE Reset;
+BEGIN
+  ids := NIL; keys := NIL; headerKeys := NIL; notes := NIL; listItems := NIL;
+  I.Reset
+END Reset;
+
 (* The document in text[0 .. n-1], pandoc markdown; tabStop is used
-   where tabs are kept *)
+   where tabs are kept. Places in messages are found with PdSource. *)
 PROCEDURE Read*(text: PdIO.Text; n: LONGINT; tabStop: INTEGER): A.Doc;
   VAR t: B.Text; i, k: LONGINT; d: A.Doc;
 BEGIN
@@ -1781,14 +2122,43 @@ BEGIN
   FOR i := 0 TO n - 1 DO t[i] := text[i] END;
   FOR i := n TO n + 2 - k DO t[i] := 0AX END;
   B.Start(t, n + 3 - k, tabStop);
-  ids := NIL; keys := NIL; headerKeys := NIL; notes := NIL; listItems := NIL;
-  I.Reset;
+  main := B.t;
+  Reset;
   d := A.NewDoc();
+  meta := d.meta;
   d.blocks := ParseBlocks();
   Resolve(d);
-  keys := NIL; headerKeys := NIL; notes := NIL;
+  keys := NIL; headerKeys := NIL; notes := NIL; meta := NIL; main := NIL;
   RETURN d
 END Read;
+
+(* yamlToMeta: the metadata in the YAML file name, its strings read as
+   markdown, with tab stop tabStop, apart from any document. A file
+   that cannot be read, is not YAML podoc reads, or is not a mapping
+   ends podoc with a message. *)
+PROCEDURE ReadMetaFile*(name: ARRAY OF CHAR; tabStop: INTEGER): A.MetaMapV;
+  VAR t: PdIO.Text; len: LONGINT; doc: Y.Node; d: A.Doc; m: Message;
+BEGIN
+  PdIO.ReadFile(name, t, len);
+  IF t = NIL THEN PdIO.Reserve(t, 0, 1) END;
+  IF ~Y.Parse(t^, len, doc) THEN YamlError(name, 1) END;
+  YamlWarnings(name, 1);
+  d := A.NewDoc();
+  IF IsNull(doc) THEN RETURN d.meta END;
+  IF doc.kind # Y.Mapping THEN
+    m := "Error at "; Cat(m, 22X); Cat(m, name); Cat(m, '" (line 1, column 1):');
+    Cat(m, 0AX); Cat(m, "expected YAML object");
+    PdIO.Fail("", m, PdIO.ParseError)
+  END;
+  B.Start(B.NewText(0), 0, tabStop);
+  main := NIL;
+  Reset;
+  meta := d.meta;
+  d.meta := MetaMapOf(doc);
+  Resolve(d);
+  keys := NIL; headerKeys := NIL; notes := NIL; meta := NIL;
+  RETURN d.meta
+END ReadMetaFile;
 
 BEGIN
   ids := NIL

@@ -38,3 +38,18 @@ read:
 A table's column widths count East Asian wide and full-width
 characters as two and combining marks as none, which approximates
 pandoc's character widths.
+
+## YAML metadata
+
+podoc reads YAML with its own small reader, `PdYaml`, not libyaml.
+
+- Anchors (`&a`), aliases (`*a`), tags (`!x`), directives (`%YAML`)
+  and complex keys (`? `) are not read: each is a parse error naming
+  the construct.
+- A YAML parse error names the file, line and column as pandoc does,
+  but the message after that is podoc's own wording, not libyaml's.
+  The hint "Consider enclosing the entire field in 'single quotes'"
+  is given only for a mapping entry that is badly indented.
+- Messages start with "podoc: ".
+- `--metadata-file` files are looked for only where named, not also
+  in pandoc's data directory.

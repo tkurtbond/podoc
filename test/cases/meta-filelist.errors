@@ -1,0 +1,2 @@
+podoc: Error at "meta-list.yaml" (line 1, column 1):
+expected YAML object
