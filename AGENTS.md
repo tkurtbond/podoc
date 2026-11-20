@@ -1,0 +1,139 @@
+# AGENTS.md
+
+Notes for agents (and people) working in this repository.
+
+## What this is
+
+podoc is a proof of concept: an Oberon-2 program, built with the
+Peaseblossom Oberon Compiler (`poc`), that replaces the parts of pandoc
+the user's writing builds need. It reads pandoc markdown with YAML
+metadata blocks and writes HTML, groff `ms`, ConTeXt and markdown, and it runs
+`pdfroff`, `groff -Tpdf` or `context` to make PDFs. The user's Lua
+filters and `pandoc-include` are built in as Oberon code. pandoc is
+too big to install on small and less common systems; podoc is meant
+to build wherever poc does.
+
+Read `docs/research/podoc-scope.md` before writing code: it records how
+the user uses pandoc, what podoc must do, and why. The plan, phase by
+phase, is `PLAN.md`; each phase's state is recorded there.
+
+The user's decisions on the research's open questions are in
+`PLAN.md`'s "Decisions" (2026-11-20). Do not settle a new question
+silently. Raise it with the user, then record the decision, dated,
+there.
+
+## Status
+
+As of 2026-11-20: research, plan and decisions only. No code yet.
+Phase 1 is next.
+
+## Reference material
+
+| What | Where |
+|---|---|
+| pandoc 3.10 source (matches the installed binary) | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.10` |
+| pandoc 3.1.11.1 source | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.1.11.1` |
+| doctemplates source | `/usr/local/sw/src/lang/Haskell/pandoc/doctemplates` |
+| The markdown reader | `src/Text/Pandoc/Readers/Markdown.hs`, `Parsing/` |
+| The writers | `src/Text/Pandoc/Writers/{HTML,Ms,Roff,ConTeXt,Shared}.hs` |
+| PDF engines | `src/Text/Pandoc/PDF.hs` |
+| Default templates | `data/templates/` (GPL-2.0-or-later or BSD-3-Clause) |
+| Test fixtures | `test/testsuite.txt`, `test/writer.*`, `test/tables.*`, `test/command/*.md` |
+| Installed pandoc (the oracle) | `~/.cabal/bin/pandoc`, 3.10, with Lua 5.4 |
+| `pandoc-include` | `~/.local/lib/python3.14/site-packages/pandoc_include/main.py` |
+| The user's filters and templates | `~/.pandoc/filters`, `~/.pandoc/templates` |
+| Markdown projects using pandoc | `~/Repos/RPG/Lost-Worlds`, `~/Repos/RPG/Galactic-Bounty-Hunters` |
+| reStructuredText projects (templates, variables) | `~/Repos/RPG/Red-Planet-Blue-Helmets/2ER`, `~/current/RPG/Campaigns/Alusia/Return/Scenarios/005-merchant/rst-version` |
+
+The user's projects and `~/.pandoc` are read only: never change them.
+Read the specific files you need; do not list `~/.pandoc` or other
+private directories wholesale.
+
+## The compiler
+
+- **Use the installed `poc`**: `/usr/bin/poc`, version 0.14.0 (a410135)
+  as of 2026-11-19. Its libraries are in `/usr/lib/poc`, and libraries
+  installed by the user in `~/.local/lib/poc/<triple>/{O2,OC}`. Check
+  what the compiler accepts by running it, not by reading its source.
+- **`~/Repos/Oberon/Peaseblossom` is reference only.** Read its
+  `doc/users-guide.md`, `doc/developer/language-extensions.md`, its
+  runtime (`rtl/`) and its `AGENTS.md` for conventions, but never
+  modify, build or commit anything there. A poc bug found here is
+  reported to the user, who records it in Peaseblossom's `PLAN.md`; do
+  not work around it silently.
+- **Target:** LLVM, `x86_64-redhat-linux-gnu` by default; Linux and
+  the BSDs. Not VAX/VMS (decision 1). Keep the core free of C where
+  there is a choice; optional C (libfyaml) goes behind a build option.
+- **Size models:** under `-O2`, the default, `INTEGER` and `LONGINT` are
+  16 and 32 bits; under `-OC` they are 32 and 64. Every module must
+  compile and pass its tests under both. Text lengths and file sizes
+  can exceed 32,767, so index text with `LONGINT` where it can.
+- **Functions cannot return records or arrays** in poc; they come back
+  through a `VAR` parameter.
+- **C**, when an optional feature needs it, is called with
+  `PROCEDURE ["C", "name"]` and a module's C part `<Module>.c`; see
+  pofltk for callbacks from C into Oberon. No C `longjmp` may cross an
+  Oberon frame.
+- **Module names** must not collide with poc's runtime modules or
+  other libraries: Oberon has one global module namespace. podoc's
+  modules are prefixed `Pd`.
+
+## Libraries
+
+| Library | Use | Notes |
+|---|---|---|
+| pounicode (`Utf8`, `Unicode`, `Utf8Strings`, `Utf8Files`) | identifiers, delimiter rules | |
+| ArgParser | the command line, if it handles pandoc's option forms | poc build via `pocGNUmakefile` |
+| Ropes | AST strings and all output (scope §12.1) | installed for poc, both models; byte-oriented |
+| pounix (`UnixProcesses`, `UnixFiles`) | running PDF engines without a shell | Unix only |
+| poDateTime | dates, if needed | |
+| polibfyaml | full YAML, a later build option | needs libfyaml; installed for `-OC` only |
+
+A library records the poc that built it, and another poc refuses it:
+rebuild and reinstall after upgrading poc.
+
+## Building and testing
+
+Planned (PLAN.md, Phase 1); update this section when it exists.
+
+- `make` builds `podoc` under `-O2` and `-OC` in `build/O2` and
+  `build/OC`.
+- `make test` runs the unit tests (`test/<Name>.Mod`, printing
+  `ok   - ` and `FAIL - ` lines) and the case tests (`test/cases/`,
+  expected output committed). It must not need pandoc. Expected JSON
+  is pandoc 3.10's; the writers' expected files start as pandoc's
+  `--wrap=none` output and may be replaced by podoc's equivalent
+  output, each difference recorded in `docs/user/differences.md`
+  (decision 3).
+- `make compare` runs pandoc and podoc side by side, where pandoc is
+  installed.
+- The reader is checked against `pandoc -f markdown -t json`, byte for
+  byte; the writers against `pandoc --wrap=none -t html|ms|context`,
+  for equivalence; the markdown writer by the round trip (its output
+  read again gives the same JSON).
+
+## Halt codes
+
+The runtime uses 10..20 and the po* libraries 61..99; podoc's codes
+start at 100. None assigned yet. List each code here when it is.
+
+## Conventions
+
+- **Claim only what has been verified.** Say in PLAN.md's State what
+  was run and what passed, with the date.
+- **Commit only when asked.** Each phase ends with a commit, made when
+  the user asks.
+- **Temporary files** go under `/usr/local/sw/tmp`, in a directory per
+  session, never `/tmp` (a RAM disk on this machine). Delete it when
+  done. Large runs (whole-corpus comparisons, ConTeXt) are capped with
+  `systemd-run --user --scope -q -p MemoryMax=... -p MemorySwapMax=0`.
+- **Portable:** Linux and the BSDs. GNU make is the build tool; shell
+  scripts are POSIX `sh`.
+- **Match pandoc**, not a reading of its manual: when unsure, run
+  pandoc 3.10 and do what it does. Known, deliberate differences are
+  listed in the user documentation.
+- **Scope:** add a feature when the user's documents or filters need
+  it, or the plan schedules it. Everything else goes to PLAN.md's
+  "Later".
+- **Style:** as the other Oberon projects under `~/Repos/Oberon`: one
+  module per file, `src/<Module>.Mod`, exported procedures commented.
