@@ -24,8 +24,9 @@ there.
 
 ## Status
 
-As of 2026-11-20: Phase 1 done (the build, the tests, and a `podoc`
-that joins its inputs as pandoc does). See PLAN.md's State.
+As of 2026-11-20: Phases 1 and 2 done (the build, the tests, a `podoc`
+that joins its inputs as pandoc does, the AST and the JSON writer).
+See PLAN.md's State.
 
 ## Reference material
 

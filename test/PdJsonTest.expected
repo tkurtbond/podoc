@@ -1,0 +1,30 @@
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[]}
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"a"},{"t":"Space"},{"t":"Emph","c":[{"t":"Str","c":"b"}]},{"t":"Space"},{"t":"Strong","c":[{"t":"Str","c":"c"}]},{"t":"Space"},{"t":"Strikeout","c":[{"t":"Str","c":"d"}]},{"t":"Space"},{"t":"Superscript","c":[{"t":"Str","c":"e"}]},{"t":"Space"},{"t":"Subscript","c":[{"t":"Str","c":"f"}]},{"t":"Space"},{"t":"SmallCaps","c":[{"t":"Str","c":"g"}]},{"t":"Space"},{"t":"Span","c":[["i",["j"],[["k","l"]]],[{"t":"Str","c":"h"}]]},{"t":"SoftBreak"},{"t":"Str","c":"m"},{"t":"LineBreak"},{"t":"Str","c":"n"}]}]}
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Quoted","c":[{"t":"DoubleQuote"},[{"t":"Str","c":"q"}]]},{"t":"Space"},{"t":"Quoted","c":[{"t":"SingleQuote"},[{"t":"Str","c":"x"}]]},{"t":"Space"},{"t":"Math","c":[{"t":"InlineMath"},"m"]},{"t":"Space"},{"t":"Math","c":[{"t":"DisplayMath"},"d"]},{"t":"Space"},{"t":"Code","c":[["i",["k"],[["a","b"]]],"c"]},{"t":"Space"},{"t":"RawInline","c":["html","<b>"]}]}]}
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Link","c":[["",[],[]],[{"t":"Str","c":"l"}],["u","t"]]},{"t":"Space"},{"t":"Image","c":[["",[],[]],[{"t":"Str","c":"i"}],["p",""]]},{"t":"Note","c":[{"t":"Para","c":[{"t":"Str","c":"A"},{"t":"Space"},{"t":"Str","c":"note."}]}]},{"t":"Space"},{"t":"Cite","c":[[{"citationId":"doe","citationPrefix":[],"citationSuffix":[],"citationMode":{"t":"NormalCitation"},"citationNoteNum":2,"citationHash":0}],[{"t":"Str","c":"[@doe]"}]]}]}]}
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Cite","c":[[{"citationId":"doe","citationPrefix":[],"citationSuffix":[],"citationMode":{"t":"AuthorInText"},"citationNoteNum":1,"citationHash":0},{"citationId":"doe","citationPrefix":[{"t":"Str","c":"see"}],"citationSuffix":[{"t":"Str","c":","},{"t":"Space"},{"t":"Str","c":"p. 3"}],"citationMode":{"t":"NormalCitation"},"citationNoteNum":1,"citationHash":0},{"citationId":"roe","citationPrefix":[],"citationSuffix":[],"citationMode":{"t":"SuppressAuthor"},"citationNoteNum":1,"citationHash":0}],[{"t":"Str","c":"x"}]]}]}]}
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"CodeBlock","c":[["x",["c"],[]],"\"a\\b\"\tc"]},{"t":"Para","c":[{"t":"Str","c":"x\u0001y\u000bz"}]}]}
+{"pandoc-api-version":[1,23,1,2],"meta":{"b":{"t":"MetaBool","c":true},"e":{"t":"MetaString","c":""},"l":{"t":"MetaList","c":[{"t":"MetaInlines","c":[{"t":"Str","c":"x"}]},{"t":"MetaBool","c":true}]},"m":{"t":"MetaMap","c":{"k":{"t":"MetaInlines","c":[{"t":"Str","c":"v"}]}}},"title":{"t":"MetaInlines","c":[{"t":"Str","c":"A"},{"t":"Space"},{"t":"Emph","c":[{"t":"Str","c":"T"}]}]}},"blocks":[]}
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Header","c":[1,["h",["c"],[]],[{"t":"Str","c":"H"}]]},{"t":"BlockQuote","c":[{"t":"Para","c":[{"t":"Str","c":"q"}]}]},{"t":"BulletList","c":[[{"t":"Plain","c":[{"t":"Str","c":"a"}]}],[{"t":"Plain","c":[{"t":"Str","c":"b"}]}]]},{"t":"OrderedList","c":[[3,{"t":"Decimal"},{"t":"OneParen"}],[[{"t":"Plain","c":[{"t":"Str","c":"x"}]}]]]},{"t":"OrderedList","c":[[2,{"t":"LowerRoman"},{"t":"TwoParens"}],[[{"t":"Plain","c":[{"t":"Str","c":"y"}]}]]]},{"t":"DefinitionList","c":[[[{"t":"Str","c":"T"}],[[{"t":"Plain","c":[{"t":"Str","c":"d"}]}]]]]},{"t":"HorizontalRule"},{"t":"Div","c":[["",["w"],[]],[{"t":"Para","c":[{"t":"Str","c":"p"}]}]]},{"t":"LineBlock","c":[[{"t":"Str","c":"a"}],[{"t":"Str","c":" b"}]]},{"t":"RawBlock","c":["html","<hr>"]}]}
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Table","c":[["",[],[]],[null,[{"t":"Plain","c":[{"t":"Str","c":"Cap"}]}]],[[{"t":"AlignLeft"},{"t":"ColWidthDefault"}],[{"t":"AlignRight"},{"t":"ColWidthDefault"}]],[["",[],[]],[[["",[],[]],[[["",[],[]],{"t":"AlignDefault"},1,1,[{"t":"Plain","c":[{"t":"Str","c":"a"}]}]],[["",[],[]],{"t":"AlignDefault"},1,1,[{"t":"Plain","c":[{"t":"Str","c":"b"}]}]]]]]],[[["",[],[]],0,[],[[["",[],[]],[[["",[],[]],{"t":"AlignDefault"},1,1,[{"t":"Plain","c":[{"t":"Str","c":"1"}]}]],[["",[],[]],{"t":"AlignDefault"},1,1,[{"t":"Plain","c":[{"t":"Str","c":"2"}]}]]]]]]],[["",[],[]],[]]]},{"t":"Figure","c":[["",[],[]],[null,[{"t":"Plain","c":[{"t":"Str","c":"f"}]}]],[{"t":"Plain","c":[{"t":"Image","c":[["",[],[]],[{"t":"Str","c":"f"}],["i.png",""]]}]}]]}]}
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Table","c":[["",[],[]],[null,[]],[[{"t":"AlignDefault"},{"t":"ColWidth","c":0.6173913043478261}],[{"t":"AlignDefault"},{"t":"ColWidth","c":0.3826086956521739}]],[["",[],[]],[[["",[],[]],[[["",[],[]],{"t":"AlignDefault"},1,1,[{"t":"Plain","c":[{"t":"Str","c":"a"}]}]],[["",[],[]],{"t":"AlignDefault"},1,1,[{"t":"Plain","c":[{"t":"Str","c":"b"}]}]]]]]],[[["",[],[]],0,[],[[["",[],[]],[[["",[],[]],{"t":"AlignDefault"},1,1,[{"t":"Plain","c":[{"t":"Str","c":"1"}]}]],[["",[],[]],{"t":"AlignDefault"},1,1,[{"t":"Plain","c":[{"t":"Str","c":"2"}]}]]]]]]],[["",[],[]],[]]]}]}
+0.1
+1.0
+1.0e7
+1234567.0
+9999999.0
+5.0e-2
+0.3333333333333333
+100.0
+123.456
+8.771929824561403e-3
+1.0e-300
+5.0e-324
+1.7976931348623157e308
+-2.5
+0.0
+0.6173913043478261
+0.2857142857142857
+1.0e22
+0.3
+{"pandoc-api-version":[1,23,1,2],"meta":{"title":{"t":"MetaInlines","c":[{"t":"Emph","c":[{"t":"Str","c":"y"}]}]}},"blocks":[{"t":"Plain","c":[{"t":"Emph","c":[{"t":"Str","c":"y"}]},{"t":"Str","c":"a"},{"t":"Note","c":[{"t":"Plain","c":[{"t":"Emph","c":[{"t":"Str","c":"y"}]},{"t":"Emph","c":[{"t":"Str","c":"y"}]}]},{"t":"HorizontalRule"}]}]},{"t":"HorizontalRule"},{"t":"BlockQuote","c":[{"t":"Plain","c":[{"t":"Str","c":"b"}]},{"t":"HorizontalRule"}]}]}

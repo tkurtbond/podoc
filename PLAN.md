@@ -75,14 +75,21 @@ JSON AST compared byte for byte.
   inline constructors, `Attr` as identifier, classes and key-value
   pairs, and `Meta` as a map of `MetaValue`s. Mirroring it is what
   makes the JSON oracle possible and the filters easy to port.
-- **Text is held in Ropes** (`~/Repos/Oberon/Ropes`, §12.1): string
-  fields of the AST, and all output. Writers build their output by
-  concatenation, templates splice the body in, and the result is
-  written leaf by leaf (`PdIO.WriteRope`, through
-  `Ropes.IterateChunks`), never flattened. The
-  reader works on the input as one flat `ARRAY OF CHAR`, for speed,
-  and makes Ropes only for the text it keeps. Confirmed or revised in
-  Phase 2.1.
+- **Text is held in Ropes** (`~/Repos/Oberon/Ropes`, §12.1) in the
+  AST: every string field is a `Ropes.Rope`, NIL being the empty
+  string. The reader works on the input as one flat `ARRAY OF CHAR`,
+  for speed, and makes Ropes only for the text it keeps. **Writers
+  write straight to `PdIO`'s buffered output**, and build a Rope only
+  where output must be held and spliced (a template's body, a table
+  of contents); a Rope is written leaf by leaf (`PdIO.WriteRope`,
+  through `Ropes.IterateChunks`), never flattened. Measured in Phase
+  2.1 (2026-11-20), on 774 KB of input (the Lost-Worlds and
+  Galactic-Bounty-Hunters sources, twice over; 122,960 Str nodes):
+  making the nodes took 22 ms (`-O2`) and 19 ms (`-OC`); writing
+  JSON-like output of 4.7 MB built as one Rope by `Cat` (depth 40)
+  took 89 and 85 ms, and written directly through `PdIO`, 10 and 12
+  ms; the whole run 0.12 s and about 75 MB. Both are fast enough;
+  writing directly is about 8 times faster and uses less memory.
 - **Modules** (names prefixed `Pd` to stay clear of the runtime's
   global module namespace):
   - `PdIO`: reading input whole, buffered output, messages and exit.
@@ -160,9 +167,9 @@ The table is kept in AGENTS.md as codes are assigned.
 - `--version` and `--help`.
 - A first case test, to prove the harness.
 
-## Phase 2: The AST and the JSON writer
+## Phase 2: The AST and the JSON writer [done]
 
-### Phase 2.1: `PdAst`
+### Phase 2.1: `PdAst` [done]
 
 - Types for every block and inline constructor of pandoc-types 1.23
   that §3.1 needs, plus the rest as stubs that the JSON writer can
@@ -172,15 +179,16 @@ The table is kept in AGENTS.md as codes are assigned.
   serve the filters.
 - Settle the use of Ropes (Design): measure building and writing a
   document the size of the largest Lost-Worlds build; record the
-  result here.
+  result here. Done: see Design, "Text is held in Ropes".
 
-### Phase 2.2: `PdJson` writer
+### Phase 2.2: `PdJson` writer [done]
 
 - Write `-t json` exactly as pandoc does: compact, field order, the
   `pandoc-api-version`, string escapes (pandoc escapes only what JSON
   requires), and numbers.
 - Unit test by building small ASTs by hand and comparing with
   pandoc's JSON for the same documents.
+- `-t json` on podoc's command line comes with the reader, Phase 3.
 
 ## Phase 3: The markdown reader, blocks
 
@@ -517,3 +525,19 @@ Oberon (decision 7).
   `-ofile` and `-o file`, `-` for standard input, and pandoc 3.10's
   tab expansion (`printf '    \xc3\xa9\tb'` gives a code block of
   `é   b`). Phase 2 next.
+- 2026-11-20: Phase 2 done. `PdAst` (every constructor of
+  pandoc-types 1.23, with constructors, list building, a sorted
+  metadata map and a `Walker` that visits inlines and then blocks,
+  bottom up, splicing in what its methods return) and `PdJson`
+  (`WriteDoc`; numbers as Haskell's `show` writes a Double, the
+  shortest digits that read back, from `RealDigits` and
+  `Strings.StrToLongReal`). `make test` passed under `-O2` and `-OC`:
+  `PdJsonTest` writes eleven hand-built documents, nineteen numbers
+  and a walked document; the documents' lines are pandoc 3.10's `-t
+  json` output for the markdown in the test's comments and the
+  numbers GHC's `show`, byte for byte, and the walk's line was
+  checked by hand. Found on the way, for later phases: pandoc's YAML
+  reads `y` in a flow list as `true` (YAML 1.1), a citation's
+  `citationNoteNum` counts the notes before it, and `p. 3` in a
+  citation suffix gets a no-break space. Ropes decided (Design).
+  Phase 3 next.
