@@ -2,10 +2,11 @@ MODULE podoc;
 (* podoc: the parts of pandoc that the user's writing builds need, in
    Oberon-2. The command line is pandoc's: podoc [OPTIONS] [FILES].
 
-   Phase 1: the inputs are joined as pandoc joins them and written out
-   unchanged, the "source" format. *)
+   The inputs are joined as pandoc joins them. The "source" format
+   writes them out unchanged; "json" reads them as pandoc markdown and
+   writes the document as pandoc's JSON. *)
 
-IMPORT ArgParser, PdIO, PdSource;
+IMPORT ArgParser, PdIO, PdSource, PdMarkdown, PdJson;
 
 CONST
   Version = "0.1";
@@ -88,7 +89,7 @@ BEGIN
   parser.AddOption(ArgParser.MakeStringOption("o", "output",
     "Write to FILE rather than standard output.", SetOutput));
   parser.AddOption(ArgParser.MakeStringOption("t", "to",
-    "The output format: source.", SetTo));
+    "The output format: json or source.", SetTo));
   parser.AddOption(ArgParser.MakeStringOption("w", "write",
     "The same as --to.", SetTo));
   parser.AddOption(ArgParser.MakeIntOption(0X, "tab-stop",
@@ -108,7 +109,7 @@ PROCEDURE Run;
   VAR text: PdIO.Text; len: LONGINT; f: File;
 BEGIN
   IF to = "" THEN to := "source" END;
-  IF to # "source" THEN
+  IF (to # "source") & (to # "json") THEN
     PdIO.Message3("Unknown output format '", to, "'");
     PdIO.Exit(PdIO.UnknownWriter)
   END;
@@ -123,7 +124,11 @@ BEGIN
     END
   END;
   PdIO.OpenOutput(output);
-  IF len > 0 THEN PdIO.WriteChars(text^, 0, len) END;
+  IF to = "json" THEN
+    PdJson.WriteDoc(PdMarkdown.Read(text, len, tabStop))
+  ELSIF len > 0 THEN
+    PdIO.WriteChars(text^, 0, len)
+  END;
   PdIO.CloseOutput
 END Run;
 

@@ -192,7 +192,7 @@ The table is kept in AGENTS.md as codes are assigned.
 
 ## Phase 3: The markdown reader, blocks
 
-### Phase 3.1: Lines and the block structure
+### Phase 3.1: Lines and the block structure [done]
 
 - Read UTF-8 text into lines, tabs expanded to four columns as pandoc
   does, and keep line numbers for messages.
@@ -200,7 +200,7 @@ The table is kept in AGENTS.md as codes are assigned.
   quotes (with laziness), indented and fenced code blocks (with
   attributes and info strings), blank lines.
 
-### Phase 3.2: Lists
+### Phase 3.2: Lists [done]
 
 - Bullet and ordered lists, with pandoc's rules: the four-space rule
   for continuation, lazy continuation, tight and loose lists, list
@@ -209,11 +209,22 @@ The table is kept in AGENTS.md as codes are assigned.
 - Cases for each rule, taken from pandoc's `testsuite.txt` and the
   user's `Includes/` stat blocks.
 
-### Phase 3.3: Raw blocks, HTML blocks and line blocks
+### Phase 3.3: Raw blocks, HTML blocks and line blocks [done]
 
 - ```` ```{=format} ```` raw blocks.
 - HTML blocks kept as `RawBlock "html"`.
 - Line blocks (`| `).
+- Brought forward from Phase 4.6, because the block structure needs
+  them: fenced and HTML divs, definition lists, header attributes and
+  identifiers (ASCII letters only so far), and task list items.
+- Left for Phase 4: Unicode letters in identifiers and words, the full
+  table of named entities (only `&amp;`, `&lt;`, `&gt;`, `&quot;`,
+  `&apos;` and numeric references so far), entities in HTML attribute
+  values, raw inline HTML and TeX (an HTML comment on a list item's
+  continuation line is read as a block, not as pandoc's `RawInline`),
+  emphasis, links, smart punctuation, implicit figures, tables, notes,
+  reference keys, abbreviations, raw TeX blocks, the title block and
+  YAML (Phase 5).
 
 ## Phase 4: The markdown reader, inlines
 
@@ -541,3 +552,14 @@ Oberon (decision 7).
   `citationNoteNum` counts the notes before it, and `p. 3` in a
   citation suffix gets a no-break space. Ropes decided (Design).
   Phase 3 next.
+- 2026-11-20: Phase 3 done. `PdMdBase` (the text, positions and the
+  tests every block parser shares: lines, attributes, HTML tags, list
+  starts, fences), `PdMdInline` (Str, Space, SoftBreak, LineBreak,
+  escapes, numeric and the five XML entities, inline code with
+  attributes and raw inlines, identifiers) and `PdMarkdown` (pandoc's
+  `block` alternatives, in pandoc's order, with compactify, task
+  lists and unique identifiers), and `podoc -t json`. `make test`
+  passed under `-O2` and `-OC`, with six new cases (`blocks`,
+  `lists`, `edges`, `inline-basic`, `empty`, `nonewline`), whose
+  expected JSON is pandoc 3.10's, byte for byte. Differences found
+  and left for Phase 4 are listed under Phase 3.3. Phase 4 next.
