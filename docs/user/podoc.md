@@ -23,7 +23,8 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
   - for `context`: ConTeXt LMTX;
   - for SVG images in ConTeXt: `rsvg-convert` (optional).
 
-podoc is built and tested on Linux (Fedora), FreeBSD and NetBSD.
+podoc is built and tested on Linux (Fedora), FreeBSD, NetBSD and
+OpenBSD.
 
 ## Building and installing
 

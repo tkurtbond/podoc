@@ -18,8 +18,8 @@ plan, phase by phase, in [PLAN.md](PLAN.md).
 
 It needs `poc` and the poc libraries ArgParser, Ropes and pounicode,
 installed under both size models in `~/.local/lib/poc` (`POCLIBDIR`),
-and GNU make. It builds and passes its tests on Linux, FreeBSD and
-NetBSD.
+and GNU make. It builds and passes its tests on Linux, FreeBSD,
+NetBSD and OpenBSD.
 
 podoc uses these repositories:
 

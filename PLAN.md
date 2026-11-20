@@ -1004,3 +1004,11 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
   math, always writes this fallback, byte for byte pandoc's, so the
   text after display math is lost in ms PDF as in pandoc's. Left as
   pandoc does it; the user's documents use no display math.
+- 2026-11-20: podoc on terhali (NetBSD 11.0, amd64) and erekose
+  (OpenBSD 7.9, i386, the first OpenBSD), after upgrading both to poc
+  0.15.0 and rebuilding their installed libraries with it (on erekose,
+  pofltk needs `FLTK_CONFIG=/usr/local/sw/versions/fltk/1.4.5/bin/fltk-config`,
+  since the `fltk-config` on its PATH is OpenBSD's FLTK 1.3.9).
+  pounicode installed on both; podoc built from a clean `git archive`,
+  and `make test` passed under `-O2` and `-OC` on each (382 `ok`
+  lines, no `FAIL`, 23 of 23 round trips). PDF output was not tried there.

@@ -35,7 +35,7 @@ is finished:
 - includes, `PdInclude`, with globs in `PdGlob`;
 - the built-in filters, `PdFilters`;
 - PDF output, `PdRun` and `PdPdf`;
-- builds and tests on FreeBSD and NetBSD, `make install`, and
+- builds and tests on FreeBSD, NetBSD and OpenBSD, `make install`, and
   docs/user/podoc.md.
 
 Further work is in PLAN.md's "Later". See PLAN.md's State.
@@ -128,7 +128,8 @@ reinstall after upgrading poc.
   installed.
 - `make install` installs the `-OC` podoc and `subs2yaml` (`PREFIX`,
   `~/.local` by default; `MODEL`, `DESTDIR`); `make uninstall`.
-- Tested on Fedora (atla), FreeBSD (alerik) and NetBSD (artos); on the
+- Tested on Fedora (atla), FreeBSD (alerik), NetBSD (artos, terhali;
+  yishana, i386) and OpenBSD (erekose, i386); on the
   VMs, copy clean checkouts (`git archive`) of podoc and its libraries
   to a scratch directory, `gmake`, and remove it afterwards.
 - The reader is checked against `pandoc -f markdown -t json`, byte for
