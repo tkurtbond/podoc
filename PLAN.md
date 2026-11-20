@@ -661,7 +661,7 @@ table reader comes before the writer: podoc reads only markdown, so
 without it no table with block cells, spans or a footer can reach a
 writer to test it.
 
-### Phase 16.1: The variant, unwrapped
+### Phase 16.1: The variant, unwrapped [done]
 
 - `-t plain` in `PdOptions` and `podoc`; output extensions stay as
   pandoc's (`.txt` deduces markdown, not plain). `-s` uses pandoc
@@ -1346,3 +1346,37 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   words on seven pages and spaces the scale table's columns
   differently, though the glyphs have not moved. The Symbola error is
   as under 1.25.0. Temporary directories removed on all three hosts.
+- 2026-11-20: Phase 16.1 done. `-t plain` and `-s` with pandoc
+  3.10's `default.plain` (`PdOptions`, `podoc`, `PdDefaults` through
+  `tools/mktemplates`). `PdMdWriter` has a plain mode (`SetPlain`)
+  that follows each `PlainText` branch of pandoc's markdown writer:
+  Str unescaped; emphasis, strong, underline and spans as their
+  contents; small caps in capitals, notes inside them too; curly
+  quotes; code as its text; superscripts and subscripts in Unicode
+  where every inline converts, else the rendered text through
+  `toSuperscript`, else `^(...)` or `_(...)`; links as their text or
+  autolinks as the URL; images as `[alt]`; notes `[n]`; headings,
+  divs and figures with attributes as their contents; code blocks
+  indented; block quotes indented two spaces; line blocks as their
+  lines; definitions indented two spaces; raw content kept only for
+  `plain`; no task-list boxes; `Plain []` as the list separator; the
+  title, authors and date as the title block; a final `refs` div
+  kept. pandoc 3.10 gives no warning for dropped raw content (it is
+  INFO), so podoc gives none. TeX math is written as texmath's
+  fallback, `$...$` and `$$...$$`: none of the user's documents has
+  math, so no subset of texmath was ported (docs/user/differences.md).
+  Tables pandoc writes as grid tables are `[TABLE]` until 16.3.
+  `make test` passed under `-O2` and `-OC`: 212 case tests (44 new
+  `.plain` files: pandoc's `--wrap=none -t plain` output for the 41
+  markdown-writer cases whose output is the same, podoc's for the
+  three with TeX math; a new `plain-features` case, `-s`, the same
+  as pandoc's; and `filter-general-plain`, whose body is pandoc's,
+  its filter messages on standard error) and 23 round trips. `make
+  compare` with `plain` (now in `COMPARE_FORMATS`): all 98
+  comparisons of the user's documents the same; the case differences
+  are TeX math and the known filter, include and option cases.
+  pandoc's `test/testsuite.txt` by hand: the same but for the `%`
+  title block and the raw TeX table, which podoc's reader does not
+  read, and math; it was not added as a case. `--wrap=preserve` the
+  same as pandoc's on `plain-features`. There is no `tools/mkcase`.
+  Phase 16.2 next.

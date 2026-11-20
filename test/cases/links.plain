@@ -1,0 +1,15 @@
+A link and ref and r1 and r1. An image [alt text] inline, an autolink http://a.b/c and me@example.com, and a span.
+
+[A figure caption]
+
+Text with a note[1] and an inline note[2] and the same note again.[3]
+
+[1] The note’s text,
+
+with a second paragraph.
+
+[2] Inline note.
+
+[3] The note’s text,
+
+with a second paragraph.

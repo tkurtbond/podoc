@@ -656,7 +656,7 @@ END CheckFilters;
 (* Works out the input and output formats from the options and the
    files' names, as pandoc does, and ends podoc with pandoc's message
    and status if they are not ones podoc has: from becomes "markdown";
-   to becomes the writer (html, ms, context, markdown, json or podoc's
+   to becomes the writer (html, ms, context, markdown, plain, json or podoc's
    source) and pdf whether its output is made into PDF, with pdfEngine
    the engine. *)
 PROCEDURE Resolve*;
@@ -703,7 +703,7 @@ BEGIN
   COPY(to, filterFormat);
   IF to = "html5" THEN to := "html" END;
   IF (to # "source") & (to # "json") & (to # "html") & (to # "ms")
-     & (to # "context") & (to # "markdown") THEN
+     & (to # "context") & (to # "markdown") & (to # "plain") THEN
     PdIO.Message3("Unknown output format '", to, "'");
     PdIO.Exit(PdIO.UnknownWriter)
   END;

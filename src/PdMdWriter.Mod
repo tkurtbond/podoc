@@ -6,12 +6,16 @@ MODULE PdMdWriter;
    attributes, simple and multiline tables. Tables that pandoc writes
    as grid or pipe tables are written as HTML.
 
+   With SetPlain(TRUE) it writes plain text instead, as pandoc's plain
+   writer (the same writer, with its PlainText variant and
+   plainExtensions) does.
+
    The output is built as a PdLayout Doc, as pandoc builds it. The
    writer's state (the notes, the identifiers used) changes as pandoc's
    does, in the same order: the metadata first, then the table of
    contents, the body and the notes. *)
 
-IMPORT Ropes, Utf8, Unicode, A := PdAst, L := PdLayout, T := PdTemplate,
+IMPORT Ropes, Utf8, Unicode, Utf8Strings, A := PdAst, L := PdLayout, T := PdTemplate,
   C := PdContext, Sh := PdShared, I := PdMdInline, B := PdMdBase, PdWords,
   PdHtml, PdIO;
 
@@ -22,6 +26,7 @@ TYPE
   NoteList = POINTER TO NoteDesc;
   NoteDesc = RECORD
     blocks: A.Block;
+    upper: BOOLEAN; (* in small caps: its text in capitals *)
     next: NoteList
   END;
 
@@ -54,6 +59,7 @@ VAR
   preserve, wantToc, numberSections: BOOLEAN;
   tocDepth: INTEGER;
   idPrefix: Rope;
+  plain: BOOLEAN; (* plain text, not markdown *)
 
   (* the writer's state *)
   notes, lastNote: NoteList; (* stNotes, in order *)
@@ -61,6 +67,13 @@ VAR
   noteNum: LONGINT; (* stNoteNum: the number of the first of them *)
   ids: IdList; (* stIds *)
   inList, escapeSpaces, noBreaks: BOOLEAN; (* the environment *)
+  (* plain text: Strs in capitals (capitalize), and as superscripts or
+     subscripts (Super, Sub) or not (NoScript) *)
+  upper: BOOLEAN;
+  script: INTEGER;
+
+CONST
+  NoScript = 0; Super = 1; Sub = 2;
 
 (* Ropes *)
 
@@ -350,9 +363,84 @@ BEGIN
   RETURN NIL
 END SingleStr;
 
-PROCEDURE StrDoc(s: Rope): L.Doc;
+(* r in capitals (T.toUpper) *)
+PROCEDURE Upper(r: Rope): Rope;
+  VAR b, d: Buf; n, m: LONGINT;
 BEGIN
-  RETURN Lr(Escape(s))
+  n := Len(r);
+  IF n = 0 THEN RETURN r END;
+  b := ToBuf(r);
+  m := Utf8Strings.UpperLength(b^, Unicode.noLanguage);
+  NEW(d, m + 1);
+  IF Utf8Strings.ToUpper(b^, d^, Unicode.noLanguage) THEN END;
+  RETURN Ropes.FromSubchars(d^, 0, m)
+END Upper;
+
+(* Whether r is Haskell's isSpace *)
+PROCEDURE IsHsSpace(r: Utf8.Rune): BOOLEAN;
+BEGIN
+  RETURN Unicode.IsSpace(r) & (r # 85H) & (r # 2028H) & (r # 2029H)
+END IsHsSpace;
+
+(* r as a superscript (toSuperscript) or subscript (toSubscript)
+   character, in s; FALSE if it has none *)
+PROCEDURE ScriptRune(r: Utf8.Rune; kind: INTEGER; VAR s: Utf8.Rune): BOOLEAN;
+BEGIN
+  IF kind = Super THEN
+    CASE r OF
+      ORD("1"): s := 0B9H
+    | ORD("2"): s := 0B2H
+    | ORD("3"): s := 0B3H
+    | ORD("+"): s := 207AH
+    | ORD("-"), 2212H: s := 207BH
+    | ORD("="): s := 207CH
+    | ORD("("): s := 207DH
+    | ORD(")"): s := 207EH
+    | ORD("0"), ORD("4") .. ORD("9"): s := 2070H + r - ORD("0")
+    ELSE
+      IF ~IsHsSpace(r) THEN RETURN FALSE END;
+      s := r
+    END
+  ELSE
+    CASE r OF
+      ORD("+"): s := 208AH
+    | ORD("-"): s := 208BH
+    | ORD("="): s := 208CH
+    | ORD("("): s := 208DH
+    | ORD(")"): s := 208EH
+    | ORD("0") .. ORD("9"): s := 2080H + r - ORD("0")
+    ELSE
+      IF ~IsHsSpace(r) THEN RETURN FALSE END;
+      s := r
+    END
+  END;
+  RETURN TRUE
+END ScriptRune;
+
+(* r's characters as superscripts or subscripts, in out; FALSE if one
+   of them has none *)
+PROCEDURE ScriptRope(r: Rope; kind: INTEGER; VAR out: Rope): BOOLEAN;
+  VAR b: Buf; n, i, j: LONGINT; o: B.Buf; ru, s: Utf8.Rune; e: ARRAY 8 OF CHAR;
+BEGIN
+  n := Len(r); b := ToBuf(r); B.InitBuf(o); i := 0;
+  WHILE i < n DO
+    j := i;
+    IF ~Utf8.Decode(b^, j, ru) OR ~ScriptRune(ru, kind, s) THEN RETURN FALSE END;
+    i := j; j := 0;
+    IF Utf8.Encode(s, e, j) THEN END;
+    e[j] := 0X; B.PutString(o, e)
+  END;
+  out := B.BufRope(o);
+  RETURN TRUE
+END ScriptRope;
+
+PROCEDURE StrDoc(s: Rope): L.Doc;
+  VAR t: Rope;
+BEGIN
+  IF ~plain THEN RETURN Lr(Escape(s)) END;
+  IF upper THEN s := Upper(s) END;
+  IF (script # NoScript) & ScriptRope(s, script, t) THEN s := t END;
+  RETURN Lr(s)
 END StrDoc;
 
 PROCEDURE SpaceDoc(): L.Doc;
@@ -379,6 +467,53 @@ BEGIN
   RETURN d
 END DelimEsc;
 
+(* Whether every inline of i has a superscript or subscript form
+   (toSuperscriptInline, toSubscriptInline) *)
+PROCEDURE Convertible(i: A.Inline; kind: INTEGER): BOOLEAN;
+  VAR t: Rope;
+BEGIN
+  WHILE i # NIL DO
+    CASE i.kind OF
+      A.Space, A.LineBreak, A.SoftBreak:
+    | A.Span: IF ~Convertible(i(A.SpanInl).content, kind) THEN RETURN FALSE END
+    | A.Str: IF ~ScriptRope(i(A.StrInl).text, kind, t) THEN RETURN FALSE END
+    ELSE RETURN FALSE
+    END;
+    i := i.next
+  END;
+  RETURN TRUE
+END Convertible;
+
+(* Plain text: superscript or subscript i in Unicode's superscript or
+   subscript characters, or, if it has none, its text after open and
+   before ")". pandoc tries the superscripts for the text of a
+   subscript too. *)
+PROCEDURE PlainScript(i: A.Inline; kind: INTEGER; open: ARRAY OF CHAR): L.Doc;
+  VAR save: INTEGER; d: L.Doc; r, t: Rope;
+BEGIN
+  IF i = NIL THEN RETURN NIL END;
+  d := Inlines(i);
+  IF Convertible(i, kind) THEN
+    save := script; script := kind;
+    d := Inlines(i);
+    script := save;
+    RETURN d
+  END;
+  r := L.Render(d, 0);
+  IF ScriptRope(r, Super, t) THEN RETURN Lr(t) END;
+  RETURN Lr(CatC(Cat(R(open), r), ")"))
+END PlainScript;
+
+(* Plain text: i in capitals (capitalize) *)
+PROCEDURE Capitals(i: A.Inline): L.Doc;
+  VAR save: BOOLEAN; d: L.Doc;
+BEGIN
+  save := upper; upper := TRUE;
+  d := Inlines(i);
+  upper := save;
+  RETURN d
+END Capitals;
+
 PROCEDURE IsMarkdownFormat(f: Rope): BOOLEAN;
 BEGIN
   RETURN Eq(f, "markdown") OR Eq(f, "markdown_github") OR Eq(f, "markdown_phpextra")
@@ -402,6 +537,10 @@ BEGIN
       useAuto := (s # NIL) & Ropes.Equal(EscapeURI(s.text), suffix)
     END
   END;
+  IF plain THEN
+    IF useAuto THEN RETURN Lr(suffix) END;
+    RETURN txt
+  END;
   IF useAuto THEN RETURN Lr(CatC(Cat(R("<"), suffix), ">")) END;
   d := L.Cat3(Lit("["), txt, Lr(CatC(Cat(Cat(R("]("), src), linktitle), ")")));
   IF ~IsNullAttr(attr) THEN d := L.Cat(d, Attrs(attr)) END;
@@ -413,7 +552,8 @@ PROCEDURE Image(i: A.LinkInl): L.Doc;
 BEGIN
   txt := i.content; s := SingleStr(txt);
   IF (txt = NIL) OR (s # NIL) & Ropes.Equal(s.text, i.url) THEN txt := A.NewStr(NIL) END;
-  d := L.Cat(Lit("!"), LinkForm(i.attr, txt, i.url, i.title));
+  d := LinkForm(i.attr, txt, i.url, i.title);
+  IF plain THEN d := L.Cat3(Lit("["), d, Lit("]")) ELSE d := L.Cat(Lit("!"), d) END;
   dummy := Inlines(i.content);
   RETURN d
 END Image;
@@ -421,9 +561,12 @@ END Image;
 PROCEDURE NoteRef(blocks: A.Block): L.Doc;
   VAR n: NoteList;
 BEGIN
-  NEW(n); n.blocks := blocks; n.next := NIL;
+  NEW(n); n.blocks := blocks; n.upper := upper; n.next := NIL;
   IF notes = NIL THEN notes := n ELSE lastNote.next := n END;
   lastNote := n; INC(noteCount);
+  IF plain THEN
+    RETURN Lr(CatC(Cat(R("["), Cat(idPrefix, Sh.IntRope(noteNum + noteCount - 1))), "]"))
+  END;
   RETURN Lr(CatC(Cat(R("[^"), Cat(idPrefix, Sh.IntRope(noteNum + noteCount - 1))), "]"))
 END NoteRef;
 
@@ -437,7 +580,7 @@ BEGIN
     IF s # NIL THEN RETURN StrDoc(s.text) END
   END;
   contents := Inlines(i.content);
-  IF IsNullAttr(a) THEN d := contents
+  IF IsNullAttr(a) OR plain THEN d := contents
   ELSE d := L.Cat3(Lit("["), contents, L.Cat(Lit("]"), Attrs(a)))
   END;
   IF a # NIL THEN
@@ -453,6 +596,7 @@ END Span;
 PROCEDURE Code(i: A.CodeInl): L.Doc;
   VAR n: LONGINT; marker, spacer: Rope; d: L.Doc;
 BEGIN
+  IF plain THEN RETURN Lr(i.text) END;
   n := LongestRun(i.text, "`");
   marker := Ropes.Make(n + 1, "`");
   spacer := NIL; IF n > 0 THEN spacer := R(" ") END;
@@ -464,6 +608,10 @@ END Code;
 PROCEDURE Raw(i: A.RawInl): L.Doc;
   VAR ticks: Rope;
 BEGIN
+  IF plain THEN
+    IF Eq(i.format, "plain") THEN RETURN Lr(i.text) END;
+    RETURN NIL
+  END;
   IF IsMarkdownFormat(i.format) THEN RETURN Lr(i.text) END;
   ticks := Ropes.Make(LongestRun(i.text, "`") + 1, "`");
   RETURN Lr(CatC(Cat(CatS(Cat(Cat(ticks, i.text), ticks), "{="), i.format), "}"))
@@ -479,28 +627,58 @@ BEGIN
   | A.SoftBreak:
     IF ~noBreaks & preserve THEN d := L.Cr() ELSE d := SpaceDoc() END
   | A.LineBreak:
-    IF noBreaks THEN d := SpaceDoc() ELSE d := L.Cat(Lit("\"), L.Cr()) END
+    IF noBreaks THEN d := SpaceDoc()
+    ELSIF plain THEN d := L.Cr()
+    ELSE d := L.Cat(Lit("\"), L.Cr())
+    END
   | A.Emph:
     c := i(A.ContInl).content;
     IF (c # NIL) & (c.next = NIL) & (c.kind = A.Emph) THEN d := Inlines(c(A.ContInl).content)
+    ELSIF plain THEN d := Inlines(c)
     ELSE d := Delim(c, "*", "*")
     END
   | A.Underline:
     c := i(A.ContInl).content;
-    IF c # NIL THEN d := L.Cat3(Lit("["), Inlines(c), Lit("]{.underline}")) END
-  | A.Strong: d := Delim(i(A.ContInl).content, "**", "**")
+    IF plain THEN d := Inlines(c)
+    ELSIF c # NIL THEN d := L.Cat3(Lit("["), Inlines(c), Lit("]{.underline}"))
+    END
+  | A.Strong:
+    IF plain THEN d := Inlines(i(A.ContInl).content)
+    ELSE d := Delim(i(A.ContInl).content, "**", "**")
+    END
   | A.Strikeout: d := Delim(i(A.ContInl).content, "~~", "~~")
-  | A.Superscript: d := DelimEsc(i(A.ContInl).content, "^", "^")
-  | A.Subscript: d := DelimEsc(i(A.ContInl).content, "~", "~")
+  | A.Superscript:
+    IF plain THEN d := PlainScript(i(A.ContInl).content, Super, "^(")
+    ELSE d := DelimEsc(i(A.ContInl).content, "^", "^")
+    END
+  | A.Subscript:
+    IF plain THEN d := PlainScript(i(A.ContInl).content, Sub, "_(")
+    ELSE d := DelimEsc(i(A.ContInl).content, "~", "~")
+    END
   | A.SmallCaps:
-    d := L.Cat3(Lit("["), Inlines(i(A.ContInl).content), Lit("]{.smallcaps}"))
+    IF plain THEN d := Capitals(i(A.ContInl).content)
+    ELSE d := L.Cat3(Lit("["), Inlines(i(A.ContInl).content), Lit("]{.smallcaps}"))
+    END
   | A.Quoted:
-    IF i(A.QuotedInl).quote = A.SingleQuote THEN q := R("'") ELSE q := R('"') END;
-    d := L.Cat3(Lr(q), Inlines(i(A.ContInl).content), Lr(q))
+    IF plain THEN
+      IF i(A.QuotedInl).quote = A.SingleQuote THEN
+        d := L.Cat3(Lit("‘"), Inlines(i(A.ContInl).content), Lit("’"))
+      ELSE d := L.Cat3(Lit("“"), Inlines(i(A.ContInl).content), Lit("”"))
+      END
+    ELSE
+      IF i(A.QuotedInl).quote = A.SingleQuote THEN q := R("'") ELSE q := R('"') END;
+      d := L.Cat3(Lr(q), Inlines(i(A.ContInl).content), Lr(q))
+    END
   | A.Cite: d := Inlines(i(A.ContInl).content)
   | A.Code: d := Code(i(A.CodeInl))
   | A.Math:
-    IF i(A.MathInl).math = A.InlineMath THEN
+    IF plain THEN
+      (* texmath's fallback: the TeX between dollars *)
+      IF i(A.MathInl).math = A.InlineMath THEN
+        d := StrDoc(CatC(Cat(R("$"), Strip(i(A.MathInl).text)), "$"))
+      ELSE d := L.Cat3(L.Cr(), StrDoc(CatS(Cat(R("$$"), i(A.MathInl).text), "$$")), L.Cr())
+      END
+    ELSIF i(A.MathInl).math = A.InlineMath THEN
       d := Lr(CatC(Cat(R("$"), Strip(i(A.MathInl).text)), "$"))
     ELSE d := Lr(CatS(Cat(R("$$"), i(A.MathInl).text), "$$"))
     END
@@ -524,7 +702,7 @@ BEGIN
        & ((Len(nx(A.StrInl).text) = 0)
           OR (Ropes.Fetch(nx(A.StrInl).text, 0) >= "0") & (Ropes.Fetch(nx(A.StrInl).text, 0) <= "9")) THEN
       d := L.Cat(d, Inline(i));
-      d := L.Cat(d, Lit("`<!-- -->`{=html}"))
+      IF ~plain THEN d := L.Cat(d, Lit("`<!-- -->`{=html}")) END
     ELSIF (i.kind = A.Str) & (nx # NIL) & ((nx.kind = A.Link) OR (nx.kind = A.Span)) THEN
       s := i(A.StrInl).text; n := Len(s);
       IF (n > 0) & (Ropes.Fetch(s, n - 1) = "!") THEN
@@ -559,7 +737,7 @@ END EscapeMarker;
 PROCEDURE PlainDoc(il: A.Inline): L.Doc;
   VAR nx, r: A.Inline; t: Rope;
 BEGIN
-  IF (il # NIL) & (il.kind = A.Str) THEN
+  IF ~plain & (il # NIL) & (il.kind = A.Str) THEN
     t := il(A.StrInl).text; nx := il.next;
     IF ((nx = NIL) OR (nx.kind = A.Space) OR (nx.kind = A.SoftBreak))
        & B.IsOrderedListMarker(t) THEN
@@ -573,7 +751,10 @@ END PlainDoc;
 
 PROCEDURE RawDoc(format, text: Rope): L.Doc;
 BEGIN
-  IF IsMarkdownFormat(format) THEN RETURN L.Cat(L.Nest(0, Lr(text)), Lr(R(0AX)))
+  IF plain THEN
+    IF Eq(format, "plain") THEN RETURN L.Cat(L.Nest(0, Lr(text)), Lr(R(0AX))) END;
+    RETURN NIL
+  ELSIF IsMarkdownFormat(format) THEN RETURN L.Cat(L.Nest(0, Lr(text)), Lr(R(0AX)))
   ELSIF Eq(format, "html") OR Eq(format, "html5") OR Eq(format, "html4")
      OR Eq(format, "latex") OR Eq(format, "tex") THEN
     RETURN L.Cat(Lr(text), Lr(R(0AX)))
@@ -583,11 +764,16 @@ BEGIN
 END RawDoc;
 
 PROCEDURE LineBlock(l: A.InlineList): L.Doc;
-  VAR d: L.Doc;
+  VAR d, x: L.Doc;
 BEGIN
   d := NIL;
   WHILE l # NIL DO
-    d := L.Above(d, L.Hang(2, Lit("| "), Inlines(l.inlines)));
+    IF plain THEN
+      x := Inlines(l.inlines);
+      IF L.IsEmpty(x) THEN x := L.BlankLine() END;
+      d := L.Above(d, x)
+    ELSE d := L.Above(d, L.Hang(2, Lit("| "), Inlines(l.inlines)))
+    END;
     l := l.next
   END;
   RETURN L.Cat(d, L.BlankLine())
@@ -616,6 +802,7 @@ BEGIN
   save := noBreaks; noBreaks := TRUE;
   contents := Inlines(h.inlines);
   noBreaks := save;
+  IF plain THEN RETURN L.NoWrap(L.Cat(contents, L.BlankLine())) END;
   RETURN L.NoWrap(L.Cat(L.Cat3(Lr(Ropes.Make(h.level, "#")), Lit(" "), contents),
     L.Cat(attr, L.BlankLine())))
 END Header;
@@ -646,7 +833,7 @@ PROCEDURE CodeBlock(c: A.CodeBlk): L.Doc;
   VAR ls: Lines; n, k, max, w: LONGINT; s, out: Rope; ticks: L.Doc; b: Buf; all: BOOLEAN;
 BEGIN
   ls := SplitLines(c.text, n);
-  IF ~IsNullAttr(c.attr) THEN
+  IF ~plain & ~IsNullAttr(c.attr) THEN
     max := 2;
     FOR k := 0 TO n - 1 DO
       s := Strip(ls[k]); w := Len(s);
@@ -694,6 +881,7 @@ BEGIN
     RETURN BlockList(b)
   END;
   contents := BlockList(b);
+  IF plain THEN RETURN L.Cat(contents, L.BlankLine()) END;
   colons := Lr(Ropes.Make(3 + Nesting(b, 0), ":"));
   RETURN L.Above(L.Above(L.NoWrap(L.Hsep(colons, ClassOrAttrs(d.attr))), L.Chomp(contents)),
     L.Cat(colons, L.BlankLine()))
@@ -732,7 +920,8 @@ END EndsWithTightList;
 PROCEDURE ItemContents(bs: A.Block): L.Doc;
   VAR contents: L.Doc;
 BEGIN
-  contents := BlockList(TaskListToAscii(bs));
+  IF ~plain THEN bs := TaskListToAscii(bs) END;
+  contents := BlockList(bs);
   IF EndsWithTightList(bs) THEN contents := L.Cat(L.Chomp(contents), L.Cr()) END;
   RETURN contents
 END ItemContents;
@@ -831,7 +1020,9 @@ BEGIN
   WHILE it # NIL DO
     def := NIL; b := it.blocks;
     WHILE b # NIL DO def := L.Above(def, Block(b)); b := b.next END;
-    contents := Join(contents, L.Hang(2, Lit(": "), def), tight);
+    IF plain THEN contents := Join(contents, L.Hang(2, Lit("  "), def), tight)
+    ELSE contents := Join(contents, L.Hang(2, Lit(": "), def), tight)
+    END;
     it := it.next
   END;
   IF ~tight THEN contents := L.Cat(L.BlankLine(), contents) END;
@@ -890,10 +1081,12 @@ BEGIN
           NEW(kv); kv.key := R("alt"); kv.value := alt; kv.next := na.attrs; na.attrs := kv
         END
       END;
+      IF plain & ~IsNullAttr(na) THEN RETURN BlockList(b) END;
       ni := A.NewLink(A.Image, na, descr, img.url, title);
       RETURN L.Cat(Inline(ni), L.BlankLine())
     END
   END;
+  IF plain THEN RETURN BlockList(b) END;
   RETURN L.Cat(Lr(Strip(PdHtml.Fragment(f))), L.BlankLine())
 END Figure;
 
@@ -1057,7 +1250,7 @@ END PandocTable;
 PROCEDURE Table(t: A.TableBlk): L.Doc;
   VAR caption: A.Inline; capD, capt: L.Doc; cs: A.ColSpec; tb: A.TableBody;
     nc, ncs, nr, k, n: LONGINT; aligns: IntArr; widths: RealArr;
-    headRow, row: A.Row; simple, plain, spans, hasFooter, allZero, headless, multiline: BOOLEAN;
+    headRow, row: A.Row; simple, plainCells, spans, hasFooter, allZero, headless, multiline: BOOLEAN;
     head: RowCells; rows: RowArr; c: A.Cell; pass: INTEGER;
 BEGIN
   caption := ToInlines(t.caption.blocks);
@@ -1067,9 +1260,9 @@ BEGIN
   WHILE cs # NIL DO INC(ncs); cs := cs.next END;
   nc := ncs;
   IF headRow # NIL THEN n := CellCount(headRow.cells); IF n > nc THEN nc := n END END;
-  nr := 0; simple := TRUE; plain := TRUE; spans := FALSE;
-  CheckRow(t.head.rows, simple, plain, spans);
-  CheckRow(t.foot.rows, simple, plain, spans);
+  nr := 0; simple := TRUE; plainCells := TRUE; spans := FALSE;
+  CheckRow(t.head.rows, simple, plainCells, spans);
+  CheckRow(t.foot.rows, simple, plainCells, spans);
   (* count the rows and widen nc: pass 0 head rows after the first,
      then each body's head and body rows, then the foot rows *)
   IF headRow # NIL THEN row := headRow.next ELSE row := NIL END;
@@ -1081,7 +1274,7 @@ BEGIN
     END;
     IF pass = 1 THEN row := tb.body; pass := 2; tb := tb.next
     ELSIF tb # NIL THEN
-      CheckRow(tb.head, simple, plain, spans); CheckRow(tb.body, simple, plain, spans);
+      CheckRow(tb.head, simple, plainCells, spans); CheckRow(tb.body, simple, plainCells, spans);
       row := tb.head; pass := 1
     ELSIF pass # 3 THEN row := t.foot.rows; pass := 3
     ELSE EXIT
@@ -1098,13 +1291,13 @@ BEGIN
       cs := cs.next
     END
   END;
-  IF (simple & ~hasFooter & allZero & ~spans) OR (plain & ~spans & ~hasFooter) THEN
+  capt := Inlines(caption);
+  IF ~IsNullAttr(t.attr) THEN capt := L.Hsep(capt, Attrs(t.attr)) END;
+  IF caption = NIL THEN capD := L.BlankLine()
+  ELSE capD := L.Above(L.Above(L.BlankLine(), L.Cat(Lit(": "), capt)), L.BlankLine())
+  END;
+  IF (simple & ~hasFooter & allZero & ~spans) OR (plainCells & ~spans & ~hasFooter) THEN
     multiline := ~(simple & ~hasFooter & allZero & ~spans);
-    capt := Inlines(caption);
-    IF ~IsNullAttr(t.attr) THEN capt := L.Hsep(capt, Attrs(t.attr)) END;
-    IF caption = NIL THEN capD := L.BlankLine()
-    ELSE capD := L.Above(L.Above(L.BlankLine(), L.Cat(Lit(": "), capt)), L.BlankLine())
-    END;
     headless := TRUE;
     IF headRow # NIL THEN
       c := headRow.cells;
@@ -1127,21 +1320,25 @@ BEGIN
     RETURN L.Above(L.Nest(2, L.Above(PandocTable(multiline, headless, head, rows, nr, aligns,
       widths, nc), capD)), L.BlankLine())
   END;
+  IF plain THEN RETURN L.Above(L.Above(Lit("[TABLE]"), capD), L.BlankLine()) END;
   RETURN L.Above(Lr(RemoveBlankLines(PdHtml.Fragment(t))), L.BlankLine())
 END Table;
 
 (* Notes *)
 
-PROCEDURE NoteDoc(blocks: A.Block; num: LONGINT): L.Doc;
-  VAR contents, spacer: L.Doc; n: Rope; size: LONGINT;
+PROCEDURE NoteDoc(blocks: A.Block; num: LONGINT; up: BOOLEAN): L.Doc;
+  VAR contents, spacer: L.Doc; n: Rope; size: LONGINT; save: BOOLEAN;
 BEGIN
+  save := upper; upper := up;
   contents := BlockList(blocks);
+  upper := save;
   n := Cat(idPrefix, Sh.IntRope(num));
   size := 4 + L.Width(n);
   IF (blocks # NIL) & ((blocks.kind = A.Para) OR (blocks.kind = A.Plain)) THEN
     IF 4 - size > 0 THEN spacer := Lr(Spaces(4 - size)) ELSE spacer := Lit(" ") END
   ELSE spacer := L.Cr()
   END;
+  IF plain THEN RETURN L.Cat3(Lr(CatC(Cat(R("["), n), "]")), spacer, contents) END;
   RETURN L.Hang(4, L.Cat(Lr(CatS(Cat(R("[^"), n), "]:")), spacer), contents)
 END NoteDoc;
 
@@ -1154,7 +1351,7 @@ BEGIN
   noteNum := noteNum + noteCount; noteCount := 0;
   d := NIL;
   WHILE l # NIL DO
-    d := L.AboveBlank(d, NoteDoc(l.blocks, num));
+    d := L.AboveBlank(d, NoteDoc(l.blocks, num, l.upper));
     INC(num); l := l.next
   END;
   IF d = NIL THEN RETURN NIL END;
@@ -1172,7 +1369,11 @@ BEGIN
   | A.CodeBlock: d := CodeBlock(b(A.CodeBlk))
   | A.RawBlock: d := RawDoc(b(A.RawBlk).format, b(A.RawBlk).text)
   | A.BlockQuote:
-    d := L.Cat3(Lit("> "), L.Prefixed("> ", BlockList(b(A.BlocksBlk).blocks)), L.BlankLine())
+    IF plain THEN
+      d := L.Cat3(Lit("  "), L.Prefixed("  ", BlockList(b(A.BlocksBlk).blocks)), L.BlankLine())
+    ELSE
+      d := L.Cat3(Lit("> "), L.Prefixed("> ", BlockList(b(A.BlocksBlk).blocks)), L.BlankLine())
+    END
   | A.OrderedList: d := OrderedList(b(A.OrderedBlk))
   | A.BulletList: d := BulletList(b(A.ListBlk))
   | A.DefinitionList: d := DefList(b(A.DefListBlk))
@@ -1193,6 +1394,7 @@ END IsList;
 
 PROCEDURE CommentSep(): L.Doc;
 BEGIN
+  IF plain THEN RETURN L.Cr() END;
   RETURN RawDoc(R("html"), CatC(R("<!-- -->"), 0AX))
 END CommentSep;
 
@@ -1203,13 +1405,14 @@ BEGIN
   d := NIL;
   WHILE b # NIL DO
     nx := b.next;
-    IF IsList(b) & (nx # NIL) & (nx.kind = A.CodeBlock) & IsNullAttr(nx(A.CodeBlk).attr) THEN
+    IF IsList(b) & (nx # NIL) & (nx.kind = A.CodeBlock) & (plain OR IsNullAttr(nx(A.CodeBlk).attr)) THEN
       d := L.Cat(L.Cat3(d, Block(b), CommentSep()), Block(nx));
       nx := nx.next
     ELSIF IsList(b) & (nx # NIL) & (nx.kind = b.kind) THEN
       d := L.Cat3(d, Block(b), CommentSep())
     ELSIF b.kind = A.Plain THEN
-      IF (nx # NIL) & (nx.kind = A.RawBlock) OR inList & ~((nx # NIL) & (nx.kind = A.Div)) THEN
+      IF (nx # NIL) & (nx.kind = A.RawBlock)
+         OR inList & (plain OR ~((nx # NIL) & (nx.kind = A.Div))) THEN
         d := L.Cat(d, PlainDoc(b(A.InlinesBlk).inlines))
       ELSE d := L.Cat3(d, PlainDoc(b(A.InlinesBlk).inlines), L.BlankLine())
       END
@@ -1359,6 +1562,55 @@ BEGIN
   idPrefix := R(prefix); IF Len(idPrefix) = 0 THEN idPrefix := NIL END
 END SetOptions;
 
+(* Sets whether the writer writes plain text (-t plain) rather than
+   markdown *)
+PROCEDURE SetPlain*(on: BOOLEAN);
+BEGIN
+  plain := on
+END SetPlain;
+
+(* A template value as a Doc (doctemplates' FromContext): a simple
+   value, or the concatenation of a list's items; NIL if v is neither *)
+PROCEDURE ValDoc(v: T.Value; VAR d: L.Doc): BOOLEAN;
+  VAR e: T.Entry; x: L.Doc;
+BEGIN
+  d := NIL;
+  IF v = NIL THEN RETURN FALSE
+  ELSIF v.kind = T.SimpleV THEN d := v.doc; RETURN TRUE
+  ELSIF v.kind = T.ListV THEN
+    e := v.items;
+    WHILE e # NIL DO
+      IF ~ValDoc(e.value, x) THEN d := NIL; RETURN FALSE END;
+      d := L.Cat(d, x); e := e.next
+    END;
+    RETURN TRUE
+  END;
+  RETURN FALSE
+END ValDoc;
+
+(* plainTitleBlock: the title, the authors separated by "; ", and the
+   date, each on its own line *)
+PROCEDURE PlainTitleBlock(m: T.Value): L.Doc;
+  VAR title, authors, date, x: L.Doc; v: T.Value; e: T.Entry; ok: BOOLEAN;
+BEGIN
+  ok := ValDoc(T.Get(m, "title"), title);
+  ok := ValDoc(T.Get(m, "date"), date);
+  authors := NIL; v := T.Get(m, "author");
+  IF (v # NIL) & (v.kind = T.ListV) THEN
+    e := v.items; ok := TRUE;
+    WHILE ok & (e # NIL) DO
+      IF ValDoc(e.value, x) THEN
+        IF e # v.items THEN authors := L.Cat(authors, Lit("; ")) END;
+        authors := L.Cat(authors, x)
+      ELSE ok := FALSE; authors := NIL
+      END;
+      e := e.next
+    END
+  ELSIF ValDoc(v, x) THEN authors := x
+  END;
+  RETURN L.Cat(L.Cat3(title, L.Cr(), authors), L.Cat3(L.Cr(), date, L.Cr()))
+END PlainTitleBlock;
+
 (* Writes the document doc as markdown: its body, or, if tmpl is not
    NIL, the template filled in *)
 PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
@@ -1366,9 +1618,11 @@ PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
     tb: A.Block;
 BEGIN
   notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ids := NIL;
-  inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE;
+  inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE; upper := FALSE; script := NoScript;
   metadata := C.FromMeta(doc.meta, BlockDoc, InlineDoc);
-  titleblock := L.Above(L.Above(Lit("---"), ContextToYaml(metadata)), Lit("---"));
+  IF plain THEN titleblock := PlainTitleBlock(metadata)
+  ELSE titleblock := L.Above(L.Above(Lit("---"), ContextToYaml(metadata)), Lit("---"))
+  END;
   toc := NIL;
   IF wantToc THEN
     tb := Contents(doc.blocks);
@@ -1377,7 +1631,8 @@ BEGIN
   (* a final Div with the id "refs" is dropped *)
   blocks := doc.blocks; last := NIL; b := blocks;
   WHILE (b # NIL) & (b.next # NIL) DO last := b; b := b.next END;
-  IF (b # NIL) & (b.kind = A.Div) & (b(A.DivBlk).attr # NIL) & Eq(b(A.DivBlk).attr.id, "refs") THEN
+  IF ~plain & (b # NIL) & (b.kind = A.Div) & (b(A.DivBlk).attr # NIL)
+     & Eq(b(A.DivBlk).attr.id, "refs") THEN
     IF last = NIL THEN blocks := NIL ELSE last.next := NIL END
   END;
   main := L.Cat(BlockList(blocks), NotesAndRefs());
@@ -1401,5 +1656,6 @@ END WriteDoc;
 BEGIN
   preserve := FALSE; wantToc := FALSE; numberSections := FALSE; tocDepth := 3; idPrefix := NIL;
   notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ids := NIL;
-  inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE
+  inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE;
+  plain := FALSE; upper := FALSE; script := NoScript
 END PdMdWriter.

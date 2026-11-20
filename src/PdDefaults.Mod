@@ -440,6 +440,20 @@ BEGIN
   C(0AX)
 END T5;
 
+PROCEDURE T6;
+BEGIN
+  S("$if(titleblock)$"); C(0AX); S("$titleblock$"); C(0AX);
+  C(0AX); S("$endif$"); C(0AX); S("$for(header-includes)$");
+  C(0AX); S("$header-includes$"); C(0AX); C(0AX);
+  S("$endfor$"); C(0AX); S("$for(include-before)$"); C(0AX);
+  S("$include-before$"); C(0AX); C(0AX); S("$endfor$");
+  C(0AX); S("$if(toc)$"); C(0AX); S("$table-of-contents$");
+  C(0AX); C(0AX); S("$endif$"); C(0AX);
+  S("$body$"); C(0AX); S("$for(include-after)$"); C(0AX);
+  C(0AX); S("$include-after$"); C(0AX); S("$endfor$");
+  C(0AX)
+END T6;
+
 (* Whether there is a default template or partial called name
    ("default.html5", "styles.html", ...); if there is, it is
    text[0 .. len-1] *)
@@ -452,6 +466,7 @@ BEGIN
   ELSIF name = "default.ms" THEN T3
   ELSIF name = "default.context" THEN T4
   ELSIF name = "default.markdown" THEN T5
+  ELSIF name = "default.plain" THEN T6
   ELSE RETURN FALSE
   END;
   text := t; len := n; t := NIL;

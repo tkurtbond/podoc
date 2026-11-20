@@ -1,0 +1,70 @@
+A header
+
+A paragraph with emphasis, strong, ~~strike~~, ^(sup), _(sub), SMALL CAPS, code, $x^2$ and
+$$y$$
+, a link, http://example.com/auto, an [image], a footnote[1] and an inline note[2], “quotes” and ‘single’, a hard
+break, and special characters: * _ ` # < > [ ] \ $ | ~ ^.
+
+Second level
+
+  A block quote
+
+    nested.
+
+    main = print 1
+
+    indented code
+
+Inside a div.
+
+Nested div.
+
+- bullet one
+- bullet two
+  - nested
+  - ☐ a task
+  - ☒ done
+
+Between lists.
+
+3.  third
+
+4.  fourth
+
+    with a second paragraph
+
+Then.
+
+(a) alpha
+(b) beta
+
+Term
+
+  Definition one.
+
+  More.
+
+Other term
+  Two.
+
+line one
+   line two indented
+
+------------------------------------------------------------------------
+
+  Right   Left    Center
+  ------- ------ --------
+  1       a         x
+  22      bb        yy
+
+  : A caption
+
+[A figure caption]
+
+Final paragraph with a span.
+
+[1] The footnote,
+
+in two paragraphs.
+
+[2] Inline note.

@@ -1,0 +1,94 @@
+Edge cases for ms
+Ann Ó Bruadair; B. (Two)
+2026-11-20
+
+- Héading with x² and H₂O and SMALL
+
+Héading with x² and H₂O and SMALL
+
+Unnumbered “quoted” heading
+
+.leading period and ‘single’ “double” and @ ~ ^ ` and a MIXED SMALLCAPS 3X.
+
+[A caption with emph]
+
+[]
+
+[Not a figure] inline.
+
+i.  one
+ii. two
+iii. three
+
+(a) alpha
+(b) beta
+
+1.  default
+2.  second
+
+7)  seven
+8)  eight
+
+Term one
+  Definition one.
+  Second paragraph.
+
+Term two
+
+      code def
+
+-     code item
+
+- item
+
+  continued
+
+-   quoted
+
+1.  first
+
+    second para
+
+line one
+  line two
+
+A note.[1] And another.[2]
+
+link and web and me@example.com.
+
+Term with note[3]
+  def
+
+------------------------------------------------------------------------
+
+Div para.
+
+  A     B
+  --- ---
+  1     2
+
+  : Caption here.
+
+  -----------------------------------------
+      Wide one             Wide two
+  ---------------- ------------------------
+         x                    y
+
+         z                    w
+  -----------------------------------------
+
+  : Multiline with widths.
+
+Line one
+line two.
+
+code and .dot and bold both and ~~strike~~.
+
+[1] Note text.
+
+More note.
+
+[2]
+    code note
+
+[3] in a term

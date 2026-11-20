@@ -1,0 +1,30 @@
+A heading
+
+Some text here over two lines.
+
+Another heading
+
+A heading
+
+A heading
+
+    indented code
+      more
+
+    after blank
+
+    main = print 1
+
+    x = 1
+
+  A quote continued lazily and more
+
+  second para
+
+line one
+   indented line
+continued here
+
+------------------------------------------------------------------------
+
+plain para

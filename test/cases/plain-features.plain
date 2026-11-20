@@ -1,0 +1,63 @@
+The Plain Writer
+One Author; Two Author
+2026-11-20
+
+A Header with emphasis
+
+Second level
+
+Third level
+
+Some SMALL CAPS WITH A NOTE[1] and H₂O, x², ^(a b), ^(x), _(x), _(q), ^(Q), _(a q), x₁ ₂ and ~~gone~~.
+
+Span and code and http://example.com and a link and [an image] and me@example.com and “quotes” and ‘single’.
+
+line one
+   line two indented
+
+after blank
+
+  A block quote with two lines.
+
+    Nested.
+
+Term
+  Definition one.
+
+Term two
+
+  Loose definition.
+
+  Second paragraph.
+
+- a list
+
+    code after list
+
+1.  one
+2.  two
+
+1.  three
+
+raw plain
+inline raw and .
+
+A div.
+
+[A figure caption]
+
+[Figure with id]
+
+    indented code
+
+------------------------------------------------------------------------
+
+Text with a second note.[2]
+
+Final.
+
+[1] A NOTE IN CAPS.
+
+[2] Second note.
+
+With a code block.

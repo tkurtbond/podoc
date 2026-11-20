@@ -3,7 +3,7 @@
 podoc is a small subset of [pandoc](https://pandoc.org) 3.10, written
 in Oberon-2 and built with the Peaseblossom Oberon Compiler (`poc`).
 It reads pandoc markdown with YAML metadata. It writes HTML, groff
-`ms`, ConTeXt, markdown and pandoc's JSON, and it makes PDF with
+`ms`, ConTeXt, markdown, plain text and pandoc's JSON, and it makes PDF with
 `pdfroff`, `groff` or ConTeXt. It is for systems where pandoc is too
 big to install or will not build, and it runs only the parts of pandoc
 that a set of writing builds use. Where it does those things, its
@@ -61,7 +61,7 @@ when no files are named. `podoc --help` lists the options:
 | Option | Meaning |
 |---|---|
 | `-f`, `-r`, `--from`, `--read` | the input format: `markdown` only |
-| `-t`, `-w`, `--to`, `--write` | `html` (`html5`), `ms`, `context`, `markdown`, `json` or `pdf` |
+| `-t`, `-w`, `--to`, `--write` | `html` (`html5`), `ms`, `context`, `markdown`, `plain`, `json` or `pdf` |
 | `-o FILE` | the output file; with no `-t`, its extension names the format |
 | `-s`, `--standalone` | a whole document, through a template |
 | `--template FILE` | the template (implies `-s`) |
@@ -127,7 +127,7 @@ word (see "What it needs").
 ## Templates
 
 podoc carries pandoc 3.10's default templates for `html5`, `ms`,
-`context` and `markdown`. `--template NAME` looks for the name as
+`context`, `markdown` and `plain`. `--template NAME` looks for the name as
 given, then with the format's extension added, then in pandoc's user
 data directory (`$XDG_DATA_HOME/pandoc/templates`, or
 `~/.pandoc/templates`). Templates use pandoc's template language, with

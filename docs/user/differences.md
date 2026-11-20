@@ -24,8 +24,8 @@ in PLAN.md) is listed by the writer.
   format (`.rst`, `.tex`, ...) when there is no `-f`, with 21. Inputs
   and `-o` imply formats as in pandoc, with pandoc's warnings when an
   extension names none.
-- podoc writes `html` (`html5`), `ms`, `context`, `markdown`, `json`
-  and PDF; `-t latex`, or `-o x.tex` with no `-t`, ends it with exit
+- podoc writes `html` (`html5`), `ms`, `context`, `markdown`,
+  `plain`, `json` and PDF; `-t latex`, or `-o x.tex` with no `-t`, ends it with exit
   status 22.
 - `--pdf-engine` takes only `groff`, `pdfroff` or `context` (by base
   name, so a path is allowed); anything else ends podoc with status 6,
@@ -268,3 +268,17 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
   `test/roundtrip.txt`; on the user's 49 documents, 40 read back to
   the same AST and the other 9 lose only what pandoc's round trip
   loses.
+
+## The plain writer
+
+- TeX math is written as its TeX between dollars, `$...$` inline and
+  `$$...$$` on a line of its own for display math, as pandoc writes
+  the math texmath cannot convert. pandoc converts what it can into
+  Unicode text (`$x^2$` becomes `x²`, `$\alpha$` becomes `α`); podoc
+  has no TeX math parser.
+- Tables that pandoc writes as grid tables (cells holding more than
+  one paragraph or other blocks, or tables too wide for a multiline
+  table) are written as `[TABLE]`, with their caption, pandoc's
+  fallback when no table extension fits.
+- Output is not wrapped; `--wrap=preserve` keeps the input's line
+  breaks.

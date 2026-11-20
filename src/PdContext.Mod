@@ -310,7 +310,7 @@ BEGIN
 END Get;
 
 (* The default template for the output format format (html5, ms,
-   context, markdown), from the user data directory or built in. One
+   context, markdown, plain), from the user data directory or built in. One
    that cannot be found or compiled ends the program. *)
 PROCEDURE GetDefault*(format: ARRAY OF CHAR; VAR t: T.Template);
   VAR name, path: ARRAY PathLen OF CHAR; text: PdIO.Text; len: LONGINT;

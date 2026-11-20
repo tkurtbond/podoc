@@ -1,0 +1,97 @@
+Intro
+
+Text with a note[pre-1] and another.[pre-2]
+
+Sub link here
+
+- ☐ todo
+- ☒ done
+
+1.  one
+2.  two
+
+(1) ex one
+(2) ex two
+
+1.  hash
+
+iv. roman
+v.  roman2
+
+A)  alpha
+B)  beta
+
+Deep
+
+Unlisted
+
+left
+
+right
+
+Inside div.
+
+[A figure caption]
+
+[] inline [alt x] and [] and []
+
+SPAN k m u p plain x y
+
+raw html
+
+Line one
+  Line two
+
+  quote
+
+    nested
+
+Term
+  Definition one
+  more
+
+Term 2
+  Def 2a
+  Def 2b
+
+------------------------------------------------------------------------
+
+    Right Left    Center  Default
+  ------- ------ -------- ---------
+       12 12        12    12
+      123 123      123    123
+
+  : Simple table
+
+  ------------------------------------------------------------------
+   Centered Header  Default Aligned     Right Aligned Left Aligned
+  ----------------- ----------------- --------------- --------------
+        First       row                          12.0 Example long
+
+       Second       row                           5.0 Here
+  ------------------------------------------------------------------
+
+  : Multiline {#pre-tbl .c}
+
+Second
+
+Back link a@b.com and mail and int.
+
+Cite H₂O ~~s~~ ^(sup)
+
+Last para with ↩ arrow and ↔.
+
+Para[pre-3]
+
+Empty header
+
+Not header
+
+[pre-1] First note.
+
+Second para of note.
+
+[pre-2] Inline note here.
+
+[pre-3]
+    code note

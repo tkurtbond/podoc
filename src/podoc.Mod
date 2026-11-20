@@ -134,6 +134,7 @@ BEGIN
   ELSIF O.standalone & (to = "ms") THEN C.GetDefault("ms", tmpl)
   ELSIF O.standalone & (to = "context") THEN C.GetDefault("context", tmpl)
   ELSIF O.standalone & (to = "markdown") THEN C.GetDefault("markdown", tmpl)
+  ELSIF O.standalone & (to = "plain") THEN C.GetDefault("plain", tmpl)
   END;
   text := NIL; len := 0;
   IF O.files = NIL THEN
@@ -171,9 +172,10 @@ BEGIN
   ELSIF to = "context" THEN
     PdConTeXt.SetOptions(O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth);
     PdConTeXt.WriteDoc(Doc(text, len), tmpl)
-  ELSIF to = "markdown" THEN
+  ELSIF (to = "markdown") OR (to = "plain") THEN
     PdHtml.SetOptions(O.idPrefix, O.numberSections, FALSE, FALSE, O.tocDepth, "-");
     PdMdWriter.SetOptions(O.wrap = "preserve", O.toc, O.tocDepth, O.numberSections, O.idPrefix);
+    PdMdWriter.SetPlain(to = "plain");
     PdMdWriter.WriteDoc(Doc(text, len), tmpl)
   ELSIF len > 0 THEN
     PdIO.WriteChars(text^, 0, len)

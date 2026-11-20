@@ -29,7 +29,7 @@ is finished:
 
 - the reader, `PdMarkdown`, and YAML metadata, `PdYaml`;
 - the writers: JSON, HTML (`PdHtml`), ms (`PdMs`), ConTeXt
-  (`PdConTeXt`) and markdown (`PdMdWriter`), with templates
+  (`PdConTeXt`), markdown and plain text (`PdMdWriter`), with templates
   (`PdTemplate`);
 - the command line, `PdOptions`;
 - includes, `PdInclude`, with globs in `PdGlob`;
@@ -38,7 +38,9 @@ is finished:
 - builds and tests on FreeBSD, NetBSD and OpenBSD, `make install`, and
   docs/user/podoc.md.
 
-Further work is in PLAN.md's "Later". See PLAN.md's State.
+Phase 16 (plain text, grid and pipe tables) and Phase 17 (wrapping)
+are under way. Further work is in PLAN.md's "Later". See PLAN.md's
+State.
 
 ## Reference material
 

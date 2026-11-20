@@ -1,0 +1,119 @@
+Escapes
+
+Braces {} backslash \ dollar $ bar | percent % tilde ~ hash # [brackets]. Dashes – and — and … and it’s “quoted” and ‘single’. Non-breaking space.
+
+Unnumbered
+
+Unlisted
+
+Both
+
+Inlines
+
+em bf SC ul ~~strike~~ x² H₂O plain a{b} {"'\()-+=%,.:;}x}y$a+b$ and $$\int x$$ and{=context}{=tex}`{=html}
+
+Line
+after
+break.
+
+A https://example.com/a%20b#frag autolink and me@example.com. Text and internal and odd.
+
+[Alt] [Inline] []
+
+Span rtl.
+
+Note.[1] Code note.[2]
+
+Blocks
+
+  Quote
+
+    nested
+
+line one
+  indented
+
+after empty
+
+Div text.
+
+English.
+
+Ref.
+
+1.  one
+
+2.  two
+
+    a.  alpha
+
+    b.  beta
+
+        i.  roman
+
+            A)  Upper
+
+                (I) Roman
+
+3)  paren
+
+(7) two parens
+
+1.  default
+2.  default
+
+Term
+  Definition one.
+  Definition two.
+
+Term 2
+  Loose
+  paragraphs
+
+- tight
+
+- list
+
+- loose
+
+- list
+
+------------------------------------------------------------------------
+
+    main = print 1
+
+    { braces }
+
+[Figure caption]
+
+  Left     Right  Center  Default
+  ------ ------- -------- ---------
+  a            b    c     d
+  e            f    g     h
+
+  : Table caption {#tbl:one}
+
+  -----------------
+   short   long
+  -------- --------
+     x     y
+
+  -----------------
+
+  -----------------------------------------------------------------------
+               Wide              Narrow
+  ------------------------------ ----------------------------------------
+   A multiline cell that wraps.  B
+
+                C                D
+  -----------------------------------------------------------------------
+
+  : Multiline with widths
+
+[1] A note.
+
+Second paragraph.
+
+[2] With code:
+
+    code
