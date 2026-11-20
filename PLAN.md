@@ -78,12 +78,15 @@ JSON AST compared byte for byte.
 - **Text is held in Ropes** (`~/Repos/Oberon/Ropes`, §12.1): string
   fields of the AST, and all output. Writers build their output by
   concatenation, templates splice the body in, and the result is
-  written leaf by leaf with `Ropes.WriteFile`, never flattened. The
+  written leaf by leaf (`PdIO.WriteRope`, through
+  `Ropes.IterateChunks`), never flattened. The
   reader works on the input as one flat `ARRAY OF CHAR`, for speed,
   and makes Ropes only for the text it keeps. Confirmed or revised in
   Phase 2.1.
 - **Modules** (names prefixed `Pd` to stay clear of the runtime's
-  global module namespace; to be confirmed in Phase 1):
+  global module namespace):
+  - `PdIO`: reading input whole, buffered output, messages and exit.
+  - `PdSource`: the inputs prepared and joined as pandoc does.
   - `PdAst`: the AST, constructors, a generic walk.
   - `PdJson`: the JSON writer.
   - `PdYaml`: the YAML subset.
@@ -97,8 +100,13 @@ JSON AST compared byte for byte.
   - `PdPdf`, `PdRun`: temporary directories and running engines.
   - `PdOptions`: the pandoc-compatible command line.
   - `podoc`: the main module.
-- **Errors** are reported with the file name and line, and the program
-  halts with a code in its own range (below).
+- **Errors** the user can cause (a missing file, a bad option, a
+  syntax error) are reported as `podoc: ...`, with the file name and
+  line where there is one, and end the program with pandoc's exit
+  status for that error (`Text.Pandoc.Error`: 1 for input and output,
+  6 for options, 22 for an unknown output format, and so on), so that
+  a build sees what it would from pandoc. HALT, with a code in
+  podoc's own range (below), is kept for what should never happen.
 
 ## Halt codes
 
@@ -108,12 +116,15 @@ The table is kept in AGENTS.md as codes are assigned.
 
 ## Testing
 
-- `make test` builds and runs `test/<Name>.Mod` unit tests, which print
-  `ok   - ` and `FAIL - ` lines, and the case tests: each
-  `test/cases/<name>.md` is converted by podoc and compared with the
+- `make test` builds and runs `test/<Name>Test.Mod` unit tests, which
+  print `ok   - ` and `FAIL - ` lines, compared with
+  `test/<Name>Test.expected`, and the case tests (`tools/runcases`):
+  each `test/cases/<name>.md` is converted by podoc, with the extra
+  arguments in `<name>.args` if there is one, and compared with the
   committed `<name>.json`, `<name>.html`, `<name>.ms`,
-  `<name>.context` and `<name>.markdown` that exist beside it.
-  `make test` does not need pandoc.
+  `<name>.context`, `<name>.markdown` and `<name>.source` that exist
+  beside it; standard error with `<name>.errors`, or nothing. Both
+  run under `-O2` and `-OC`. `make test` does not need pandoc.
 - The expected `.json` files are pandoc 3.10's, unchanged. The writers'
   expected files start as pandoc 3.10's `--wrap=none` output; where
   podoc's output differs but is equivalent (decision 3), the file is
@@ -125,9 +136,9 @@ The table is kept in AGENTS.md as codes are assigned.
   `test/pandoc-cases.txt`. For PDFs it compares `pdftotext` output.
 - `tools/mkcase` makes a case's expected files with pandoc.
 
-## Phase 1: The repository and the skeleton
+## Phase 1: The repository and the skeleton [done]
 
-### Phase 1.1: Repository files and the build
+### Phase 1.1: Repository files and the build [done]
 
 - `README.md`, `LICENSE` (BSD 3-Clause, as the other Oberon projects),
   `.gitattributes`, `.gitignore`.
@@ -137,11 +148,15 @@ The table is kept in AGENTS.md as codes are assigned.
   for both size models, and record in AGENTS.md how to install a
   missing one.
 
-### Phase 1.2: A program that runs
+### Phase 1.2: A program that runs [done]
 
 - `podoc` reads files named on the command line (or standard input),
-  joins them as pandoc does (with a blank line between), and writes
-  them unchanged to `-o` or standard output.
+  joins them as pandoc does, and writes them unchanged to `-o` or
+  standard output (`-t source`). pandoc's joining
+  (`App/Input.hs`, `Sources.hs`): each input has a UTF-8 BOM dropped
+  and its CRs removed, its tabs expanded to `--tab-stop` (4) counted in
+  characters, and a final new line ensured (none of this with
+  `--preserve-tabs`), and then a new line appended.
 - `--version` and `--help`.
 - A first case test, to prove the harness.
 
@@ -435,9 +450,10 @@ Oberon (decision 7).
 
 - Make and remove a temporary directory under `TMPDIR`.
 - Run a program with arguments, standard input from a file or buffer,
-  standard output to a file; report its exit status. Through pounix
-  without a shell; `Platform.System` with quoting only if pounix is
-  missing on a BSD.
+  standard output to a file; report its exit status. Through
+  `Platform.System`, with every argument in POSIX single quotes: pounix
+  is built for `-OC` only, and podoc must build under both models
+  (2026-11-20). pounix stays a possible `-OC` refinement.
 
 ### Phase 14.2: The engines
 
@@ -487,3 +503,17 @@ Oberon (decision 7).
   poc under `-O2` and `-OC`; a test program built on it ran under
   both (200,000 appends, 600,003 characters, depth 34, written with
   `WriteFile`, in 0.04 s). Phase 1 next.
+- 2026-11-20: Phase 1 done. `PdIO`, `PdSource` and `podoc` (with
+  ArgParser: `-o`, `-t`/`-w`, `--tab-stop`, `-p`/`--preserve-tabs`,
+  `-v`, `-h`), the GNUmakefile, `tools/runcases`, README, LICENSE and
+  `docs/user/differences.md`. ArgParser, Ropes and pounicode are
+  installed for both models; pounix and polibfyaml for `-OC` only, so
+  Phase 14.1 now plans `Platform.System` rather than pounix. `make
+  test` passed under `-O2` and `-OC`: `PdSourceTest` (13 checks: BOM,
+  CRs, tabs by characters, final new lines, joining) and the case
+  `join.source`. By hand: errors and exit statuses (1 for a missing
+  input or an output that cannot be created, 22 for an unknown
+  format; 2, not pandoc's 6, for an unknown option, from ArgParser),
+  `-ofile` and `-o file`, `-` for standard input, and pandoc 3.10's
+  tab expansion (`printf '    \xc3\xa9\tb'` gives a code block of
+  `é   b`). Phase 2 next.

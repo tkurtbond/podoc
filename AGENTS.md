@@ -24,8 +24,8 @@ there.
 
 ## Status
 
-As of 2026-11-20: research, plan and decisions only. No code yet.
-Phase 1 is next.
+As of 2026-11-20: Phase 1 done (the build, the tests, and a `podoc`
+that joins its inputs as pandoc does). See PLAN.md's State.
 
 ## Reference material
 
@@ -83,24 +83,28 @@ private directories wholesale.
 | Library | Use | Notes |
 |---|---|---|
 | pounicode (`Utf8`, `Unicode`, `Utf8Strings`, `Utf8Files`) | identifiers, delimiter rules | |
-| ArgParser | the command line, if it handles pandoc's option forms | poc build via `pocGNUmakefile` |
-| Ropes | AST strings and all output (scope §12.1) | installed for poc, both models; byte-oriented |
-| pounix (`UnixProcesses`, `UnixFiles`) | running PDF engines without a shell | Unix only |
+| ArgParser | the command line: `--opt=val`, `--opt val`, `-ovalue`, `-o value`, clustered short options | |
+| Ropes | AST strings and all output (scope §12.1) | byte-oriented |
+| pounix (`UnixProcesses`, `UnixFiles`) | not used: built for `-OC` only; PDF engines run through `Platform.System` | Unix only |
 | poDateTime | dates, if needed | |
 | polibfyaml | full YAML, a later build option | needs libfyaml; installed for `-OC` only |
 
-A library records the poc that built it, and another poc refuses it:
-rebuild and reinstall after upgrading poc.
+ArgParser, Ropes and pounicode must be installed under both models in
+`~/.local/lib/poc` (`POCLIBDIR`). A missing one is installed from its
+checkout under `~/Repos/Oberon`: `make -f pocGNUmakefile install` in
+`ArgParser` and `Ropes`, `make install` in `pounicode`. A library
+records the poc that built it, and another poc refuses it: rebuild and
+reinstall after upgrading poc.
 
 ## Building and testing
 
-Planned (PLAN.md, Phase 1); update this section when it exists.
-
 - `make` builds `podoc` under `-O2` and `-OC` in `build/O2` and
   `build/OC`.
-- `make test` runs the unit tests (`test/<Name>.Mod`, printing
-  `ok   - ` and `FAIL - ` lines) and the case tests (`test/cases/`,
-  expected output committed). It must not need pandoc. Expected JSON
+- `make test` runs the unit tests (`test/<Name>Test.Mod`, printing
+  `ok   - ` and `FAIL - ` lines, compared with `<Name>Test.expected`)
+  and the case tests (`tools/runcases`: `test/cases/<name>.md` with
+  optional `<name>.args`, against each expected `<name>.<format>`
+  beside it), under both models. It must not need pandoc. Expected JSON
   is pandoc 3.10's; the writers' expected files start as pandoc's
   `--wrap=none` output and may be replaced by podoc's equivalent
   output, each difference recorded in `docs/user/differences.md`
@@ -112,10 +116,16 @@ Planned (PLAN.md, Phase 1); update this section when it exists.
   for equivalence; the markdown writer by the round trip (its output
   read again gives the same JSON).
 
-## Halt codes
+## Exit statuses and halt codes
 
-The runtime uses 10..20 and the po* libraries 61..99; podoc's codes
-start at 100. None assigned yet. List each code here when it is.
+Errors the user can cause end podoc with pandoc's exit status for that
+error (`Text.Pandoc.Error`), through `PdIO.Fail` or `PdIO.Exit`: 1
+input or output, 22 unknown output format, and so on. ArgParser ends
+with 2 on a bad option (pandoc: 6).
+
+`HALT` is for what should never happen. The runtime uses 10..20 and
+the po* libraries 61..99; podoc's codes start at 100. None assigned
+yet. List each code here when it is.
 
 ## Conventions
 

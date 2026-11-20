@@ -1,0 +1,13 @@
+ok   - a new line is appended
+ok   - a last line gets a new line
+ok   - an empty input is a new line
+ok   - CRs are removed
+ok   - a lone CR is removed
+ok   - tabs go to the next stop
+ok   - tab stop 8
+ok   - tabs are kept with tab stop 0
+ok   - no last new line is added with tab stop 0
+ok   - inputs are joined
+ok   - columns restart in each input
+ok   - a byte order mark is dropped
+ok   - tabs count characters, not bytes

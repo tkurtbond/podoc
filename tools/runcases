@@ -1,0 +1,56 @@
+#!/bin/sh
+# runcases PODOC OUTDIR [CASEDIR]
+#
+# Runs the case tests: for each CASEDIR/<name>.md (test/cases by
+# default) and each expected output beside it, <name>.<ext>, where <ext>
+# is a format (json, html, ms, context, markdown, source), runs
+#
+#     PODOC -t <ext> <name>.md [the words of <name>.args]
+#
+# in CASEDIR, and compares its standard output with <name>.<ext> and its
+# standard error with <name>.errors, or with nothing if there is no such
+# file. Results go in OUTDIR. Prints an "ok   - " or "FAIL - " line for
+# each, and exits 1 if any failed.
+
+if [ $# -lt 2 ]; then
+  echo "usage: runcases PODOC OUTDIR [CASEDIR]" >&2
+  exit 2
+fi
+podoc=$1
+outdir=$2
+casedir=${3:-test/cases}
+
+case $podoc in /*) ;; *) podoc=$(pwd)/$podoc ;; esac
+mkdir -p "$outdir" || exit 2
+case $outdir in /*) ;; *) outdir=$(pwd)/$outdir ;; esac
+cd "$casedir" || exit 2
+
+failed=0
+total=0
+for md in *.md; do
+  [ -f "$md" ] || continue
+  name=${md%.md}
+  args=
+  [ -f "$name.args" ] && args=$(cat "$name.args")
+  for ext in json html ms context markdown source; do
+    [ -f "$name.$ext" ] || continue
+    total=$((total + 1))
+    # $args is split into words on purpose
+    # shellcheck disable=SC2086
+    "$podoc" -t "$ext" "$md" $args > "$outdir/$name.$ext" 2> "$outdir/$name.$ext.err"
+    status=$?
+    errors=/dev/null
+    [ -f "$name.errors" ] && errors=$name.errors
+    if [ $status -eq 0 ] &&
+       diff -u "$name.$ext" "$outdir/$name.$ext" > "$outdir/$name.$ext.diff" &&
+       diff -u "$errors" "$outdir/$name.$ext.err" >> "$outdir/$name.$ext.diff"; then
+      echo "ok   - $name.$ext"
+    else
+      echo "FAIL - $name.$ext (status $status)"
+      cat "$outdir/$name.$ext.diff"
+      failed=$((failed + 1))
+    fi
+  done
+done
+echo "$((total - failed)) of $total case tests passed"
+[ $failed -eq 0 ]
