@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+# mkmime: writes src/PdMime.Mod, the extensions pandoc 3.10 knows a
+# MIME type for, each with the type's category (image, video, audio
+# or another), from data/mime-types.txt.
+#   tools/mkmime > src/PdMime.Mod
+import os, sys
+
+here = os.path.dirname(os.path.abspath(sys.argv[0]))
+cats = {'image': 'i', 'video': 'v', 'audio': 'a'}
+words = []
+for line in open(os.path.join(here, '..', 'data', 'mime-types.txt')):
+    if line.startswith('#') or not line.strip():
+        continue
+    ext, typ = line.split()
+    words.append((ext, cats.get(typ.split('/')[0], 'o')))
+words.sort()
+maxlen = max(len(e) for e, c in words) + 3
+
+lines, cur = [], ''
+for e, c in words:
+    w = '%s:%s ' % (e, c)
+    if len(cur) + len(w) > 64:
+        lines.append(cur); cur = ''
+    cur += w
+if cur:
+    lines.append(cur)
+
+w = sys.stdout.write
+w('''MODULE PdMime;
+(* PdMime: the extensions pandoc 3.10 knows a MIME type for
+   (Text.Pandoc.MIME.getMimeType), with the category of each type.
+   Written by tools/mkmime from data/mime-types.txt; do not edit. *)
+
+CONST
+  Unknown* = 0; Image* = 1; Video* = 2; Audio* = 3; Other* = 4;
+  Count = %d;
+  WordLen = %d;
+
+TYPE
+  Word = ARRAY WordLen OF CHAR;
+
+VAR
+  exts: ARRAY Count OF Word;
+  cats: ARRAY Count OF CHAR;
+  n: INTEGER;
+
+(* Adds the entries in s, each "ext:c" followed by a space *)
+PROCEDURE Add(s: ARRAY OF CHAR);
+  VAR i, j: INTEGER;
+BEGIN
+  i := 0;
+  WHILE s[i] # 0X DO
+    j := 0;
+    WHILE s[i] # ":" DO exts[n][j] := s[i]; INC(i); INC(j) END;
+    exts[n][j] := 0X;
+    cats[n] := s[i + 1]; INC(n); INC(i, 3)
+  END
+END Add;
+
+(* The category of the MIME type of the extension ext (without the
+   dot, compared ignoring case): Image, Video, Audio, Other, or Unknown
+   if there is no MIME type for it *)
+PROCEDURE Category*(ext: ARRAY OF CHAR): INTEGER;
+  VAR lo, hi, mid, i: INTEGER; e: Word;
+BEGIN
+  i := 0;
+  WHILE (i < LEN(ext)) & (ext[i] # 0X) DO
+    IF i = WordLen - 1 THEN RETURN Unknown END;
+    IF (ext[i] >= "A") & (ext[i] <= "Z") THEN e[i] := CHR(ORD(ext[i]) + 32)
+    ELSE e[i] := ext[i]
+    END;
+    INC(i)
+  END;
+  e[i] := 0X;
+  lo := 0; hi := Count - 1;
+  WHILE lo <= hi DO
+    mid := (lo + hi) DIV 2;
+    IF exts[mid] = e THEN
+      CASE cats[mid] OF
+        "i": RETURN Image
+      | "v": RETURN Video
+      | "a": RETURN Audio
+      ELSE RETURN Other
+      END
+    ELSIF exts[mid] < e THEN lo := mid + 1
+    ELSE hi := mid - 1
+    END
+  END;
+  RETURN Unknown
+END Category;
+
+BEGIN
+  n := 0;
+''' % (len(words), maxlen))
+for l in lines:
+    w('  Add("%s");\n' % l)
+w('END PdMime.\n')

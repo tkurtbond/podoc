@@ -25,7 +25,7 @@ SRCS := $(wildcard src/*.Mod)
 TESTS := $(patsubst test/%.Mod,%,$(wildcard test/*Test.Mod))
 CASES := $(wildcard test/cases/*)
 
-.PHONY: all test test-o2 test-oc clean FORCE
+.PHONY: all test test-o2 test-oc compare clean FORCE
 .SECONDEXPANSION:
 
 all: $(MODELS:%=$(BUILD)/%/podoc)
@@ -45,6 +45,11 @@ $(BUILD)/%/podoc: $(SRCS) $(POC_STAMP)
 	  -output-dir $(BUILD)/$* -o $@ src/podoc.Mod
 
 test: test-o2 test-oc
+
+# pandoc and podoc side by side (tools/compare), where pandoc is installed
+COMPARE_FORMATS ?= json html
+compare: $(BUILD)/OC/podoc
+	tools/compare $(BUILD)/OC/podoc $(BUILD)/compare $(COMPARE_FORMATS)
 
 test-o2: $(TESTS:%=$(BUILD)/O2/test/%.passed) $(BUILD)/O2/cases.passed
 test-oc: $(TESTS:%=$(BUILD)/OC/test/%.passed) $(BUILD)/OC/cases.passed

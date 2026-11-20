@@ -1438,6 +1438,30 @@ BEGIN
   RETURN d
 END RenderT;
 
+(* Whether the template t uses the variable name (its parts joined by
+   "."), as pandoc's HTML writer's hasVariable asks: in an
+   interpolation, a conditional or a loop, at any depth *)
+PROCEDURE HasVariable*(t: Template; name: ARRAY OF CHAR): BOOLEAN;
+  VAR r: Ropes.Rope; p: Part; found: BOOLEAN;
+BEGIN
+  found := FALSE;
+  WHILE (t # NIL) & ~found DO
+    IF (t.kind = interpolate) OR (t.kind = conditional) OR (t.kind = iterate) THEN
+      r := NIL; p := t.var.parts;
+      WHILE p # NIL DO
+        IF r # NIL THEN r := Ropes.Cat(r, Ropes.FromString(".")) END;
+        r := Ropes.Cat(r, p.name); p := p.next
+      END;
+      found := Ropes.EqualString(r, name)
+    END;
+    IF ~found & (t.kind # literal) THEN
+      found := HasVariable(t.a, name) OR HasVariable(t.b, name)
+    END;
+    t := t.next
+  END;
+  RETURN found
+END HasVariable;
+
 (* The template t rendered with the context ctx, a map *)
 PROCEDURE Render*(t: Template; ctx: Value): L.Doc;
 BEGIN

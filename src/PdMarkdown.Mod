@@ -834,14 +834,28 @@ BEGIN
   RETURN TRUE
 END DefinitionItem;
 
-(* definitionList *)
+PROCEDURE^ Table(VAR l: A.Blocks): BOOLEAN;
+
+(* Whether a table starts at p *)
+PROCEDURE TableAt(p: LONGINT): BOOLEAN;
+  VAR save, sp, st: LONGINT; tmp: A.Blocks; found: BOOLEAN;
+BEGIN
+  save := B.pos; sp := B.lastStrPos; st := B.lastStrText;
+  B.pos := p; A.InitBlocks(tmp);
+  found := Table(tmp);
+  B.pos := save; B.lastStrPos := sp; B.lastStrText := st;
+  RETURN found
+END TableAt;
+
+(* definitionList; a line and a blank line before a table (whose
+   caption starts with ":") start none *)
 PROCEDURE DefinitionList(VAR l: A.Blocks): BOOLEAN;
   VAR p, q: LONGINT; first, last, item: A.DefItem;
 BEGIN
   p := B.AnyLine(B.pos);
   IF p < 0 THEN RETURN FALSE END;
   q := B.BlankLine(p);
-  IF q >= 0 THEN p := q END;
+  IF (q >= 0) & ~TableAt(q) THEN p := q END;
   IF B.DefListStart(p) < 0 THEN RETURN FALSE END;
   first := NIL; last := NIL;
   WHILE DefinitionItem(item) DO

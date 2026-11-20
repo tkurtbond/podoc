@@ -1,0 +1,143 @@
+<h1 class="special" data-key="val" id="intro">Intro</h1>
+<p>Text with a note<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a> and another.<a href="#fn2" class="footnote-ref" id="fnref2" role="doc-noteref"><sup>2</sup></a></p>
+<h2 id="sub-link-here">Sub <a href="http://x.com">link</a> here</h2>
+<ul class="task-list">
+<li><label><input type="checkbox" />todo</label></li>
+<li><label><input type="checkbox" checked="" />done</label></li>
+</ul>
+<ol type="1">
+<li>one</li>
+<li>two</li>
+</ol>
+<ol class="example" type="1">
+<li>ex one</li>
+<li>ex two</li>
+</ol>
+<ol>
+<li>hash</li>
+</ol>
+<ol start="4" type="i">
+<li>roman</li>
+<li>roman2</li>
+</ol>
+<ol type="A">
+<li>alpha</li>
+<li>beta</li>
+</ol>
+<h3 class="unnumbered" id="deep">Deep</h3>
+<h4 class="unlisted" id="unlisted">Unlisted</h4>
+<div class="columns">
+<div class="column" style="width:40%;">
+<p>left</p>
+</div><div class="column" style="width:60%;">
+<p>right</p>
+</div>
+</div>
+<div id="d1" class="warning" data-x="1" data-foo="bar" data-label="l">
+<p>Inside div.</p>
+</div>
+<figure id="fig1">
+<img src="fig.png" title="Title" style="height:2.5cm" width="300" alt="A figure caption" />
+<figcaption aria-hidden="true">A figure caption</figcaption>
+</figure>
+<p><img src="inline.svg" style="width:50.0%" /> inline <img src="a.jpg" alt="given" /> and <audio src="s.mp3" controls=""><a href="s.mp3">Audio</a></audio> and <embed src="doc.pdf" /></p>
+<p><span class="smallcaps">span</span> <kbd id="s1" class="x">k</kbd> <mark>m</mark> <u>u</u> <span style="font-style:normal;">p</span> <span class="foo" style="color:red">plain</span> <samp>x</samp> <var class="z">y</var></p>
+<div class="raw">
+raw html
+</div>
+<div class="line-block">Line one<br />
+  Line two</div>
+<blockquote>
+<p>quote</p>
+<blockquote>
+<p>nested</p>
+</blockquote>
+</blockquote>
+<dl>
+<dt>Term</dt>
+<dd>
+Definition one
+more
+</dd>
+<dt>Term 2</dt>
+<dd>
+Def 2a
+</dd>
+<dd>
+Def 2b
+</dd>
+</dl>
+<hr />
+<table>
+<caption>Simple table</caption>
+<thead>
+<tr>
+<th style="text-align: right;">Right</th>
+<th style="text-align: left;">Left</th>
+<th style="text-align: center;">Center</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">12</td>
+<td style="text-align: left;">12</td>
+<td style="text-align: center;">12</td>
+<td>12</td>
+</tr>
+<tr>
+<td style="text-align: right;">123</td>
+<td style="text-align: left;">123</td>
+<td style="text-align: center;">123</td>
+<td>123</td>
+</tr>
+</tbody>
+</table>
+<table id="tbl" class="c" style="width:64%;">
+<caption>Multiline</caption>
+<colgroup>
+<col style="width: 15%" />
+<col style="width: 18%" />
+<col style="width: 15%" />
+<col style="width: 15%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: center;">Centered Header</th>
+<th style="text-align: left;">Default Aligned</th>
+<th style="text-align: right;">Right Aligned</th>
+<th style="text-align: left;">Left Aligned</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">First</td>
+<td style="text-align: left;">row</td>
+<td style="text-align: right;">12.0</td>
+<td style="text-align: left;">Example long</td>
+</tr>
+<tr>
+<td style="text-align: center;">Second</td>
+<td style="text-align: left;">row</td>
+<td style="text-align: right;">5.0</td>
+<td style="text-align: left;">Here</td>
+</tr>
+</tbody>
+</table>
+<h1 id="second">Second</h1>
+<p>Back link <a href="mailto:a@b.com" class="email">a@b.com</a> and <a href="mailto:x@y.z">mail</a> and <a href="#intro" title="go">int</a>.</p>
+<p><span class="citation">Cite</span> H<sub>2</sub>O <del>s</del> <sup>sup</sup></p>
+<p>Last para with ↩︎ arrow and ↔︎.</p>
+<p>Para<a href="#fn3" class="footnote-ref" id="fnref3" role="doc-noteref"><sup>3</sup></a></p>
+<h2 class="unnumbered" id="empty-header">Empty header</h2>
+<p class="heading" id="not-header">Not header</p>
+<section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes">
+<hr />
+<ol>
+<li id="fn1"><p>First note.</p>
+<p>Second para of note.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>Inline <em>note</em> here.<a href="#fnref2" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><pre><code>code note</code></pre>
+<a href="#fnref3" class="footnote-back" role="doc-backlink">↩︎</a></li>
+</ol>
+</section>

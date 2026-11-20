@@ -339,13 +339,13 @@ that exists), which on the user's machine is `~/.pandoc`.
 
 ## Phase 7: The HTML writer
 
-### Phase 7.1: Blocks and inlines
+### Phase 7.1: Blocks and inlines [done]
 
 - Every element of §3.3, escaping, attributes, figures, tables with
   alignment, footnotes at the end.
 - Raw `html` passed through; other raw formats dropped.
 
-### Phase 7.2: Standalone HTML
+### Phase 7.2: Standalone HTML [done]
 
 - `-s` with the default template and `--css`; `--toc` (and
   `--toc-depth`); `--number-sections`.
@@ -681,3 +681,28 @@ Oberon (decision 7).
   cases for a missing template (97), a template that does not compile
   (5) and a missing `-H` file (99), with pandoc's messages but for its
   data directory path. Phase 7 next.
+- 2026-11-20: Phase 7 done. `PdHtml` writes pandoc's HTML5: every
+  block and inline, escaping, attributes (`data-` for unknown keys),
+  section divs, task lists, ordered list types and starts, definition
+  lists, figures, tables with column widths, alignment, `colgroup`,
+  heads and feet, footnotes with back links, images with dimensions,
+  `video`, `audio` and `embed` by media type (`PdMime`, from
+  `data/mime-types.txt` through `tools/mkmime`), and raw `html`
+  passed through. With `-s` it fills the default `html5` template:
+  title, authors, date, keywords, `pagetitle` falling back to the
+  input's name, `--css`, `--toc` and `--toc-depth`, `-N`. `podoc`
+  adds `--wrap`, `--id-prefix`, `-N`, `--toc`, `--toc-depth` and
+  `-c`/`--css`; `-s -t json` now ends without a new line, as
+  pandoc's does. Reader fix: a paragraph followed by `: caption` and
+  a table is no longer read as a definition list. `tools/compare`
+  (`make compare`) runs pandoc and podoc side by side on the case
+  inputs and the files in `test/compare.txt`. `make test` passed
+  under `-O2` and `-OC`: 47 of 47 cases, among them 13 new `.html`
+  expected files (pandoc's `--wrap=none --syntax-highlighting=none`
+  output, except `inlines.html` and `tables.html`, which are podoc's
+  because of TeX math). Acceptance: with `PANDOC=~/.cabal/bin/pandoc
+  make compare`, 263 of 267 comparisons were the same; the four that
+  differ are TeX math in the `inlines` and `tables` cases
+  (docs/user/differences.md). All 49 markdown files of Lost-Worlds and
+  Galactic-Bounty-Hunters gave pandoc's HTML byte for byte, without
+  and with `-s`, and with `-s --toc -N`. Phase 8 next.

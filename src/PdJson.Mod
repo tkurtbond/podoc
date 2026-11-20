@@ -462,13 +462,20 @@ BEGIN
   END
 END MetaValue;
 
-(* Writes the document d, as pandoc -t json does, to PdIO's output. *)
-PROCEDURE WriteDoc*(d: A.Doc);
+(* Writes the document d as JSON to PdIO's output, without a final
+   new line, as pandoc -s -t json does (json's template is empty). *)
+PROCEDURE WriteDocNoNl*(d: A.Doc);
 BEGIN
   PdIO.WriteString('{"pandoc-api-version":'); PdIO.WriteString(ApiVersion);
   PdIO.WriteString(',"meta":'); MetaEntries(d.meta.entries);
   PdIO.WriteString(',"blocks":'); Blocks(d.blocks);
-  PdIO.WriteChar("}"); PdIO.WriteLn
+  PdIO.WriteChar("}")
+END WriteDocNoNl;
+
+(* Writes the document d, as pandoc -t json does, to PdIO's output. *)
+PROCEDURE WriteDoc*(d: A.Doc);
+BEGIN
+  WriteDocNoNl(d); PdIO.WriteLn
 END WriteDoc;
 
 END PdJson.

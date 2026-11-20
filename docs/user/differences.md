@@ -70,3 +70,24 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
 - `pandoc-version` is `3.10`, the pandoc that podoc follows.
 - The variable `meta-json` is not set, and there is no
   `--variable-json` or `--data-dir`.
+
+## The HTML writer
+
+- Code is not highlighted: podoc writes what `pandoc
+  --syntax-highlighting=none` writes.
+- TeX math is written as its TeX, escaped, inside `span.math`
+  (`\(...\)` and `\[...\]`); pandoc's default output converts it
+  with texmath to HTML where it can.
+- Output is not wrapped: `--wrap=auto` behaves as `--wrap=none`;
+  `--wrap=preserve` keeps the input's soft line breaks. A `--wrap`
+  value other than `auto`, `none` or `preserve` ends podoc with exit
+  status 2.
+- The media type of an image or link target (for `video`, `audio` and
+  `embed`) comes from podoc's built-in table, made from pandoc's.
+- E-mail addresses are not obfuscated (pandoc's default is none too;
+  `--email-obfuscation` is not supported).
+- The date in `<meta name="dcterms.date">` is normalized with
+  pandoc's list of date formats in the C locale (English month
+  names), with `%x` and `%D` read as `%m/%d/%y`.
+- Raw blocks and inlines are passed through for the formats `html`,
+  `html5` and `html4`; every other raw format is dropped.

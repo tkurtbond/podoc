@@ -1,0 +1,7 @@
+# Inputs for tools/compare (make compare) besides test/cases: the
+# user's markdown documents, read only. "~/" is the home directory;
+# each line is split into words and its patterns expanded.
+~/Repos/RPG/Lost-Worlds/*.md
+~/Repos/RPG/Lost-Worlds/Includes/*.md
+~/Repos/RPG/Galactic-Bounty-Hunters/*.md
+~/Repos/RPG/Galactic-Bounty-Hunters/Includes/*.md

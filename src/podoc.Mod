@@ -15,7 +15,7 @@ MODULE podoc;
    (-B), include-after (-A), header-includes (-H) and curdir. *)
 
 IMPORT Platform, ArgParser, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
-  T := PdTemplate, C := PdContext;
+  T := PdTemplate, C := PdContext, PdHtml;
 
 CONST
   Version = "0.1";
@@ -41,6 +41,11 @@ VAR
   standalone: BOOLEAN; (* -s *)
   template: ArgParser.String; (* --template; "" for the default *)
   before, lastBefore, after, lastAfter, header, lastHeader: File; (* -B, -A, -H *)
+  wrap: ArgParser.String; (* --wrap: auto, none or preserve *)
+  idPrefix: ArgParser.String; (* --id-prefix *)
+  numberSections: BOOLEAN; (* -N *)
+  toc: BOOLEAN; (* --toc *)
+  tocDepth: INTEGER; (* --toc-depth *)
   done: BOOLEAN; (* --help or --version was given: nothing else is done *)
 
 (* The command line *)
@@ -199,13 +204,55 @@ BEGIN
   RETURN TRUE
 END AddMeta;
 
+(* --wrap: auto, none or preserve *)
+PROCEDURE SetWrap(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  IF (arg # "auto") & (arg # "none") & (arg # "preserve") THEN
+    PdIO.Message3("Unknown option for wrap: '", arg, "'");
+    PdIO.Exit(2)
+  END;
+  COPY(arg, wrap);
+  RETURN TRUE
+END SetWrap;
+
+PROCEDURE SetIdPrefix(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  COPY(arg, idPrefix);
+  RETURN TRUE
+END SetIdPrefix;
+
+PROCEDURE SetNumberSections(): BOOLEAN;
+BEGIN
+  numberSections := TRUE;
+  RETURN TRUE
+END SetNumberSections;
+
+(* --css: adds a URL to the variable css *)
+PROCEDURE AddCss(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  C.AddListString("css", arg);
+  RETURN TRUE
+END AddCss;
+
+PROCEDURE SetToc(): BOOLEAN;
+BEGIN
+  toc := TRUE;
+  RETURN TRUE
+END SetToc;
+
+PROCEDURE SetTocDepth(n: LONGINT): BOOLEAN;
+BEGIN
+  tocDepth := SHORT(n);
+  RETURN TRUE
+END SetTocDepth;
+
 PROCEDURE ParseCommandLine;
 BEGIN
   parser := ArgParser.NewParser("podoc [OPTIONS] [FILES]", AddInput);
   parser.AddOption(ArgParser.MakeStringOption("o", "output",
     "Write to FILE rather than standard output.", SetOutput));
   parser.AddOption(ArgParser.MakeStringOption("t", "to",
-    "The output format: json or source.", SetTo));
+    "The output format: html, html5, json or source.", SetTo));
   parser.AddOption(ArgParser.MakeStringOption("w", "write",
     "The same as --to.", SetTo));
   parser.AddOption(ArgParser.MakeStringOption("M", "metadata",
@@ -224,6 +271,20 @@ BEGIN
     "Put the contents of FILE at the start of the body.", AddBefore));
   parser.AddOption(ArgParser.MakeStringOption("A", "include-after-body",
     "Put the contents of FILE at the end of the body.", AddAfter));
+  parser.AddOption(ArgParser.MakeOption("N", "number-sections",
+    "Number the sections' headings.", SetNumberSections));
+  parser.AddOption(ArgParser.MakeOption(0X, "toc",
+    "Write a table of contents (with -s).", SetToc));
+  parser.AddOption(ArgParser.MakeOption(0X, "table-of-contents",
+    "The same as --toc.", SetToc));
+  parser.AddOption(ArgParser.MakeIntOption(0X, "toc-depth",
+    "Put headings of levels 1 to N in the table of contents (3).", SetTocDepth, 1, 6));
+  parser.AddOption(ArgParser.MakeStringOption("c", "css",
+    "Link to the style sheet URL (HTML, with -s).", AddCss));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "id-prefix",
+    "Put STRING before every identifier (HTML).", SetIdPrefix));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "wrap",
+    "How to wrap lines: auto, none or preserve (podoc does not wrap).", SetWrap));
   parser.AddOption(ArgParser.MakeIntOption(0X, "tab-stop",
     "Expand tabs to every N columns (4).", SetTabStop, 1, 1000));
   parser.AddOption(ArgParser.MakeOption("p", "preserve-tabs",
@@ -292,7 +353,8 @@ PROCEDURE Run;
   VAR text: PdIO.Text; len: LONGINT; f: File; tmpl: T.Template;
 BEGIN
   IF to = "" THEN to := "source" END;
-  IF (to # "source") & (to # "json") THEN
+  IF to = "html5" THEN to := "html" END;
+  IF (to # "source") & (to # "json") & (to # "html") THEN
     PdIO.Message3("Unknown output format '", to, "'");
     PdIO.Exit(PdIO.UnknownWriter)
   END;
@@ -306,7 +368,10 @@ BEGIN
   END;
   SetVariables;
   (* json has no default template, and writes none *)
-  IF standalone & (template # "") & (to = "json") THEN C.Get(template, to, tmpl) END;
+  tmpl := NIL;
+  IF standalone & (template # "") THEN C.Get(template, to, tmpl)
+  ELSIF standalone & (to = "html") THEN C.GetDefault("html5", tmpl)
+  END;
   text := NIL; len := 0;
   IF files = NIL THEN
     PdSource.AddFile(text, len, "-", tabStop)
@@ -319,7 +384,16 @@ BEGIN
   END;
   PdIO.OpenOutput(output);
   IF to = "json" THEN
-    PdJson.WriteDoc(ReadDoc(text, len))
+    IF standalone THEN PdJson.WriteDocNoNl(ReadDoc(text, len))
+    ELSE PdJson.WriteDoc(ReadDoc(text, len))
+    END
+  ELSIF to = "html" THEN
+    IF files = NIL THEN
+      PdHtml.SetOptions(idPrefix, numberSections, wrap = "preserve", toc, tocDepth, "-")
+    ELSE
+      PdHtml.SetOptions(idPrefix, numberSections, wrap = "preserve", toc, tocDepth, files.name^)
+    END;
+    PdHtml.WriteDoc(ReadDoc(text, len), tmpl)
   ELSIF len > 0 THEN
     PdIO.WriteChars(text^, 0, len)
   END;
@@ -331,6 +405,7 @@ BEGIN
   cmdMeta := A.NewMetaMap();
   output := ""; to := ""; tabStop := DefaultTabStop; done := FALSE;
   standalone := FALSE; template := "";
+  wrap := "auto"; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
   before := NIL; lastBefore := NIL; after := NIL; lastAfter := NIL;
   header := NIL; lastHeader := NIL;
   ParseCommandLine;

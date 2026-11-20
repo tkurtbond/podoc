@@ -1,0 +1,87 @@
+#!/bin/sh
+# compare PODOC OUTDIR FORMAT...
+#
+# Runs pandoc and podoc side by side, where pandoc is installed, and
+# reports each input whose outputs differ. The inputs are the case
+# tests' markdown files, test/cases/*.md, with their <name>.args, and
+# the files listed in test/compare.txt, one per line ("~/" is the home
+# directory; blank lines and lines starting with "#" are skipped),
+# each run in its own directory. For each format (json, html, ...),
+#
+#     pandoc --wrap=none --syntax-highlighting=none -f markdown -t FORMAT
+#     PODOC -t FORMAT
+#
+# are run, and for html also with -s. Outputs go in OUTDIR; a line
+# "DIFF <format> <input> (<pandoc status>/<podoc status>) <n>" is
+# printed for each pair that differs, n being the number of lines diff
+# shows. Known differences (docs/user/differences.md), TeX math for
+# one, show here. Exits 1 if any differ.
+
+if [ $# -lt 3 ]; then
+  echo "usage: compare PODOC OUTDIR FORMAT..." >&2
+  exit 2
+fi
+podoc=$1
+outdir=$2
+shift 2
+pandoc=${PANDOC:-pandoc}
+command -v "$pandoc" > /dev/null 2>&1 || { echo "compare: no $pandoc" >&2; exit 2; }
+
+case $podoc in /*) ;; *) podoc=$(pwd)/$podoc ;; esac
+mkdir -p "$outdir" || exit 2
+case $outdir in /*) ;; *) outdir=$(pwd)/$outdir ;; esac
+top=$(pwd)
+
+differ=0
+total=0
+
+# one DIR FILE TAG FORMAT ARGS...
+one() {
+  dir=$1 file=$2 tag=$3 fmt=$4
+  shift 4
+  total=$((total + 1))
+  out=$outdir/$tag.$fmt
+  (cd "$dir" && "$pandoc" --wrap=none --syntax-highlighting=none -f markdown \
+    -t "$fmt" "$file" "$@" > "$out.pandoc" 2> "$out.pandoc.err")
+  ps=$?
+  (cd "$dir" && "$podoc" -t "$fmt" "$file" "$@" > "$out.podoc" 2> "$out.podoc.err")
+  os=$?
+  if [ $ps -ne $os ] || ! cmp -s "$out.pandoc" "$out.podoc"; then
+    n=$(diff "$out.pandoc" "$out.podoc" | grep -c '^[<>]')
+    echo "DIFF $fmt $tag ($ps/$os) $n"
+    differ=$((differ + 1))
+  fi
+}
+
+# input DIR FILE TAG ARGS...
+input() {
+  idir=$1 ifile=$2 itag=$3
+  shift 3
+  for f in $formats; do
+    one "$idir" "$ifile" "$itag" "$f" "$@"
+    if [ "$f" = html ]; then one "$idir" "$ifile" "$itag-s" "$f" -s "$@"; fi
+  done
+}
+
+formats=$*
+for md in "$top"/test/cases/*.md; do
+  name=$(basename "$md" .md)
+  args=
+  [ -f "$top/test/cases/$name.args" ] && args=$(cat "$top/test/cases/$name.args")
+  # $args is split into words on purpose
+  # shellcheck disable=SC2086
+  input "$top/test/cases" "$name.md" "case-$name" $args
+done
+if [ -f "$top/test/compare.txt" ]; then
+  while IFS= read -r line; do
+    case $line in ''|'#'*) continue ;; esac
+    case $line in '~/'*) line=$HOME/${line#\~/} ;; esac
+    for path in $line; do
+      [ -f "$path" ] || continue
+      tag=$(echo "$path" | sed 's|^/||; s|/|_|g; s|\.md$||')
+      input "$(dirname "$path")" "$(basename "$path")" "$tag"
+    done
+  done < "$top/test/compare.txt"
+fi
+echo "$((total - differ)) of $total comparisons the same"
+[ $differ -eq 0 ]
