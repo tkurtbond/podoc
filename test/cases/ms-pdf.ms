@@ -1,5 +1,6 @@
 .NH 1
 Héading with x\*{2\*} and H\*<2\*>O and S\s-2MALL\s0
+.br
 .pdfhref O 1 "\*[SN]  \376\377\000H\000\351\000a\000d\000i\000n\000g\000 \000w\000i\000t\000h\000 \000x\000\262\000 \000a\000n\000d\000 \000H\040\202\000O\000 \000a\000n\000d\000 \000S\000M\000A\000L\000L"
 .pdfhref M "he-ad"
 .XS
@@ -8,6 +9,7 @@ Héading with x\*{2\*} and H\*<2\*>O and S\s-2MALL\s0
 .XE
 .SH 2
 Unnumbered \(lqquoted\(rq heading
+.br
 .pdfhref O 2 "\376\377\000U\000n\000n\000u\000m\000b\000e\000r\000e\000d\000 \040\034\000q\000u\000o\000t\000e\000d\040\035\000 \000h\000e\000a\000d\000i\000n\000g"
 .pdfhref M "unnumbered-quoted-heading"
 .XS

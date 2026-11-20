@@ -58,6 +58,11 @@ Made by the user on 2026-11-20, on the questions of §15.
 7. **A full markdown writer** for the `-whole.md` targets (Phase 10),
    not a textual expansion of the includes.
 8. **The name `podoc` and pandoc's command line.**
+9. **`.br` after a heading's text in ms, before its `.pdfhref`
+   lines** (2026-11-20), when a PDF engine is set. pandoc writes none;
+   without it groff 1.25's `.SH` and `.NH` box the `.pdfhref` lines
+   with the heading, print them, and make no bookmarks. Listed in
+   docs/user/differences.md.
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -1039,8 +1044,8 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
     1.25's `s.tmac` diverts the heading (`box @NHpdf`) and makes the
     bookmark itself, so the `.pdfhref O` pandoc and podoc put after
     the heading text runs inside the diversion and is printed. pandoc
-    3.10's ms has the same `.pdfhref O`. Leaving it out for groff 1.25
-    would be a difference from pandoc; not decided.
+    3.10's ms has the same `.pdfhref O`. Fixed by decision 9's `.br`,
+    below.
   - groff 1.25.0 does not ship `pdfroff` or `pdfmark.tmac` (its NEWS:
     the pdfmark package is now maintained separately, as
     groff-pdfmark; 1.24.2, below, does not ship them either). terhali: `pdfroff` ends with 47. erekose: 1.22.4's
@@ -1066,5 +1071,32 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
     atla and erekose: an older `pdfroff` later in the PATH (1.23.0's,
     1.22.4's) cannot load `pdfmark` with 1.24.2's troff, exits 0 and
     leaves an empty 2.4 KB PDF (12 of 24 runs on each).
-  - So a workaround for the stray heading line, if one is decided,
-    is needed for groff 1.25 and later only.
+  - So the stray heading line is new in groff 1.25.
+- 2026-11-20: the `.br` of decision 9. On atla, groff 1.25.0 by hand
+  on ms-pdf's ms: without `-r PDFFEAT=1` (which podoc does not pass;
+  1.25's NEWS calls ms's own PDF features opt-in for now), podoc's
+  ms as it was gave no bookmarks at all and the stray lines; with the
+  `.br`, podoc's bookmarks, correct titles, internal links and their
+  targets, and no stray lines; with `-r PDFFEAT=1` each heading gets
+  two bookmarks, ms's and podoc's. Moving the `.pdfhref` lines before
+  `.SH` instead left a stray line and lost the second bookmark.
+  `make test` passed under both models (382 `ok`, no `FAIL`, 23 of 23
+  round trips; ms-pdf.ms and ms-standalone.ms gained their `.br`).
+  Then the PDF runs (6 documents, `pdfroff` and `groff`, `-O2` and
+  `-OC`) from the working tree on atla, terhali and erekose, each with
+  groff 1.23.0, 1.24.2 and 1.25.0 first in the PATH:
+  - 1.23.0, both engines, all hosts: every run ended with status 0;
+    all 12 `-OC` PDFs on terhali and erekose have the same words as
+    atla's, with bookmarks. (terhali's 1.23.0 works now; it did not
+    earlier today.)
+  - `--pdf-engine=groff` with 1.24.2 and 1.25.0, all hosts: every run
+    ended with status 0; no stray lines; ms-pdf and ms-standalone have
+    their bookmarks (H₂O and curly quotes kept). 1.24.2 has 1.23.0's
+    words; 1.25.0 differs only in ms-features, ms-pdf and ms-standalone,
+    where a footnote mark in an `.IP` label is 3, where 1.23.0 and
+    1.24.2 say 4 (1.25.0's is the right number).
+  - `--pdf-engine=pdfroff` with 1.24.2 and 1.25.0: 47 on terhali; on
+    atla and erekose the older `pdfroff` exits 0 and leaves 6 empty
+    PDFs of 12, as before.
+  - `-O2` and `-OC` gave the same words everywhere; no temporary
+    directories left.

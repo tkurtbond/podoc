@@ -811,7 +811,10 @@ BEGIN
   END;
   firstPara := TRUE;
   d := Above(L.Cat3(d, L.Space(), L.Literal(Sh.IntRope(h.level))), contents);
-  IF hasEngine THEN d := Above(d, Above3(bookmark, anchor, toc)) END;
+  (* .br ends the heading's line first: groff 1.25's .SH and .NH box
+     the heading until its line is output, and would box (and print)
+     the .pdfhref lines too; pandoc writes no .br *)
+  IF hasEngine THEN d := Above3(d, Lit(".br"), Above3(bookmark, anchor, toc)) END;
   RETURN d
 END Header;
 

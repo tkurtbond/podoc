@@ -81,6 +81,7 @@ An abstract with \f[I]emphasis\f[R].
 .1C
 .SH 1
 Héading with x\*{2\*} and H\*<2\*>O and S\s-2MALL\s0
+.br
 .pdfhref O 1 "Héading with x² and H₂O and SMALL"
 .pdfhref M "he-ad"
 .XS
@@ -89,6 +90,7 @@ Héading with x\*{2\*} and H\*<2\*>O and S\s-2MALL\s0
 .XE
 .SH 2
 Unnumbered \(lqquoted\(rq heading
+.br
 .pdfhref O 2 "Unnumbered “quoted” heading"
 .pdfhref M "unnumbered-quoted-heading"
 .LP

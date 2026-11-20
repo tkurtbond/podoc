@@ -190,6 +190,13 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
   `eqn`: `@...@` inline and `.EQ` ... `.EN`.
 - The plain text of a heading in its PDF bookmark (`.pdfhref O`)
   comes from podoc's own approximation of pandoc's plain writer.
+- When it writes bookmarks (a PDF engine is set), podoc writes `.br`
+  after a heading's text, before its `.pdfhref` lines; pandoc does
+  not. groff 1.25's `.SH` and `.NH` hold the heading in a box until
+  its line is output, so without the `.br` the `.pdfhref` lines are
+  caught in it: each heading is followed by a printed
+  `.pdfbookmark ...` line, and no bookmarks are made. The `.br`
+  changes nothing with groff 1.23 or 1.24.
 - Small caps use Unicode's simple upper-case mapping, one character
   for one.
 - Output is not wrapped, as for HTML.
