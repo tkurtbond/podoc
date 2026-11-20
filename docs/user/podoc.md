@@ -24,9 +24,10 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
     1.25.0 work with `--pdf-engine=groff` (with pandoc's ms output,
     1.25.0 prints a stray `.pdfbookmark` line after each heading and
     makes no bookmarks; see differences.md). groff 1.25.0 itself
-    repeats a word, and spaces out the first line, in an `.SH` or
-    `.NH` heading that wraps to a second line; 1.24.2 and 1.23.0 do
-    not. Since groff 1.24,
+    repeats a word, and spaces out a line, in an `.SH` or `.NH`
+    heading that wraps to a second line, under `-Tpdf` and `-Tps`
+    and under `-Tascii`, `-Tutf8` and `-Tlatin1` alike; 1.24.2 and
+    1.23.0 do not. Since groff 1.24,
     `pdfroff` is not part of groff: with the pdfmark macros, it is now
     the separate groff-pdfmark package. An older `pdfroff` left on the
     PATH may then make an empty PDF without reporting an error;

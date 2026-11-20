@@ -1141,3 +1141,11 @@ longer follows `PREFIX`. `make uninstall` removes what it installed.
   no harm, as the 1.23.0 PDF uses only Palatino and Symbol. 1.25.0's
   tables are also a little narrower in places. Temporary directories
   removed on all three hosts.
+- 2026-11-20: the same heading on atla under groff 1.25.0's terminal
+  devices. `-Tascii`, `-Tutf8` and `-Tlatin1` all give "Converting
+  Between Minimal", then a spaced-out "OpenD6 OpenD6 & Traditional",
+  then "OpenD6" on a third line; 1.24.2 gives "Converting Between
+  Minimal" and "OpenD6 & Traditional OpenD6". The wider characters
+  break the first line sooner than under `-Tpdf`, so the repeated
+  word is a different one, but it is again the word at the start of
+  the second line. So the bug is in ms, not in a device.
