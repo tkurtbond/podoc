@@ -917,17 +917,22 @@ END MetaString;
    NIL, the template filled in *)
 PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
   VAR ctx: T.Value; main, placelist: L.Doc; meta: A.MetaMapV; s, lang: Rope; found: BOOLEAN;
+    blocks: A.Block;
     k: INTEGER; b: Buf; n, i: LONGINT;
     levels: ARRAY 6, 20 OF CHAR;
 BEGIN
   nextRef := 1; listLevel := 0; cslRefs := FALSE; cslHanging := FALSE;
   meta := doc.meta;
   ctx := C.Build(meta, BlockDoc, InlineDoc);
-  main := Blocks(Sh.MakeSections(FALSE, -1, doc.blocks));
+  blocks := Sh.MakeSections(FALSE, -1, doc.blocks);
   IF tmpl = NIL THEN
-    L.Write(L.Chomp(main), width); PdIO.WriteLn;
+    (* a block at a time, so the whole body is never built *)
+    L.Open(width);
+    WHILE blocks # NIL DO L.PutAbove(Block(blocks)); blocks := blocks.next END;
+    L.Close; PdIO.WriteLn;
     RETURN
   END;
+  main := Blocks(blocks);
   C.DefField(ctx, "toc", T.NewBool(wantToc));
   C.DefField(ctx, "lof", T.NewBool(FALSE));
   C.DefField(ctx, "lot", T.NewBool(FALSE));

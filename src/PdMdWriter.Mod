@@ -19,6 +19,9 @@ IMPORT Ropes, Utf8, Unicode, Utf8Strings, A := PdAst, L := PdLayout, T := PdTemp
   C := PdContext, Sh := PdShared, I := PdMdInline, B := PdMdBase, PdWords,
   PdHtml, PdIO;
 
+CONST
+  IdBuckets = 4096; (* hash buckets for the identifiers used *)
+
 TYPE
   Rope = Ropes.Rope;
   Buf = PdIO.Text;
@@ -86,7 +89,7 @@ VAR
   notes, lastNote: NoteList; (* stNotes, in order *)
   noteCount: LONGINT; (* how many notes are in notes *)
   noteNum: LONGINT; (* stNoteNum: the number of the first of them *)
-  ids: IdList; (* stIds *)
+  ids: ARRAY IdBuckets OF IdList; (* stIds, hashed *)
   inList, escapeSpaces, noBreaks: BOOLEAN; (* the environment *)
   (* plain text: Strs in capitals (capitalize), and as superscripts or
      subscripts (Super, Sub) or not (NoScript) *)
@@ -362,10 +365,22 @@ END ClassOrAttrs;
 
 (* Identifiers *)
 
+PROCEDURE IdBucket(id: Rope): LONGINT;
+BEGIN
+  IF id = NIL THEN RETURN 0 END;
+  RETURN SHORT(Ropes.Hash(id) MOD IdBuckets)
+END IdBucket;
+
+PROCEDURE ClearIds;
+  VAR i: LONGINT;
+BEGIN
+  FOR i := 0 TO IdBuckets - 1 DO ids[i] := NIL END
+END ClearIds;
+
 PROCEDURE Used(id: Rope): BOOLEAN;
   VAR s: IdList;
 BEGIN
-  s := ids;
+  s := ids[IdBucket(id)];
   WHILE (s # NIL) & ~Ropes.Equal(s.s, id) DO s := s.next END;
   RETURN s # NIL
 END Used;
@@ -373,7 +388,7 @@ END Used;
 PROCEDURE Use(id: Rope);
   VAR s: IdList;
 BEGIN
-  NEW(s); s.s := id; s.next := ids; ids := s
+  NEW(s); s.s := id; s.next := ids[IdBucket(id)]; ids[IdBucket(id)] := s
 END Use;
 
 (* Inlines *)
@@ -1988,32 +2003,45 @@ BEGIN
 END CommentSep;
 
 (* blockListToMarkdown: the blocks, fixed as fixBlocks fixes them *)
-PROCEDURE BlockList(b: A.Block): L.Doc;
+(* The blocks b, joined; given to L.Put one by one if put, else
+   returned *)
+PROCEDURE BlocksTo(b: A.Block; put: BOOLEAN): L.Doc;
   VAR d: L.Doc; nx: A.Block; raw: Rope; n: LONGINT;
+
+  PROCEDURE Add(x: L.Doc);
+  BEGIN
+    IF put THEN L.Put(x) ELSE d := L.Cat(d, x) END
+  END Add;
+
 BEGIN
   d := NIL;
   WHILE b # NIL DO
     nx := b.next;
     IF IsList(b) & (nx # NIL) & (nx.kind = A.CodeBlock) & (plain OR IsNullAttr(nx(A.CodeBlk).attr)) THEN
-      d := L.Cat(L.Cat3(d, Block(b), CommentSep()), Block(nx));
+      Add(Block(b)); Add(CommentSep()); Add(Block(nx));
       nx := nx.next
     ELSIF IsList(b) & (nx # NIL) & (nx.kind = b.kind) THEN
-      d := L.Cat3(d, Block(b), CommentSep())
+      Add(Block(b)); Add(CommentSep())
     ELSIF b.kind = A.Plain THEN
       IF (nx # NIL) & (nx.kind = A.RawBlock)
          OR inList & (plain OR ~((nx # NIL) & (nx.kind = A.Div))) THEN
-        d := L.Cat(d, PlainDoc(b(A.InlinesBlk).inlines))
-      ELSE d := L.Cat3(d, PlainDoc(b(A.InlinesBlk).inlines), L.BlankLine())
+        Add(PlainDoc(b(A.InlinesBlk).inlines))
+      ELSE Add(PlainDoc(b(A.InlinesBlk).inlines)); Add(L.BlankLine())
       END
     ELSIF (b.kind = A.RawBlock) & (nx # NIL) & (nx.kind # A.Plain) & (nx.kind # A.RawBlock) THEN
       raw := b(A.RawBlk).text; n := Len(raw);
       IF (n > 0) & (Ropes.Fetch(raw, n - 1) # 0AX) THEN raw := CatC(raw, 0AX) END;
-      d := L.Cat(d, RawDoc(b(A.RawBlk).format, raw))
-    ELSE d := L.Cat(d, Block(b))
+      Add(RawDoc(b(A.RawBlk).format, raw))
+    ELSE Add(Block(b))
     END;
     b := nx
   END;
   RETURN d
+END BlocksTo;
+
+PROCEDURE BlockList(b: A.Block): L.Doc;
+BEGIN
+  RETURN BlocksTo(b, FALSE)
 END BlockList;
 
 (* The YAML metadata block *)
@@ -2228,7 +2256,7 @@ PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
   VAR metadata, ctx: T.Value; titleblock, toc, main: L.Doc; e: T.Entry; blocks, b, last: A.Block;
     tb: A.Block;
 BEGIN
-  notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ids := NIL;
+  notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ClearIds;
   inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE; upper := FALSE; script := NoScript;
   metadata := C.FromMeta(doc.meta, BlockDoc, InlineDoc);
   IF plain THEN titleblock := PlainTitleBlock(metadata)
@@ -2246,12 +2274,16 @@ BEGIN
      & Eq(b(A.DivBlk).attr.id, "refs") THEN
     IF last = NIL THEN blocks := NIL ELSE last.next := NIL END
   END;
-  main := L.Cat(BlockList(blocks), NotesAndRefs());
-  IF last # NIL THEN last.next := b END;
   IF tmpl = NIL THEN
-    L.Write(L.Chomp(main), LineLength()); PdIO.WriteLn;
+    (* a block at a time, so the whole body is never built *)
+    L.Open(LineLength());
+    main := BlocksTo(blocks, TRUE); L.Put(NotesAndRefs());
+    IF last # NIL THEN last.next := b END;
+    L.Close; PdIO.WriteLn;
     RETURN
   END;
+  main := L.Cat(BlockList(blocks), NotesAndRefs());
+  IF last # NIL THEN last.next := b END;
   ctx := metadata;
   e := C.variables.items;
   WHILE e # NIL DO T.PutRope(ctx, e.key, e.value); e := e.next END;
@@ -2266,7 +2298,7 @@ END WriteDoc;
 
 BEGIN
   preserve := FALSE; wantToc := FALSE; numberSections := FALSE; tocDepth := 3; idPrefix := NIL;
-  notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ids := NIL;
+  notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ClearIds;
   inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE;
   plain := FALSE; gutenberg := FALSE; columns := 72; wrapAuto := FALSE; upper := FALSE; script := NoScript
 END PdMdWriter.

@@ -189,6 +189,7 @@ BEGIN
     ELSE INC(i)
     END
   END;
+  IF start = 0 THEN RETURN r END; (* nothing escaped *)
   IF n > start THEN out := Cat(out, Ropes.Substring(r, start, n - start)) END;
   RETURN out
 END EscapeStr;
@@ -1159,7 +1160,7 @@ END LitV;
    the template filled in *)
 PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
   VAR ctx, v: T.Value; title, main: L.Doc; meta: A.MetaMapV; authors: A.InlineList;
-    s: Rope;
+    s: Rope; b: A.Block;
 BEGIN
   firstPara := TRUE; smallCaps := FALSE; inHeader := FALSE; hasInlineMath := FALSE;
   fontI := FALSE; fontB := FALSE; fontC := FALSE; fontV := FALSE; notes := NIL;
@@ -1170,11 +1171,14 @@ BEGIN
   title := L.Chomp(InlinesP(Sh.DocMeta(meta, "title"), FALSE));
   ctx := NIL;
   IF tmpl # NIL THEN ctx := C.Build(meta, BlockDoc, InlineDoc) END;
-  main := Blocks(doc.blocks);
   IF tmpl = NIL THEN
-    L.Write(L.Chomp(main), width); PdIO.WriteLn;
+    (* a block at a time, so the whole body is never built *)
+    L.Open(width); b := doc.blocks;
+    WHILE b # NIL DO L.PutAbove(Block(b)); b := b.next END;
+    L.Close; PdIO.WriteLn;
     RETURN
   END;
+  main := Blocks(doc.blocks);
   C.ResetField(ctx, "title", T.NewSimple(title));
   s := NIL; authors := Sh.DocAuthors(meta);
   WHILE authors # NIL DO

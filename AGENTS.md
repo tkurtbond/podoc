@@ -69,6 +69,7 @@ See PLAN.md's State.
 | The user's filters and templates | `~/.pandoc/filters`, `~/.pandoc/templates` |
 | Markdown projects using pandoc | `~/Repos/RPG/Lost-Worlds`, `~/Repos/RPG/Galactic-Bounty-Hunters` |
 | reStructuredText projects (templates, variables) | `~/Repos/RPG/Red-Planet-Blue-Helmets/2ER`, `~/current/RPG/Campaigns/Alusia/Return/Scenarios/005-merchant/rst-version` |
+| The largest reStructuredText files, for tests and benchmarks | `~/current/RPG/Mini-Six/SRD/minimal-opend6-srd.rst` (179 KB: grid and simple tables, `table` with `:widths:`, `raw:: ms` and `raw:: context`, line blocks, comments, `container`, hyperlink references), `~/current/RPG/Campaigns/Alusia/Return/Scenarios/005-merchant/rst-version/return-005-merchant.rst` (47 KB) |
 
 The user's projects and `~/.pandoc` are read only: never change them.
 Read the specific files you need; do not list `~/.pandoc` or other
@@ -143,7 +144,8 @@ reinstall after upgrading poc.
   Lost-Worlds builds and PDFs; run it under a `systemd-run` memory
   cap. Its results, the method and the changes made for performance
   are in `docs/developer/performance.md`. The layout writers' memory
-  use, still open, is in `docs/developer/memory-use-problem.md`.
+  use, its fixes and what is left are in
+  `docs/developer/memory-use-problem.md`.
 - `make install` installs the `-OC` podoc and `subs2yaml` (`PREFIX`,
   `~/.local` by default; `MODEL`, `DESTDIR`); `make uninstall`.
 - Tested on Fedora (atla), FreeBSD (alerik), NetBSD (artos, terhali;

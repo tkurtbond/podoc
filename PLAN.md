@@ -1213,21 +1213,14 @@ ConTeXt.
 - Templates: the pipes `left`, `right` and `center` (block layout);
   the `meta-json` variable; `--variable-json`; `--data-dir`; the
   "expecting ..." part of template error messages.
-- Memory use of the writers that lay out with `PdLayout` (found
-  2026-11-20, `-OC` on atla, pandoc 3.10's `MANUAL.txt` repeated):
-  at ×10 (3 MB) `-t ms` reaches 450 MB RSS, `markdown` 370 MB,
-  `plain` 360 MB and `context` 340 MB, about 110-150 times the input,
-  against 100 MB for `json` and 140 MB for `html`. At ×40 (12 MB)
-  `ms` and `markdown` hit poc's default 1 GB heap limit
-  (`GarbageCollectedHeap.defaultHeapLimit`): the collector thrashes
-  for 2 to 4 minutes, then `NEW` gives NIL and podoc ends with "NIL
-  pointer dereference". The user's documents are far smaller, so
-  nothing fails today. To look at: what holds the memory (the `Doc`
-  trees, `Flatten`'s lists, intermediate ropes, the whole body kept
-  as a `Doc` for the template), and whether parts can be laid out
-  and dropped earlier. Meanwhile, running out of heap should end
-  podoc with a message, not a NIL trap. See
-  docs/developer/memory-use-problem.md.
+- Memory use (found 2026-11-20; the layout writers' part fixed the
+  same day, see docs/developer/memory-use-problem.md). Left:
+  - with a template (`-s`) the body is still built whole as a `Doc`
+    before it is laid out;
+  - ConTeXt's sections are its top-level blocks, each built whole;
+  - the AST itself: 30-45 times the input at 12 MB, for every writer;
+  - running out of poc's heap ends in a NIL trap, not a message:
+    `GarbageCollectedHeap` has no hook for it (a question for poc).
 
 ## State
 
@@ -2032,8 +2025,7 @@ ConTeXt.
     tables are undone with them. `-t json` at ×10 went from 2.41 s to
     0.30 s; ×40 takes 1.53 s; the collector's share is 45-52% from ×1
     to ×40, no longer growing.
-  - Peaseblossom's PLAN.md item 34 records that what first looked like
-    the collector slowing was this.
+  - What first looked like the collector slowing was this, not poc.
   - Output was the same before and after: JSON at ×1, ×4 and ×10;
     `ms`, `context` and `markdown` at ×1 and ×2 (the old build crashed
     at ×4); `plain` and `html` at ×4.
@@ -2043,6 +2035,30 @@ ConTeXt.
   - `make test` passed under `-O2` and `-OC`, 23 round trips.
     `make compare`: 1396 of 1606 the same; 210 differ, as many as
     before.
+- 2026-11-20: the layout writers' memory use fixed; see
+  `docs/developer/memory-use-problem.md`.
+  - `Chomp` and `RemoveFinalNl` keep the nodes they don't change;
+    `Doc` nodes are smaller and the breaks shared; `PdLayout` renders
+    as it walks the tree, with no flattened copy; `PdMs.EscapeStr` and
+    `Literal` no longer copy words that need no change; without a
+    template, ms, ConTeXt, markdown and plain lay the body out a block
+    at a time (`PdLayout.Open`, `Put`, `PutAbove`, `Close`).
+  - The markdown writer's header identifiers (`Used`, `Use`) are a
+    hash table, not a linear list: markdown and plain at ×40 went
+    from 15 s to 2.8 s.
+  - MANUAL ×10, `-OC`: ms 453 to 140 MB peak RSS, ConTeXt 341 to
+    142 MB, markdown 367 to 140 MB, plain 364 to 140 MB, each about
+    twice as fast. At ×40 every writer finishes, within 550 MB; ms and
+    markdown used to run out of the 1 GB heap.
+  - Output unchanged: the build before these changes against the new
+    one on 35,910 runs (test/cases, pandoc's testsuite, tables,
+    `MANUAL.txt` and test/command, Lost-Worlds and
+    Galactic-Bounty-Hunters; ms, context, markdown, plain, gfm and
+    commonmark; `--wrap=none`, `auto`, `preserve`, `auto
+    --columns=30` and `-s`), byte for byte: none differed.
+  - `make test` passed under `-O2` and `-OC`: 540 ok, 0 FAIL, 23
+    round trips. `tools/bench convert` rerun; its results are in
+    `docs/developer/performance.md`.
 - 2026-11-20: Phase 21, images in ms output (decision 23), planned.
   podoc's ms output for `.pdf`, `.svg` with a width, `.png` and
   `.eps` images was checked identical to pandoc 3.10's; neither

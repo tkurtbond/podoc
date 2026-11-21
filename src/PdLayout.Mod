@@ -17,7 +17,7 @@ MODULE PdLayout;
    and links; Chop breaks a rendered line as a block does. Widths count East Asian wide and full-width characters as
    two and combining marks as none, as doclayout's realLength does. *)
 
-IMPORT Ropes, Utf8, Unicode, W := PdWidth, PdIO;
+IMPORT SYSTEM, Ropes, Utf8, Unicode, W := PdWidth, PdIO;
 
 CONST
   text = 0; prefixed = 1; beforeNonBlank = 2; flush = 3;
@@ -27,20 +27,10 @@ CONST
 TYPE
   Doc* = POINTER TO DocDesc;
   DocDesc = RECORD
-    kind: INTEGER;
-    n: LONGINT; (* text: width; blankLines: how many *)
+    kind: SYSTEM.INT8;
+    n: SYSTEM.INT32; (* text: width; blankLines: how many *)
     s: Ropes.Rope; (* text; prefixed: the prefix; afterBreak: the text *)
     a, b: Doc (* concat: a then b; prefixed, beforeNonBlank, flush: a *)
-  END;
-
-  (* doclayout's FlatDoc: a Doc flattened into a list *)
-  Flat = POINTER TO FlatDesc;
-  FlatDesc = RECORD
-    kind: INTEGER;
-    n: LONGINT;
-    s: Ropes.Rope;
-    sub: Flat; (* prefixed, beforeNonBlank, flush, afterBreak *)
-    next: Flat
   END;
 
   Stack = POINTER TO ARRAY OF Doc;
@@ -57,6 +47,33 @@ VAR
   column, newlines: LONGINT;
 
   buf: PdIO.Text; (* for Width *)
+
+  (* the breaks, shared, as a Doc is never changed once made *)
+  space, cr, nl, blank1: Doc;
+
+TYPE
+  (* the render state, saved by Render *)
+  State = RECORD
+    out: PdIO.Text; outLen: LONGINT;
+    prefix, prefixTrimmed: Ropes.Rope; prefixLen: LONGINT;
+    usePrefix: BOOLEAN; lineLength, column, newlines: LONGINT
+  END;
+
+PROCEDURE Save(VAR st: State);
+BEGIN
+  st.out := out; st.outLen := outLen;
+  st.prefix := prefix; st.prefixTrimmed := prefixTrimmed; st.prefixLen := prefixLen;
+  st.usePrefix := usePrefix; st.lineLength := lineLength;
+  st.column := column; st.newlines := newlines
+END Save;
+
+PROCEDURE Restore(VAR st: State);
+BEGIN
+  out := st.out; outLen := st.outLen;
+  prefix := st.prefix; prefixTrimmed := st.prefixTrimmed; prefixLen := st.prefixLen;
+  usePrefix := st.usePrefix; lineLength := st.lineLength;
+  column := st.column; newlines := st.newlines
+END Restore;
 
 (* Widths *)
 
@@ -160,7 +177,7 @@ END Chop;
 PROCEDURE New(kind: INTEGER): Doc;
   VAR d: Doc;
 BEGIN
-  NEW(d); d.kind := kind; d.n := 0; d.s := NIL; d.a := NIL; d.b := NIL;
+  NEW(d); d.kind := SYSTEM.VAL(SYSTEM.INT8, kind); d.n := 0; d.s := NIL; d.a := NIL; d.b := NIL;
   RETURN d
 END New;
 
@@ -192,7 +209,7 @@ PROCEDURE Line(s: Ropes.Rope): Doc;
   VAR d: Doc;
 BEGIN
   IF Ropes.Length(s) = 0 THEN RETURN NIL END;
-  d := New(text); d.s := s; d.n := Width(s);
+  d := New(text); d.s := s; d.n := SYSTEM.VAL(SYSTEM.INT32, Width(s));
   RETURN d
 END Line;
 
@@ -267,6 +284,7 @@ PROCEDURE Literal*(r: Ropes.Rope): Doc;
   END Add;
 
 BEGIN
+  IF Ropes.IndexChar(r, 0AX, 0) < 0 THEN RETURN Line(r) END;
   NEW(parts, 8); np := 0;
   n := Ropes.Length(r); i := 0;
   LOOP
@@ -276,7 +294,7 @@ BEGIN
       EXIT
     END;
     IF j > i THEN Add(Line(Ropes.Substring(r, i, j - i))) END;
-    Add(New(newLine));
+    Add(nl);
     i := j + 1
   END;
   RETURN Join(parts, 0, np)
@@ -304,26 +322,27 @@ END Char;
    long *)
 PROCEDURE Space*(): Doc;
 BEGIN
-  RETURN New(breakingSpace)
+  RETURN space
 END Space;
 
 (* A carriage return: a new line unless at the start of a line *)
 PROCEDURE Cr*(): Doc;
 BEGIN
-  RETURN New(carriageReturn)
+  RETURN cr
 END Cr;
 
 (* A new line *)
 PROCEDURE NewLine*(): Doc;
 BEGIN
-  RETURN New(newLine)
+  RETURN nl
 END NewLine;
 
 (* n blank lines, unless there are that many already *)
 PROCEDURE BlankLines*(n: LONGINT): Doc;
   VAR d: Doc;
 BEGIN
-  d := New(blankLines); d.n := n;
+  IF n = 1 THEN RETURN blank1 END;
+  d := New(blankLines); d.n := SYSTEM.VAL(SYSTEM.INT32, n);
   RETURN d
 END BlankLines;
 
@@ -459,30 +478,36 @@ PROCEDURE Chomp*(d: Doc): Doc;
 
   (* x, not a concatenation, chomped *)
   PROCEDURE One(x: Doc): Doc;
-    VAR y: Doc;
+    VAR y, z: Doc;
   BEGIN
     IF x = NIL THEN RETURN NIL END;
     CASE x.kind OF
       blankLines, newLine, carriageReturn, breakingSpace: RETURN NIL
-    | prefixed: y := New(prefixed); y.s := x.s; y.a := Chomp(x.a); RETURN y
+    | prefixed:
+        y := Chomp(x.a);
+        IF y = x.a THEN RETURN x END;
+        z := New(prefixed); z.s := x.s; z.a := y; RETURN z
     ELSE RETURN x
     END
   END One;
 
 BEGIN
   (* Iterative, as the right spine of a document can be very long: the
-     left parts down the spine on stack, the last part chomped, then the
-     parts before it chomped while nothing is left *)
+     concatenations down to the last part on stack; while the part
+     chomps to nothing, the one before it; then the nodes on the path
+     rebuilt, those whose right part is unchanged kept *)
   NEW(stack, 64); sp := 0;
-  WHILE (d # NIL) & (d.kind = concat) DO
-    IF (d.a # NIL) & (d.a.kind = concat) THEN
-      d := Cat(d.a.a, Cat(d.a.b, d.b))
-    ELSE Push(stack, sp, d.a); d := d.b
-    END
-  END;
+  WHILE (d # NIL) & (d.kind = concat) DO Push(stack, sp, d); d := d.b END;
   c := One(d);
-  WHILE (c = NIL) & (sp > 0) DO DEC(sp); c := One(stack[sp]) END;
-  WHILE sp > 0 DO DEC(sp); c := Cat(stack[sp], c) END;
+  WHILE (c = NIL) & (sp > 0) DO
+    DEC(sp); d := stack[sp].a;
+    WHILE (d # NIL) & (d.kind = concat) DO Push(stack, sp, d); d := d.b END;
+    c := One(d)
+  END;
+  WHILE sp > 0 DO
+    DEC(sp);
+    IF c = stack[sp].b THEN c := stack[sp] ELSE c := Cat(stack[sp].a, c) END
+  END;
   RETURN c
 END Chomp;
 
@@ -509,13 +534,16 @@ END Nestle;
 (* doclayout's removeFinalNl, as doctemplates uses it: d without a new
    line or carriage return at the end of its right spine *)
 PROCEDURE RemoveFinalNl*(d: Doc): Doc;
-  VAR stack: Stack; sp: LONGINT;
+  VAR stack: Stack; sp: LONGINT; c: Doc;
 BEGIN
   NEW(stack, 64); sp := 0;
-  WHILE (d # NIL) & (d.kind = concat) DO Push(stack, sp, d.a); d := d.b END;
-  IF (d # NIL) & ((d.kind = newLine) OR (d.kind = carriageReturn)) THEN d := NIL END;
-  WHILE sp > 0 DO DEC(sp); d := Cat(stack[sp], d) END;
-  RETURN d
+  WHILE (d # NIL) & (d.kind = concat) DO Push(stack, sp, d); d := d.b END;
+  IF (d # NIL) & ((d.kind = newLine) OR (d.kind = carriageReturn)) THEN c := NIL ELSE c := d END;
+  WHILE sp > 0 DO
+    DEC(sp);
+    IF c = stack[sp].b THEN c := stack[sp] ELSE c := Cat(stack[sp].a, c) END
+  END;
+  RETURN c
 END RemoveFinalNl;
 
 (* Whether d holds a new line, a carriage return or blank lines outside
@@ -772,99 +800,14 @@ BEGIN
   RETURN l
 END MinOffset;
 
-(* Flattening *)
+(* Rendering
 
-PROCEDURE NewFlat(kind: INTEGER; n: LONGINT; s: Ropes.Rope; sub: Flat): Flat;
-  VAR f: Flat;
-BEGIN
-  NEW(f); f.kind := kind; f.n := n; f.s := s; f.sub := sub; f.next := NIL;
-  RETURN f
-END NewFlat;
-
-(* doclayout's flatten: d as a list *)
-PROCEDURE Flatten(d: Doc): Flat;
-  VAR parts: Stack; np, i: LONGINT; head, tail, f, sub: Flat; x: Doc;
-BEGIN
-  parts := NIL; Unfold(d, parts, np);
-  head := NIL; tail := NIL;
-  FOR i := 0 TO np - 1 DO
-    x := parts[i]; f := NIL;
-    CASE x.kind OF
-      text: f := NewFlat(text, x.n, x.s, NIL)
-    | prefixed, beforeNonBlank, flush:
-        sub := Flatten(x.a);
-        IF sub # NIL THEN f := NewFlat(x.kind, 0, x.s, sub) END
-    | afterBreak:
-        sub := Flatten(Literal(x.s));
-        IF sub # NIL THEN f := NewFlat(afterBreak, 0, NIL, sub) END
-    | breakingSpace, carriageReturn, newLine, blankLines:
-        f := NewFlat(x.kind, x.n, NIL, NIL)
-    END;
-    IF f # NIL THEN
-      IF head = NIL THEN head := f ELSE tail.next := f END;
-      tail := f
-    END
-  END;
-  RETURN head
-END Flatten;
-
-(* Whether the pair p, x collapses, as doclayout's normalize collapses
-   it; if so, p becomes what it collapses to *)
-PROCEDURE Collapse(VAR p: Flat; x: Flat): BOOLEAN;
-BEGIN
-  CASE p.kind OF
-    blankLines:
-      IF x.kind = blankLines THEN
-        IF x.n > p.n THEN p.n := x.n END;
-        RETURN TRUE
-      END;
-      RETURN (x.kind = breakingSpace) OR (x.kind = carriageReturn)
-             OR (x.kind = newLine)
-  | newLine:
-      IF x.kind = blankLines THEN p := x; RETURN TRUE END;
-      RETURN (x.kind = breakingSpace) OR (x.kind = carriageReturn)
-  | carriageReturn:
-      IF x.kind = blankLines THEN p := x; RETURN TRUE END;
-      RETURN (x.kind = carriageReturn) OR (x.kind = breakingSpace)
-  | breakingSpace:
-      IF (x.kind = carriageReturn) OR (x.kind = newLine)
-         OR (x.kind = blankLines) OR (x.kind = breakingSpace) THEN
-        p := x; RETURN TRUE
-      END;
-      RETURN FALSE
-  ELSE RETURN FALSE
-  END
-END Collapse;
-
-(* doclayout's normalize: the list l with its runs of breaks and spaces
-   collapsed; a new line or blank lines at the end become a carriage
-   return, and a breaking space there is dropped *)
-PROCEDURE Normalize(l: Flat): Flat;
-  VAR head, tail, p, x, next: Flat;
-BEGIN
-  head := NIL; tail := NIL; p := NIL;
-  WHILE l # NIL DO
-    next := l.next; x := l; x.next := NIL;
-    IF p = NIL THEN p := x
-    ELSIF ~Collapse(p, x) THEN
-      IF head = NIL THEN head := p ELSE tail.next := p END;
-      tail := p; p := x
-    END;
-    l := next
-  END;
-  IF p # NIL THEN
-    IF (p.kind = newLine) OR (p.kind = blankLines) THEN
-      p := NewFlat(carriageReturn, 0, NIL, NIL)
-    ELSIF p.kind = breakingSpace THEN p := NIL
-    END;
-    IF p # NIL THEN
-      IF head = NIL THEN head := p ELSE tail.next := p END
-    END
-  END;
-  RETURN head
-END Normalize;
-
-(* Rendering *)
+   doclayout flattens a Doc into a list, normalizes the list and renders
+   it. Here the parts of a Doc are rendered as they are reached, through
+   a Level, which keeps only the parts whose rendering depends on what
+   comes after them: the last part, which may yet collapse with the next
+   (doclayout's normalize), a breaking space until the next break, and a
+   part printed only before something not blank until that something. *)
 
 PROCEDURE Emit(r: Ropes.Rope);
   VAR n: LONGINT;
@@ -910,70 +853,256 @@ BEGIN
   RETURN (ch = " ") OR (ch >= 09X) & (ch <= 0DX)
 END IsSpaceChar;
 
-(* doclayout's startsBlank *)
-PROCEDURE StartsBlank(f: Flat): BOOLEAN;
+TYPE
+  Item = RECORD
+    kind: INTEGER;
+    n: LONGINT;
+    d: Doc (* the part *)
+  END;
+  Items = POINTER TO ARRAY OF Item;
+
+  (* The parts of one list, a Doc's or a prefixed, flush, beforeNonBlank
+     or afterBreak part's, being rendered *)
+  Level = RECORD
+    stack: Stack; sp: LONGINT; (* the parts still to come *)
+    q: Items; qh, qt: LONGINT; (* the parts kept, q[qh .. qt-1] *)
+    p: Item; hasP: BOOLEAN; (* the last part, not yet in q *)
+    norm: BOOLEAN (* whether the list is normalized *)
+  END;
+
+VAR
+  (* Levels' arrays, kept for reuse at each depth *)
+  stacks: ARRAY 32 OF Stack;
+  queues: ARRAY 32 OF Items;
+  depth: LONGINT;
+
+  (* the document being written a part at a time *)
+  open: Level; isOpen, putAny: BOOLEAN; pending: Doc;
+  rout: PdIO.Text; (* Render's buffer *)
+
+PROCEDURE IsBreak(kind: INTEGER): BOOLEAN;
+BEGIN
+  RETURN (kind = breakingSpace) OR (kind = carriageReturn)
+    OR (kind = newLine) OR (kind = blankLines)
+END IsBreak;
+
+PROCEDURE^ IsVoid(d: Doc): BOOLEAN;
+
+(* Whether the part x, not a concatenation, is left out of a list, as
+   doclayout's flatten leaves out an empty prefixed, flush,
+   beforeNonBlank or afterBreak part *)
+PROCEDURE VoidPart(x: Doc): BOOLEAN;
+BEGIN
+  CASE x.kind OF
+    prefixed, beforeNonBlank, flush: RETURN IsVoid(x.a)
+  | afterBreak: RETURN Ropes.Length(x.s) = 0
+  ELSE RETURN FALSE
+  END
+END VoidPart;
+
+(* The first part of d not left out of its list, or NIL *)
+PROCEDURE FirstPart(d: Doc): Doc;
+  VAR stack: Stack; sp: LONGINT;
+BEGIN
+  stack := NIL; sp := 0;
+  LOOP
+    WHILE (d # NIL) & (d.kind = concat) DO
+      IF stack = NIL THEN NEW(stack, 16) END;
+      Push(stack, sp, d.b); d := d.a
+    END;
+    IF (d # NIL) & ~VoidPart(d) THEN RETURN d END;
+    IF sp = 0 THEN RETURN NIL END;
+    DEC(sp); d := stack[sp]
+  END
+END FirstPart;
+
+(* Whether d flattens to nothing *)
+PROCEDURE IsVoid(d: Doc): BOOLEAN;
+BEGIN
+  RETURN FirstPart(d) = NIL
+END IsVoid;
+
+(* doclayout's startsBlank, of a part *)
+PROCEDURE StartsBlank(x: Doc): BOOLEAN;
   VAR r: Utf8.Rune; s: ARRAY 8 OF CHAR; i, n: LONGINT;
 BEGIN
-  CASE f.kind OF
+  CASE x.kind OF
     text:
-      n := Ropes.Length(f.s);
+      n := Ropes.Length(x.s);
+      IF n = 0 THEN RETURN FALSE END;
       IF n > 4 THEN n := 4 END;
-      Ropes.Blit(f.s, 0, s, 0, n);
+      Ropes.Blit(x.s, 0, s, 0, n);
       IF ORD(s[0]) < 80H THEN RETURN IsSpaceChar(s[0]) END;
       i := 0;
       IF ~Utf8.Decode(s, i, r) THEN RETURN FALSE END;
       RETURN Unicode.IsSpace(r)
-  | prefixed, beforeNonBlank, flush, afterBreak: RETURN StartsBlank(f.sub)
+  | prefixed, beforeNonBlank, flush: RETURN StartsBlank(FirstPart(x.a))
+  | afterBreak: RETURN StartsBlank(FirstPart(Literal(x.s)))
   ELSE RETURN TRUE
   END
 END StartsBlank;
 
-PROCEDURE^ RenderList(f: Flat);
-
-PROCEDURE RenderOne(VAR f: Flat);
-  VAR p, pt: Ropes.Rope; pl, off, i, k: LONGINT; up: BOOLEAN; g: Flat;
+PROCEDURE StartLevel(VAR l: Level; d: Doc; norm: BOOLEAN);
 BEGIN
-  CASE f.kind OF
-    text: Outp(f.n, f.s)
-  | prefixed:
-      p := prefix; pt := prefixTrimmed; pl := prefixLen;
-      SetPrefix(Ropes.Cat(prefix, f.s));
-      RenderList(Normalize(f.sub));
-      prefix := p; prefixTrimmed := pt; prefixLen := pl
-  | flush:
-      up := usePrefix; usePrefix := FALSE;
-      RenderList(Normalize(f.sub));
-      usePrefix := up
-  | beforeNonBlank:
-      IF (f.next # NIL) & ~StartsBlank(f.next) THEN
-        RenderList(Normalize(f.sub))
-      END
-  | blankLines:
-      IF newlines <= f.n THEN
-        k := 1 + f.n - newlines;
-        FOR i := 1 TO k DO Newline END
-      END
-  | carriageReturn: IF newlines = 0 THEN Newline END
-  | newLine: Newline
-  | breakingSpace:
-      WHILE (f.next # NIL) & (f.next.kind = breakingSpace) DO f := f.next END;
-      off := 0; g := f.next;
-      WHILE (g # NIL) & (g.kind # breakingSpace) & (g.kind # carriageReturn)
-            & (g.kind # newLine) & (g.kind # blankLines) DO
-        IF g.kind = text THEN INC(off, g.n) END;
-        g := g.next
-      END;
-      IF (lineLength > 0) & (column + 1 + off > lineLength) THEN Newline
-      ELSIF column > 0 THEN Outp(1, Ropes.FromChar(" "))
-      END
-  | afterBreak: IF newlines > 0 THEN RenderList(f.sub) END
+  IF depth < LEN(stacks) THEN
+    IF stacks[depth] = NIL THEN NEW(stacks[depth], 64); NEW(queues[depth], 16) END;
+    l.stack := stacks[depth]; l.q := queues[depth]
+  ELSE NEW(l.stack, 64); NEW(l.q, 16)
+  END;
+  INC(depth);
+  l.sp := 0; l.qh := 0; l.qt := 0; l.hasP := FALSE; l.norm := norm;
+  IF d # NIL THEN Push(l.stack, l.sp, d) END
+END StartLevel;
+
+PROCEDURE EndLevel(VAR l: Level);
+  VAR i: LONGINT;
+BEGIN
+  DEC(depth);
+  IF depth < LEN(stacks) THEN
+    (* kept for reuse, but holding no parts *)
+    stacks[depth] := l.stack; queues[depth] := l.q;
+    FOR i := 0 TO LEN(l.q^) - 1 DO l.q[i].d := NIL END;
+    FOR i := 0 TO l.sp - 1 DO l.stack[i] := NIL END
   END
-END RenderOne;
+END EndLevel;
 
-PROCEDURE RenderList(f: Flat);
+(* The next part of l's list, or FALSE at its end *)
+PROCEDURE NextPart(VAR l: Level; VAR x: Item): BOOLEAN;
+  VAR d: Doc;
 BEGIN
-  WHILE f # NIL DO RenderOne(f); f := f.next END
-END RenderList;
+  LOOP
+    IF l.sp = 0 THEN RETURN FALSE END;
+    DEC(l.sp); d := l.stack[l.sp]; l.stack[l.sp] := NIL;
+    WHILE d.kind = concat DO Push(l.stack, l.sp, d.b); d := d.a END;
+    IF ~VoidPart(d) THEN
+      x.kind := d.kind; x.n := d.n; x.d := d;
+      RETURN TRUE
+    END
+  END
+END NextPart;
+
+(* x appended to l's queue *)
+PROCEDURE Keep(VAR l: Level; VAR x: Item);
+  VAR t: Items; i: LONGINT;
+BEGIN
+  IF l.qt = LEN(l.q^) THEN
+    IF l.qh > 0 THEN
+      FOR i := l.qh TO l.qt - 1 DO l.q[i - l.qh] := l.q[i]; l.q[i].d := NIL END;
+      DEC(l.qt, l.qh); l.qh := 0
+    ELSE
+      NEW(t, 2 * l.qt);
+      FOR i := 0 TO l.qt - 1 DO t[i] := l.q[i] END;
+      l.q := t
+    END
+  END;
+  l.q[l.qt] := x; INC(l.qt)
+END Keep;
+
+(* Whether the pair p, x collapses, as doclayout's normalize collapses
+   it; if so, p becomes what it collapses to *)
+PROCEDURE Collapse(VAR p: Item; VAR x: Item): BOOLEAN;
+BEGIN
+  CASE p.kind OF
+    blankLines:
+      IF x.kind = blankLines THEN
+        IF x.n > p.n THEN p.n := x.n END;
+        RETURN TRUE
+      END;
+      RETURN (x.kind = breakingSpace) OR (x.kind = carriageReturn)
+             OR (x.kind = newLine)
+  | newLine:
+      IF x.kind = blankLines THEN p := x; RETURN TRUE END;
+      RETURN (x.kind = breakingSpace) OR (x.kind = carriageReturn)
+  | carriageReturn:
+      IF x.kind = blankLines THEN p := x; RETURN TRUE END;
+      RETURN (x.kind = carriageReturn) OR (x.kind = breakingSpace)
+  | breakingSpace:
+      IF (x.kind = carriageReturn) OR (x.kind = newLine)
+         OR (x.kind = blankLines) OR (x.kind = breakingSpace) THEN
+        p := x; RETURN TRUE
+      END;
+      RETURN FALSE
+  ELSE RETURN FALSE
+  END
+END Collapse;
+
+PROCEDURE^ RenderDoc(d: Doc; norm: BOOLEAN);
+
+(* Renders the parts at the front of l's queue that can be rendered: all
+   of them at the end of the list *)
+PROCEDURE Drain(VAR l: Level; atEnd: BOOLEAN);
+  VAR i, j, off, k: LONGINT; p, pt: Ropes.Rope; pl: LONGINT; up: BOOLEAN;
+    x: Item;
+BEGIN
+  WHILE l.qh < l.qt DO
+    x := l.q[l.qh];
+    CASE x.kind OF
+      breakingSpace:
+        (* the width of the text up to the next break *)
+        i := l.qh; WHILE (i + 1 < l.qt) & (l.q[i + 1].kind = breakingSpace) DO INC(i) END;
+        j := i + 1; off := 0;
+        WHILE (j < l.qt) & ~IsBreak(l.q[j].kind) DO
+          IF l.q[j].kind = text THEN INC(off, l.q[j].n) END;
+          INC(j)
+        END;
+        IF (j = l.qt) & ~atEnd THEN RETURN END;
+        l.qh := i;
+        IF (lineLength > 0) & (column + 1 + off > lineLength) THEN Newline
+        ELSIF column > 0 THEN Outp(1, Ropes.FromChar(" "))
+        END
+    | beforeNonBlank:
+        IF (l.qh + 1 = l.qt) & ~atEnd THEN RETURN END;
+        IF (l.qh + 1 < l.qt) & ~StartsBlank(l.q[l.qh + 1].d) THEN
+          RenderDoc(x.d.a, TRUE)
+        END
+    | text: Outp(x.n, x.d.s)
+    | prefixed:
+        p := prefix; pt := prefixTrimmed; pl := prefixLen;
+        SetPrefix(Ropes.Cat(prefix, x.d.s));
+        RenderDoc(x.d.a, TRUE);
+        prefix := p; prefixTrimmed := pt; prefixLen := pl
+    | flush:
+        up := usePrefix; usePrefix := FALSE;
+        RenderDoc(x.d.a, TRUE);
+        usePrefix := up
+    | blankLines:
+        IF newlines <= x.n THEN
+          k := 1 + x.n - newlines;
+          FOR i := 1 TO k DO Newline END
+        END
+    | carriageReturn: IF newlines = 0 THEN Newline END
+    | newLine: Newline
+    | afterBreak: IF newlines > 0 THEN RenderDoc(Literal(x.d.s), FALSE) END
+    END;
+    l.q[l.qh].d := NIL; INC(l.qh)
+  END;
+  l.qh := 0; l.qt := 0
+END Drain;
+
+(* Renders d's list, normalized if norm *)
+PROCEDURE RenderDoc(d: Doc; norm: BOOLEAN);
+  VAR l: Level; x: Item;
+BEGIN
+  StartLevel(l, d, norm);
+  WHILE NextPart(l, x) DO
+    IF ~norm THEN Keep(l, x)
+    ELSIF ~l.hasP THEN l.p := x; l.hasP := TRUE
+    ELSIF ~Collapse(l.p, x) THEN Keep(l, l.p); l.p := x
+    END;
+    Drain(l, FALSE)
+  END;
+  IF l.hasP THEN
+    (* normalize's end: new lines or blank lines become a carriage
+       return, and a breaking space is dropped *)
+    IF (l.p.kind = newLine) OR (l.p.kind = blankLines) THEN
+      l.p.kind := carriageReturn; l.p.n := 0; Keep(l, l.p)
+    ELSIF l.p.kind # breakingSpace THEN Keep(l, l.p)
+    END;
+    l.p.d := NIL
+  END;
+  Drain(l, TRUE);
+  EndLevel(l)
+END RenderDoc;
 
 (* Lays d out into out[0 .. outLen-1] *)
 PROCEDURE Lay(d: Doc; width: LONGINT);
@@ -982,16 +1111,18 @@ BEGIN
   prefix := NIL; prefixTrimmed := NIL; prefixLen := 0;
   usePrefix := TRUE; lineLength := width;
   column := 0; newlines := 2;
-  RenderList(Normalize(Flatten(d)))
+  RenderDoc(d, TRUE)
 END Lay;
 
 (* d laid out as text, wrapped at width columns, or not wrapped if
-   width is 0 *)
+   width is 0. It may be called between Open and Close. *)
 PROCEDURE Render*(d: Doc; width: LONGINT): Ropes.Rope;
-  VAR r: Ropes.Rope;
+  VAR r: Ropes.Rope; st: State;
 BEGIN
+  Save(st); out := rout;
   Lay(d, width);
   IF outLen = 0 THEN r := NIL ELSE r := Ropes.FromSubchars(out^, 0, outLen) END;
+  rout := out; Restore(st);
   RETURN r
 END Render;
 
@@ -1002,6 +1133,81 @@ BEGIN
   IF outLen > 0 THEN PdIO.WriteChars(out^, 0, outLen) END
 END Write;
 
+(* Writing a document a part at a time
+
+   Open, then Put or PutAbove for each part in turn, then Close, writes
+   what Write(Chomp(d), width) writes, d being the parts joined with Cat
+   or Above, but without the whole of d ever being built. Each part is
+   laid out when the next one, not chomped to nothing, is put; the last
+   such part, with any after it, is chomped and laid out by Close. *)
+
+(* d's parts laid out through the open level *)
+PROCEDURE Feed(d: Doc);
+  VAR x: Item;
 BEGIN
-  out := NIL; outLen := 0; buf := NIL
+  IF d = NIL THEN RETURN END;
+  Push(open.stack, open.sp, d);
+  WHILE NextPart(open, x) DO
+    IF ~open.hasP THEN open.p := x; open.hasP := TRUE
+    ELSIF ~Collapse(open.p, x) THEN Keep(open, open.p); open.p := x
+    END;
+    Drain(open, FALSE)
+  END;
+  IF outLen >= 10000H THEN PdIO.WriteChars(out^, 0, outLen); outLen := 0 END
+END Feed;
+
+(* Starts writing a document laid out at width columns, or not wrapped
+   if width is 0 *)
+PROCEDURE Open*(width: LONGINT);
+BEGIN
+  ASSERT(~isOpen);
+  outLen := 0;
+  prefix := NIL; prefixTrimmed := NIL; prefixLen := 0;
+  usePrefix := TRUE; lineLength := width;
+  column := 0; newlines := 2;
+  StartLevel(open, NIL, TRUE);
+  pending := NIL; putAny := FALSE; isOpen := TRUE
+END Open;
+
+(* x, the next part of the document Open started, as Cat joins it *)
+PROCEDURE Put*(x: Doc);
+BEGIN
+  ASSERT(isOpen);
+  IF x = NIL THEN RETURN END;
+  IF Chomp(x) = NIL THEN pending := Cat(pending, x)
+  ELSE Feed(pending); pending := x
+  END
+END Put;
+
+(* x, the next part of the document Open started, as Above joins it to
+   the parts put by PutAbove before it *)
+PROCEDURE PutAbove*(x: Doc);
+BEGIN
+  IF x = NIL THEN RETURN END;
+  IF putAny THEN Put(cr) END;
+  Put(x); putAny := TRUE
+END PutAbove;
+
+(* Ends the document Open started, written to PdIO's output *)
+PROCEDURE Close*;
+BEGIN
+  ASSERT(isOpen);
+  Feed(Chomp(pending)); pending := NIL;
+  IF open.hasP THEN
+    IF (open.p.kind = newLine) OR (open.p.kind = blankLines) THEN
+      open.p.kind := carriageReturn; open.p.n := 0; Keep(open, open.p)
+    ELSIF open.p.kind # breakingSpace THEN Keep(open, open.p)
+    END;
+    open.p.d := NIL
+  END;
+  Drain(open, TRUE);
+  EndLevel(open); isOpen := FALSE;
+  IF outLen > 0 THEN PdIO.WriteChars(out^, 0, outLen); outLen := 0 END
+END Close;
+
+BEGIN
+  out := NIL; outLen := 0; buf := NIL; rout := NIL;
+  isOpen := FALSE; pending := NIL; depth := 0;
+  space := New(breakingSpace); cr := New(carriageReturn); nl := New(newLine);
+  blank1 := New(blankLines); blank1.n := 1
 END PdLayout.
