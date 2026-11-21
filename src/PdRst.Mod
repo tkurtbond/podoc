@@ -4,7 +4,7 @@
    substitutions and notes. *)
 MODULE PdRst;
 
-IMPORT Ropes, PdIO, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
+IMPORT Ropes, Platform, PdIO, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
   RI := PdRstInline, SH := PdShared;
 
 CONST
@@ -19,6 +19,18 @@ TYPE
   Message = ARRAY 1024 OF CHAR;
   RefWalker = POINTER TO RefWalkerDesc;
   RefWalkerDesc = RECORD (A.WalkerDesc) END;
+  Field = POINTER TO FieldDesc;
+  FieldDesc = RECORD name, raw: A.Rope; next: Field END;
+  Directive = RECORD
+    label: ARRAY 64 OF CHAR; (* lower case *)
+    top: B.Buf; (* the text after the label *)
+    fields, last: Field;
+    body: B.Buf (* the indented body *)
+  END;
+  Subst = POINTER TO SubstDesc;
+  SubstDesc = RECORD key: A.Rope; blocks: A.Block; next: Subst END;
+  SubstWalker = POINTER TO SubstWalkerDesc;
+  SubstWalkerDesc = RECORD (A.WalkerDesc) END;
   Id = POINTER TO IdDesc;
   IdDesc = RECORD id: A.Rope; next: Id END;
 
@@ -32,6 +44,7 @@ VAR
   main: B.Text; mainLen: LONGINT;
   notes, notesLast: Note; (* stateNotes, in document order *)
   citations: Note; (* stateCitations, sorted by ref *)
+  substs: Subst; (* stateSubstitutions *)
 
 PROCEDURE^ Block(VAR l: A.Blocks): BOOLEAN;
 PROCEDURE^ ParseBlocks(): A.Block;
@@ -1028,14 +1041,510 @@ BEGIN
 END Para;
 
 (* block *)
+(* Directives *)
+
+PROCEDURE Is(r: A.Rope; s: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  RETURN (r # NIL) & Ropes.EqualString(r, s)
+END Is;
+
+(* trim of the rope r; "" for NIL *)
+PROCEDURE Trim(r: A.Rope): A.Rope;
+  VAR b: B.Buf;
+BEGIN
+  B.InitBuf(b);
+  IF r # NIL THEN MI.PutRope(b, r) END;
+  RI.TrimBuf(b);
+  RETURN Ropes.FromSubchars(b.t^, 0, b.len)
+END Trim;
+
+(* trimr of the rope r *)
+PROCEDURE TrimR(r: A.Rope): A.Rope;
+  VAR b: B.Buf;
+BEGIN
+  B.InitBuf(b);
+  IF r # NIL THEN MI.PutRope(b, r) END;
+  WHILE (b.len > 0) & B.IsWhite(b.t[b.len - 1]) DO DEC(b.len) END;
+  RETURN Ropes.FromSubchars(b.t^, 0, b.len)
+END TrimR;
+
+(* The rope of b, "" if it is empty *)
+PROCEDURE BufR(VAR b: B.Buf): A.Rope;
+BEGIN
+  RETURN Ropes.FromSubchars(b.t^, 0, b.len)
+END BufR;
+
+(* rawFieldListItem minIndent at p: the field in f; the position after
+   it, or -1 *)
+PROCEDURE RawField(p, minIndent: LONGINT; VAR f: Field): LONGINT;
+  VAR q, ns, e, r, g, indent, i: LONGINT; b, c: B.Buf;
+BEGIN
+  q := p; indent := 0;
+  WHILE B.C(q) = " " DO INC(q); INC(indent) END;
+  IF (indent < minIndent) OR (B.C(q) # ":") THEN RETURN -1 END;
+  ns := q + 1; e := ns;
+  IF (B.C(e) = 0AX) OR (e >= B.len) THEN RETURN -1 END;
+  INC(e);
+  WHILE (B.C(e) # ":") & (B.C(e) # 0AX) & (e < B.len) DO INC(e) END;
+  IF B.C(e) # ":" THEN RETURN -1 END;
+  r := e + 1;
+  IF B.C(r) # 0AX THEN
+    IF ~B.IsSpace(B.C(r)) THEN RETURN -1 END;
+    WHILE B.IsSpace(B.C(r)) DO INC(r) END
+  END;
+  g := B.AnyLine(r);
+  IF g < 0 THEN RETURN -1 END;
+  B.InitBuf(b);
+  IF g - 1 > r THEN B.Put(b, r, g - 1); B.PutChar(b, 0AX) END;
+  i := 0;
+  WHILE (i < indent) & (B.C(g + i) = " ") DO INC(i) END;
+  IF (i = indent) & B.IsSpace(B.C(g + i)) THEN
+    q := IndentedBlock(g, c);
+    IF q >= 0 THEN PutBuf(b, c); g := q END
+  END;
+  IF b.len > 0 THEN B.PutChar(b, 0AX) END;
+  NEW(f); f.name := B.Rope(ns, e); f.raw := BufR(b); f.next := NIL;
+  RETURN g
+END RawField;
+
+(* directive' at p, after the "..": the directive in d; the position
+   after it, or -1 *)
+PROCEDURE DirectiveAt(p: LONGINT; VAR d: Directive): LONGINT;
+  VAR s, q, r, indent: LONGINT; f: Field; c: CHAR; i: INTEGER;
+BEGIN
+  IF ~B.IsSpace(B.C(p)) THEN RETURN -1 END;
+  WHILE B.IsSpace(B.C(p)) DO INC(p) END;
+  s := p;
+  WHILE B.IsLetter(B.C(p)) OR (B.C(p) = "-") DO INC(p) END;
+  IF (p = s) OR ~B.Looking(p, "::") OR (p - s >= LEN(d.label)) THEN RETURN -1 END;
+  i := 0;
+  WHILE s < p DO
+    c := B.C(s);
+    IF (c >= "A") & (c <= "Z") THEN c := CHR(ORD(c) + 32) END;
+    d.label[i] := c; INC(i); INC(s)
+  END;
+  d.label[i] := 0X;
+  INC(p, 2);
+  WHILE B.IsSpace(B.C(p)) DO INC(p) END;
+  B.InitBuf(d.top);
+  LOOP
+    WHILE (p < B.len) & (B.C(p) # 0AX) DO B.PutChar(d.top, B.C(p)); INC(p) END;
+    IF p >= B.len THEN RETURN -1 END;
+    q := p + 1;
+    IF (B.C(q) = " ") & (RawField(q, 1, f) < 0) THEN
+      r := q; WHILE B.C(r) = " " DO INC(r) END;
+      IF B.BlankLine(r) >= 0 THEN EXIT END;
+      B.PutChar(d.top, 0AX); p := r
+    ELSE EXIT
+    END
+  END;
+  INC(p);
+  d.fields := NIL; d.last := NIL;
+  indent := 0;
+  WHILE B.C(p + indent) = " " DO INC(indent) END;
+  IF indent > 0 THEN
+    LOOP
+      q := RawField(p, indent, f);
+      IF q < 0 THEN EXIT END;
+      IF d.fields = NIL THEN d.fields := f ELSE d.last.next := f END;
+      d.last := f; p := q
+    END
+  END;
+  B.InitBuf(d.body);
+  q := B.BlankLines(p);
+  IF q >= 0 THEN
+    r := IndentedBlock(q, d.body);
+    IF r >= 0 THEN p := r ELSE B.InitBuf(d.body) END
+  END;
+  q := B.BlankLines(p);
+  IF q >= 0 THEN p := q END;
+  RETURN p
+END DirectiveAt;
+
+(* lookup name fields: the raw value of d's first field name, or NIL *)
+PROCEDURE FieldVal(VAR d: Directive; name: ARRAY OF CHAR): A.Rope;
+  VAR f: Field;
+BEGIN
+  f := d.fields;
+  WHILE (f # NIL) & ~Is(f.name, name) DO f := f.next END;
+  IF f = NIL THEN RETURN NIL END;
+  RETURN f.raw
+END FieldVal;
+
+(* The words of r, added to a's classes *)
+PROCEDURE AddWords(a: A.Attr; r: A.Rope);
+  VAR b: B.Buf; i, s: LONGINT;
+BEGIN
+  IF r = NIL THEN RETURN END;
+  B.InitBuf(b); MI.PutRope(b, r); i := 0;
+  WHILE i < b.len DO
+    WHILE (i < b.len) & B.IsWhite(b.t[i]) DO INC(i) END;
+    s := i;
+    WHILE (i < b.len) & ~B.IsWhite(b.t[i]) DO INC(i) END;
+    IF i > s THEN A.AddClass(a, Ropes.FromSubchars(b.t^, s, i - s)) END
+  END
+END AddWords;
+
+(* The attribute (name, label:classes, keyvals) of d; label is left out
+   if it is "" *)
+PROCEDURE DirAttr(VAR d: Directive; label: ARRAY OF CHAR): A.Attr;
+  VAR a: A.Attr; f: Field;
+BEGIN
+  a := A.NewAttr(Trim(FieldVal(d, "name")));
+  IF label # "" THEN A.AddClass(a, A.S(label)) END;
+  AddWords(a, Trim(FieldVal(d, "class")));
+  f := d.fields;
+  WHILE f # NIL DO
+    IF ~Is(f.name, "name") & ~Is(f.name, "class") THEN
+      A.AddKeyVal(a, f.name, Trim(f.raw))
+    END;
+    f := f.next
+  END;
+  RETURN a
+END DirAttr;
+
+(* parseFromString' parseBlocks of top <> "\n\n" <> body' *)
+PROCEDURE TopBodyBlocks(VAR d: Directive): A.Block;
+  VAR b: B.Buf;
+BEGIN
+  B.InitBuf(b); PutBuf(b, d.top); B.PutChar(b, 0AX); B.PutChar(b, 0AX);
+  PutBuf(b, d.body); B.PutChar(b, 0AX); B.PutChar(b, 0AX);
+  RETURN BlocksOf(b)
+END TopBodyBlocks;
+
+(* addNewRole top fields; FALSE if top is not a role name *)
+PROCEDURE NewRole(VAR d: Directive): BOOLEAN;
+  VAR f: B.Frame; b: B.Buf; q, r: LONGINT; role, parent: A.Rope; ok: BOOLEAN;
+    fmt, lang, cls: A.Rope;
+BEGIN
+  B.InitBuf(b); PutBuf(b, d.top); B.PutChar(b, 0AX);
+  B.Enter(f, b.t, b.len - 1);
+  ok := FALSE; parent := NIL; role := NIL;
+  q := RI.RoleName(0);
+  IF q > 0 THEN
+    role := B.Rope(0, q); ok := TRUE;
+    IF B.C(q) = "(" THEN
+      r := RI.RoleName(q + 1);
+      IF (r > q + 1) & (B.C(r) = ")") THEN parent := B.Rope(q + 1, r) END
+    END
+  END;
+  B.Leave(f);
+  IF ~ok THEN RETURN FALSE END;
+  fmt := FieldVal(d, "format"); lang := FieldVal(d, "language");
+  cls := FieldVal(d, "class");
+  IF fmt # NIL THEN fmt := Trim(fmt) END;
+  IF lang # NIL THEN lang := Trim(lang) END;
+  IF cls # NIL THEN cls := Trim(cls) END;
+  RI.AddRole(role, parent, fmt, lang, cls, fmt # NIL, lang # NIL, cls # NIL);
+  RETURN TRUE
+END NewRole;
+
+(* unicodeTransform of the text in b, in out *)
+PROCEDURE UnicodeTransform(VAR b: B.Buf; VAR out: B.Buf);
+  VAR i, j, s, v: LONGINT;
+
+  PROCEDURE Hex(c: CHAR): INTEGER;
+  BEGIN
+    IF (c >= "0") & (c <= "9") THEN RETURN ORD(c) - ORD("0")
+    ELSIF (c >= "a") & (c <= "f") THEN RETURN ORD(c) - ORD("a") + 10
+    ELSIF (c >= "A") & (c <= "F") THEN RETURN ORD(c) - ORD("A") + 10
+    END;
+    RETURN -1
+  END Hex;
+
+  PROCEDURE Pre(s: ARRAY OF CHAR): BOOLEAN;
+    VAR k: LONGINT;
+  BEGIN
+    k := 0;
+    WHILE (s[k] # 0X) & (i + k < b.len) & (b.t[i + k] = s[k]) DO INC(k) END;
+    IF s[k] = 0X THEN j := i + k; RETURN TRUE END;
+    RETURN FALSE
+  END Pre;
+
+  (* extractUnicodeChar at j: the code point in v, j after its digits *)
+  PROCEDURE Code(): BOOLEAN;
+    VAR k: LONGINT;
+  BEGIN
+    k := j; v := 0;
+    WHILE (k < b.len) & (Hex(b.t[k]) >= 0) DO
+      IF v <= 10FFFFH THEN v := v * 16 + Hex(b.t[k]) END;
+      INC(k)
+    END;
+    IF (k = j) OR (v > 10FFFFH) THEN RETURN FALSE END;
+    j := k; RETURN TRUE
+  END Code;
+
+BEGIN
+  B.InitBuf(out); i := 0;
+  WHILE i < b.len DO
+    IF Pre("..") THEN
+      i := j; WHILE (i < b.len) & (b.t[i] # 0AX) DO INC(i) END
+    ELSIF Pre("0x") OR Pre("x") OR Pre("\x") OR Pre("U+") OR Pre("u") OR Pre("\u") THEN
+      s := i;
+      IF Code() THEN B.PutUtf8(out, v)
+      ELSE WHILE s < j DO B.PutChar(out, b.t[s]); INC(s) END
+      END;
+      i := j
+    ELSIF Pre("&#x") THEN
+      s := i;
+      IF Code() THEN
+        B.PutUtf8(out, v); i := j; IF i < b.len THEN INC(i) END
+      ELSE
+        WHILE s < j DO B.PutChar(out, b.t[s]); INC(s) END; i := j
+      END
+    ELSE B.PutChar(out, b.t[i]); INC(i)
+    END
+  END
+END UnicodeTransform;
+
+(* formatTime defaultTimeLocale fmt of the time getTimestamp gives:
+   SOURCE_DATE_EPOCH, or now, in UTC *)
+PROCEDURE FormatDate(VAR fmt: B.Buf; VAR out: B.Buf);
+  VAR env: ARRAY 32 OF CHAR; secs, usec, days, rem, z, era, doe, yoe, y,
+    doy, mp, d, m, wday, yday, i, k: LONGINT; c, pad: CHAR;
+    months, wdays: ARRAY 100 OF CHAR;
+
+  PROCEDURE Num(n, width: LONGINT);
+    VAR s: ARRAY 24 OF CHAR; j, l: LONGINT;
+  BEGIN
+    IF n < 0 THEN B.PutChar(out, "-"); n := -n END;
+    l := 0;
+    REPEAT s[l] := CHR(ORD("0") + n MOD 10); n := n DIV 10; INC(l) UNTIL n = 0;
+    IF pad # "-" THEN
+      FOR j := l TO width - 1 DO B.PutChar(out, pad) END
+    END;
+    FOR j := l - 1 TO 0 BY -1 DO B.PutChar(out, s[j]) END
+  END Num;
+
+  (* the n-th word of names, all or its first three letters *)
+  PROCEDURE Name(VAR names: ARRAY OF CHAR; n: LONGINT; short: BOOLEAN);
+    VAR j, w, cnt: LONGINT;
+  BEGIN
+    j := 0; w := 0;
+    WHILE w < n DO
+      WHILE names[j] # " " DO INC(j) END;
+      INC(j); INC(w)
+    END;
+    cnt := 0;
+    WHILE (names[j] # " ") & (names[j] # 0X) & (~short OR (cnt < 3)) DO
+      B.PutChar(out, names[j]); INC(j); INC(cnt)
+    END
+  END Name;
+
+  PROCEDURE Str(s: ARRAY OF CHAR);
+    VAR j: LONGINT;
+  BEGIN
+    j := 0; WHILE s[j] # 0X DO B.PutChar(out, s[j]); INC(j) END
+  END Str;
+
+BEGIN
+  months := "January February March April May June July August September October November December";
+  wdays := "Sunday Monday Tuesday Wednesday Thursday Friday Saturday";
+  env := ""; Platform.GetEnv("SOURCE_DATE_EPOCH", env);
+  IF env[0] # 0X THEN
+    secs := 0; i := 0;
+    WHILE (env[i] >= "0") & (env[i] <= "9") DO
+      secs := secs * 10 + ORD(env[i]) - ORD("0"); INC(i)
+    END
+  ELSE Platform.GetTimeOfDay(secs, usec)
+  END;
+  days := secs DIV 86400; rem := secs MOD 86400;
+  z := days + 719468; era := z DIV 146097; doe := z - era * 146097;
+  yoe := (doe - doe DIV 1460 + doe DIV 36524 - doe DIV 146096) DIV 365;
+  y := yoe + era * 400; doy := doe - (365 * yoe + yoe DIV 4 - yoe DIV 100);
+  mp := (5 * doy + 2) DIV 153; d := doy - (153 * mp + 2) DIV 5 + 1;
+  IF mp < 10 THEN m := mp + 3 ELSE m := mp - 9 END;
+  IF m <= 2 THEN INC(y) END;
+  IF m >= 3 THEN yday := doy + 59 ELSE yday := doy - 306 END;
+  IF (m >= 3) & ((y MOD 4 = 0) & (y MOD 100 # 0) OR (y MOD 400 = 0)) THEN INC(yday) END;
+  INC(yday);
+  wday := (days + 4) MOD 7;
+  B.InitBuf(out); i := 0;
+  WHILE i < fmt.len DO
+    c := fmt.t[i]; INC(i);
+    IF (c = "%") & (i < fmt.len) THEN
+      c := fmt.t[i]; INC(i); pad := "0";
+      IF ((c = "-") OR (c = "_") OR (c = "0")) & (i < fmt.len) THEN
+        IF c = "_" THEN pad := " " ELSE pad := c END;
+        c := fmt.t[i]; INC(i)
+      END;
+      CASE c OF
+        "Y": Num(y, 1)
+      | "y": Num(y MOD 100, 2)
+      | "C": Num(y DIV 100, 2)
+      | "m": Num(m, 2)
+      | "d": Num(d, 2)
+      | "e": IF pad = "0" THEN pad := " " END; Num(d, 2)
+      | "j": Num(yday, 3)
+      | "H": Num(rem DIV 3600, 2)
+      | "k": IF pad = "0" THEN pad := " " END; Num(rem DIV 3600, 2)
+      | "I": k := rem DIV 3600 MOD 12; IF k = 0 THEN k := 12 END; Num(k, 2)
+      | "l": k := rem DIV 3600 MOD 12; IF k = 0 THEN k := 12 END;
+          IF pad = "0" THEN pad := " " END; Num(k, 2)
+      | "M": Num(rem DIV 60 MOD 60, 2)
+      | "S": Num(rem MOD 60, 2)
+      | "s": Num(secs, 1)
+      | "u": IF wday = 0 THEN Num(7, 1) ELSE Num(wday, 1) END
+      | "w": Num(wday, 1)
+      | "B": Name(months, m - 1, FALSE)
+      | "b", "h": Name(months, m - 1, TRUE)
+      | "A": Name(wdays, wday, FALSE)
+      | "a": Name(wdays, wday, TRUE)
+      | "p": IF rem < 43200 THEN Str("AM") ELSE Str("PM") END
+      | "P": IF rem < 43200 THEN Str("am") ELSE Str("pm") END
+      | "F": Num(y, 4); B.PutChar(out, "-"); Num(m, 2); B.PutChar(out, "-"); Num(d, 2)
+      | "D": Num(m, 2); B.PutChar(out, "/"); Num(d, 2); B.PutChar(out, "/"); Num(y MOD 100, 2)
+      | "T": Num(rem DIV 3600, 2); B.PutChar(out, ":"); Num(rem DIV 60 MOD 60, 2);
+          B.PutChar(out, ":"); Num(rem MOD 60, 2)
+      | "R": Num(rem DIV 3600, 2); B.PutChar(out, ":"); Num(rem DIV 60 MOD 60, 2)
+      | "Z": Str("UTC")
+      | "z": Str("+0000")
+      | "n": B.PutChar(out, 0AX)
+      | "t": B.PutChar(out, 09X)
+      | "%": B.PutChar(out, "%")
+      ELSE B.PutChar(out, "%"); B.PutChar(out, c)
+      END
+    ELSE B.PutChar(out, c)
+    END
+  END
+END FormatDate;
+
+(* escapeURI of r *)
+PROCEDURE EscapeURIRope(r: A.Rope): A.Rope;
+  VAR b, e: B.Buf;
+BEGIN
+  B.InitBuf(b); MI.PutRope(b, r); B.InitBuf(e);
+  MI.EscapeURI(b.t^, b.len, e);
+  RETURN BufR(e)
+END EscapeURIRope;
+
+(* The image directive *)
+PROCEDURE ImageDirective(VAR d: Directive): A.Block;
+  VAR a: A.Attr; src, t, cls, al: A.Rope; img: A.Inline;
+BEGIN
+  src := EscapeURIRope(Trim(BufR(d.top)));
+  a := A.NewAttr(Trim(FieldVal(d, "name")));
+  cls := FieldVal(d, "class");
+  IF cls # NIL THEN cls := Trim(cls) ELSE cls := A.S("") END;
+  AddWords(a, cls);
+  al := FieldVal(d, "align");
+  IF al # NIL THEN cls := Ropes.Cat(cls, Ropes.Cat(A.S("align-"), Trim(al))) END;
+  AddWords(a, cls);
+  t := FieldVal(d, "alt");
+  IF t = NIL THEN t := A.S("image") ELSE t := Trim(t) END;
+  img := A.NewLink(A.Image, a, A.NewStr(t), src, A.S(""));
+  t := FieldVal(d, "target");
+  IF t # NIL THEN
+    img := A.NewLink(A.Link, A.NewAttr(NIL), img, EscapeURIRope(Trim(t)), A.S(""))
+  END;
+  RETURN A.NewInlinesBlock(A.Para, img)
+END ImageDirective;
+
+(* Runs the directive d, adding its blocks to l; FALSE if it fails *)
+PROCEDURE RunDirective(VAR d: Directive; VAR l: A.Blocks): BOOLEAN;
+  VAR b: B.Buf; r: A.Rope;
+BEGIN
+  IF d.label = "role" THEN RETURN NewRole(d)
+  ELSIF d.label = "default-role" THEN
+    r := Trim(BufR(d.top));
+    IF Ropes.Length(r) = 0 THEN RI.defaultRole := A.S("title-reference")
+    ELSE RI.defaultRole := r
+    END
+  ELSIF d.label = "highlight" THEN
+    r := Trim(BufR(d.top));
+    IF Ropes.Length(r) = 0 THEN highlight := NIL ELSE highlight := r END
+  ELSIF d.label = "replace" THEN
+    A.AddBlock(l, A.NewInlinesBlock(A.Para, RI.ParseRope(Trim(BufR(d.top)))))
+  ELSIF d.label = "unicode" THEN
+    UnicodeTransform(d.top, b);
+    A.AddBlock(l, A.NewInlinesBlock(A.Para, RI.ParseRope(Trim(BufR(b)))))
+  ELSIF d.label = "date" THEN
+    RI.TrimBuf(d.top);
+    IF d.top.len = 0 THEN B.InitBuf(d.top); MI.PutRope(d.top, A.S("%Y-%m-%d")) END;
+    FormatDate(d.top, b);
+    A.AddBlock(l, A.NewInlinesBlock(A.Para, RI.TextOf(BufR(b))))
+  ELSIF d.label = "image" THEN A.AddBlock(l, ImageDirective(d))
+  ELSIF d.label = "raw" THEN
+    StripNewlines(d.body);
+    A.AddBlock(l, A.NewRawBlock(Trim(BufR(d.top)), BufR(d.body)))
+  ELSE
+    (* pandoc logs SkippedContent, an INFO message *)
+    A.AddBlock(l, A.NewDiv(DirAttr(d, d.label), TopBodyBlocks(d)))
+  END;
+  RETURN TRUE
+END RunDirective;
+
+(* directive *)
+PROCEDURE DirectiveBlock(VAR l: A.Blocks): BOOLEAN;
+  VAR d: Directive; q: LONGINT;
+BEGIN
+  IF ~B.Looking(B.pos, "..") THEN RETURN FALSE END;
+  q := DirectiveAt(B.pos + 2, d);
+  IF q < 0 THEN RETURN FALSE END;
+  IF ~RunDirective(d, l) THEN RETURN FALSE END;
+  B.pos := q;
+  RETURN TRUE
+END DirectiveBlock;
+
+(* substKey: .. |name| directive *)
+PROCEDURE SubstKey(VAR l: A.Blocks): BOOLEAN;
+  VAR p, q, s: LONGINT; c: A.Inlines; alt: A.Inline; key: A.Rope; d: Directive;
+    res: A.Blocks; i: A.Inline; sb: Subst;
+
+  (* whether i is an Image with the alt text [Str "image"] *)
+  PROCEDURE DefaultAlt(i: A.Inline): BOOLEAN;
+    VAR k: A.Inline;
+  BEGIN
+    IF (i = NIL) OR (i.next # NIL) OR (i.kind # A.Image) THEN RETURN FALSE END;
+    k := i(A.LinkInl).content;
+    RETURN (k # NIL) & (k.next = NIL) & (k IS A.StrInl) & Is(k(A.StrInl).text, "image")
+  END DefaultAlt;
+
+BEGIN
+  p := B.pos;
+  IF ~B.Looking(p, "..") OR ~B.IsSpace(B.C(p + 2)) THEN RETURN FALSE END;
+  q := p + 2;
+  WHILE B.IsSpace(B.C(q)) DO INC(q) END;
+  IF B.C(q) # "|" THEN RETURN FALSE END;
+  s := q;
+  B.pos := q + 1;
+  IF B.IsWhite(B.C(B.pos)) THEN B.pos := p; RETURN FALSE END;
+  A.InitInlines(c);
+  IF ~RI.Inline(c) THEN B.pos := p; RETURN FALSE END;
+  WHILE B.C(B.pos) # "|" DO
+    IF ~RI.Inline(c) THEN B.pos := p; RETURN FALSE END
+  END;
+  INC(B.pos);
+  key := RI.RopeKey(B.Rope(s + 1, B.pos - 1));
+  alt := MI.Trim(c);
+  q := DirectiveAt(B.pos, d);
+  IF q < 0 THEN B.pos := p; RETURN FALSE END;
+  A.InitBlocks(res);
+  IF ~RunDirective(d, res) THEN B.pos := p; RETURN FALSE END;
+  B.pos := q;
+  IF (res.first # NIL) & (res.first.next = NIL) & (res.first.kind = A.Para) THEN
+    i := res.first(A.InlinesBlk).inlines;
+    IF DefaultAlt(i) THEN i(A.LinkInl).content := alt
+    ELSIF (i # NIL) & (i.next = NIL) & (i.kind = A.Link)
+        & DefaultAlt(i(A.LinkInl).content) THEN
+      i(A.LinkInl).content(A.LinkInl).content := alt
+    END
+  END;
+  sb := substs;
+  WHILE (sb # NIL) & ~Ropes.Equal(sb.key, key) DO sb := sb.next END;
+  IF sb = NIL THEN NEW(sb); sb.key := key; sb.next := substs; substs := sb END;
+  sb.blocks := res.first;
+  RETURN TRUE
+END SubstKey;
+
 PROCEDURE Block(VAR l: A.Blocks): BOOLEAN;
   VAR q: LONGINT;
 BEGIN
   q := B.BlankLines(B.pos);
   IF q >= 0 THEN B.pos := q; RETURN TRUE END;
   RETURN CodeBlock(l) OR BlockQuote(l) OR FieldList(l) OR OptionList(l)
-    OR ReferenceKey(l) OR NoteBlock(l)
-    OR CitationBlock(l) OR Anchor(l) OR Comment(l)
+    OR SubstKey(l) OR ReferenceKey(l) OR NoteBlock(l)
+    OR CitationBlock(l) OR DirectiveBlock(l) OR Anchor(l) OR Comment(l)
     OR DoubleHeader(l) OR SingleHeader(l) OR Hrule(l) OR LineBlock(l)
     OR List(l, FALSE) OR List(l, TRUE) OR DefinitionList(l) OR LhsCodeBlock(l) OR Para(l)
 END Block;
@@ -1115,9 +1624,69 @@ BEGIN
   m := "Reference not found for '"; CatRope(m, ref); Cat(m, "'"); WarnAtEnd(m)
 END NotFound;
 
+(* A copy of the block b, its contents shared, the inlines of a Para
+   or Plain copied; next = NIL *)
+PROCEDURE CopyBlock(b: A.Block): A.Block;
+  VAR h: A.HeaderBlk; ib: A.InlinesBlk; lb: A.LineBlk; cb: A.CodeBlk;
+    rb: A.RawBlk; db: A.DivBlk; fb: A.FigureBlk; bb: A.BlocksBlk;
+    ob: A.OrderedBlk; li: A.ListBlk; dl: A.DefListBlk; tb: A.TableBlk;
+    x, n: A.Block;
+BEGIN
+  WITH
+    b: A.HeaderBlk DO NEW(h); h^ := b^; n := h
+  | b: A.InlinesBlk DO
+      NEW(ib); ib^ := b^; ib.inlines := A.CopyInlines(b.inlines); n := ib
+  | b: A.LineBlk DO NEW(lb); lb^ := b^; n := lb
+  | b: A.CodeBlk DO NEW(cb); cb^ := b^; n := cb
+  | b: A.RawBlk DO NEW(rb); rb^ := b^; n := rb
+  | b: A.DivBlk DO NEW(db); db^ := b^; n := db
+  | b: A.FigureBlk DO NEW(fb); fb^ := b^; n := fb
+  | b: A.BlocksBlk DO NEW(bb); bb^ := b^; n := bb
+  | b: A.OrderedBlk DO NEW(ob); ob^ := b^; n := ob
+  | b: A.ListBlk DO NEW(li); li^ := b^; n := li
+  | b: A.DefListBlk DO NEW(dl); dl^ := b^; n := dl
+  | b: A.TableBlk DO NEW(tb); tb^ := b^; n := tb
+  ELSE NEW(x); x^ := b^; n := x
+  END;
+  n.next := NIL;
+  RETURN n
+END CopyBlock;
+
+(* The substitution of ref, "|name|", or NIL; warns if there is none *)
+PROCEDURE FindSubst(ref: A.Rope): Subst;
+  VAR key: A.Rope; sb: Subst; m: Message;
+BEGIN
+  key := RI.RopeKey(Ropes.Substring(ref, 1, Ropes.Length(ref) - 2));
+  sb := substs;
+  WHILE (sb # NIL) & ~Ropes.Equal(sb.key, key) DO sb := sb.next END;
+  IF sb = NIL THEN
+    (* pandoc shows the key with tshow *)
+    m := "Reference not found for '"; Cat(m, 22X); CatRope(m, key); Cat(m, 22X);
+    Cat(m, "'"); WarnAtEnd(m)
+  END;
+  RETURN sb
+END FindSubst;
+
+(* resolveBlockSubstitutions: a Para holding only a substitution *)
+PROCEDURE (w: SubstWalker) Block*(b: A.Block): A.Block;
+  VAR i: A.Inline; ref: A.Rope; sb: Subst; bl: A.Block;
+BEGIN
+  IF (b.kind # A.Para) OR ~(b IS A.InlinesBlk) THEN RETURN b END;
+  i := b(A.InlinesBlk).inlines;
+  IF (i = NIL) OR (i.next # NIL) OR (i.kind # A.Link)
+      OR ~Prefix(i(A.LinkInl).url, "##SUBST##", ref) THEN
+    RETURN b
+  END;
+  sb := FindSubst(ref);
+  IF sb = NIL THEN RETURN b END;
+  bl := sb.blocks;
+  IF (bl # NIL) & (bl.next = NIL) THEN RETURN CopyBlock(bl) END;
+  RETURN A.NewDiv(A.NewAttr(NIL), bl)
+END Block;
+
 PROCEDURE (w: RefWalker) Inline*(i: A.Inline): A.Inline;
   VAR l: A.LinkInl; ref, key: A.Rope; k: RI.Key; n, prev: Note; nl: A.LinkInl;
-    saved, savedLast: Note; c: CHAR;
+    saved, savedLast: Note; c: CHAR; sb: Subst; bl: A.Block; il: A.Inlines;
 BEGIN
   IF ~(i IS A.LinkInl) OR (i.kind # A.Link) THEN RETURN i END;
   l := i(A.LinkInl);
@@ -1155,6 +1724,17 @@ BEGIN
       END
     END;
     RETURN i
+  ELSIF Prefix(l.url, "##SUBST##", ref) THEN
+    sb := FindSubst(ref);
+    IF sb = NIL THEN RETURN i END;
+    bl := sb.blocks;
+    IF (bl # NIL) & (bl.next = NIL) & (bl.kind = A.Para) THEN
+      i := A.CopyInlines(bl(A.InlinesBlk).inlines);
+      IF (i # NIL) & (i.next = NIL) THEN RETURN i END;
+      RETURN A.NewSpan(A.NewAttr(NIL), i)
+    END;
+    A.InitInlines(il); SH.BlocksToInlines(il, bl);
+    RETURN A.NewSpan(A.NewAttr(NIL), A.CopyInlines(il.first))
   END;
   RETURN i
 END Inline;
@@ -1180,13 +1760,16 @@ END CitationsDiv;
 
 (* Appends the citations, and resolves references in d *)
 PROCEDURE Resolve(d: A.Doc);
-  VAR w: RefWalker; l: A.Blocks; c: A.Block;
+  VAR w: RefWalker; sw: SubstWalker; l: A.Blocks; c: A.Block;
 BEGIN
   c := CitationsDiv();
   IF c # NIL THEN
     A.InitBlocks(l); A.AddBlock(l, d.blocks); A.AddBlock(l, c);
     d.blocks := l.first
   END;
+  NEW(sw);
+  A.WalkMetaValue(sw, d.meta);
+  d.blocks := A.WalkBlocks(sw, d.blocks);
   NEW(w);
   A.WalkMetaValue(w, d.meta);
   d.blocks := A.WalkBlocks(w, d.blocks)
@@ -1204,14 +1787,14 @@ BEGIN
   FOR i := n TO n + 1 - k DO t[i] := 0AX END;
   B.Start(t, n + 2 - k, tabStop);
   main := B.t; mainLen := n + 2 - k;
-  notes := NIL; notesLast := NIL; citations := NIL;
+  notes := NIL; notesLast := NIL; citations := NIL; substs := NIL;
   nStyles := 0; ids := NIL; highlight := NIL;
   RI.Reset;
   d := A.NewDoc();
   B.pos := B.SkipBlankLines(0);
   d.blocks := ParseBlocks();
   Resolve(d);
-  ids := NIL; main := NIL; notes := NIL; notesLast := NIL; citations := NIL;
+  ids := NIL; main := NIL; notes := NIL; notesLast := NIL; citations := NIL; substs := NIL;
   RETURN d
 END Read;
 

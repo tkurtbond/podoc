@@ -1013,7 +1013,7 @@ All of this runs under `-O2` and `-OC`, as every phase does.
 - Line blocks, keeping their leading spaces as U+00A0.
 - `rst+lhs` (literate Haskell, `lhsCodeBlock`), as pandoc gives it.
 
-### Phase 19.2: Inlines
+### Phase 19.2: Inlines [done]
 
 - Emphasis, strong and inline literals. pandoc's recognition rules
   for where inline markup starts and ends (`notAfterString`, ...) are
@@ -2275,3 +2275,27 @@ ConTeXt.
     (19.3), tables (19.4), `-s` (19.5); rST's `smart`,
     `ascii_identifiers`, `east_asian_line_breaks` and
     `gfm_auto_identifiers` extensions.
+- 2026-11-21: Phase 19.2 done: rST roles, substitutions and the
+  directive framework.
+  - `PdRst`: directives are read as pandoc's `directive'` does (the
+    label, the top lines, the field list, the body). `role` (with a
+    base role and `format`, `language`, `class`), `default-role`,
+    `highlight`, `replace`, `unicode`, `date` (a strftime subset, in
+    UTC, from `SOURCE_DATE_EPOCH` or the clock; poDateTime is not
+    used), `image` (`:alt:`, `:class:`, `:align:`, `:target:`) and
+    `raw` are done; any other directive is, for now, a `Div` with its
+    name as a class, as pandoc gives an unknown one.
+  - Substitution definitions (`.. |name| directive::`), with image
+    substitutions taking the name as `alt`, and their resolution
+    after parsing: a paragraph that is only a substitution becomes its
+    block (or a `Div` of its blocks), and an inline one becomes its
+    inlines or a `Span`; a missing one warns "Reference not found",
+    as pandoc does.
+  - New cases `rst-roles` and `rst-directives` (JSON from pandoc
+    3.10). `$T/r/d3.rst` (dates, every format letter) matched pandoc
+    at five `SOURCE_DATE_EPOCH` values, including leap days, under
+    both models.
+  - `make test` passed under `-O2` and `-OC`: 259 case tests, 23
+    round trips and the image tests under each.
+  - Not yet: image `:width:`, `:height:` and `:scale:` and the other
+    directives (19.3).
