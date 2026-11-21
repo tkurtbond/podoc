@@ -2492,3 +2492,33 @@ ConTeXt.
   of the image converter chain (`img2pdf`, then `magick` or
   `convert`), since gropdf cannot read GraphicsMagick 1.3.45's PDFs.
   The code already did without it; only PLAN.md changed.
+- 2026-11-21: All six BSD VMs on atla (FreeBSD 15.1 amd64 and arm64,
+  NetBSD 11.0 amd64 and i386, OpenBSD 7.9 amd64 and i386) built
+  5e2f6e4 and passed `make test` under `-O2` and `-OC`: 288 case
+  tests, 23 round trips, the image tests (conversions skipped where
+  no converter is installed). First runs on arm64 (rackhir) and
+  OpenBSD amd64 (jherek).
+- 2026-11-21: reStructuredText in the performance tests (the user's
+  request). `tools/bench rst` times pandoc's `rst-reader.rst` and
+  `tables.rst`, the Mini Six SRD, the SRD ×10, the merchant scenario
+  and five generated stress inputs of 12,000 items; results in
+  docs/developer/performance.md, "reStructuredText".
+  - Found and fixed: anonymous references, substitutions, footnotes
+    and citations were quadratic in PdRst and PdRstInline, and
+    repeated section titles cubic (12,000 took 397.73 s). Now a heap
+    for the anonymous keys, hash tables, citations merge-sorted once,
+    and identifier suffixes resumed from the last tried. The markdown
+    reader's suffixes are resumed too (cleared when `TableAt` takes
+    identifiers out). Both readers stop at `-60000` as pandoc's
+    `uniqueIdent` does. Every hash table has 4,093 buckets, a prime,
+    since `Ropes.Hash` modulo 4,096 left most buckets empty.
+  - A bug fixed: past 9,999 anonymous targets, the keys (`_` and the
+    count modulo 10,000) collided; they are pandoc's `_%04d` now.
+  - podoc is 3.2–28× faster than pandoc on every rST input, in 3–26×
+    less memory; the stress inputs are 4.8–17× faster.
+  - Checked: the stress inputs, a duplicate-citation and repeated-title
+    case and 60,005 identical titles (rST and markdown) give pandoc's
+    JSON under `-O2` and `-OC`; the user's 73 rST files give pandoc's
+    JSON and messages byte for byte, with and without `-s`, under both
+    models (292 runs); `make test` passed under `-O2` and `-OC` on
+    atla (288 case tests, 23 round trips, 6 image tests).

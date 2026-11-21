@@ -2,7 +2,7 @@
 # bench: times podoc against pandoc and measures their memory use
 # (docs/developer/performance.md):
 #
-#   tools/bench [convert] [build] [pdf]
+#   tools/bench [convert] [build] [pdf] [rst]
 #
 # With no arguments, runs convert and build. Each case is run once to
 # warm the file cache, then RUNS times; the median wall-clock and CPU
@@ -25,6 +25,13 @@
 #            filters; podoc gets the substitutions with --metadata-file, as
 #            tools/subs2yaml makes them.
 #   pdf      001-breakout.md to PDF through context and through pdfroff.
+#   rst      the reStructuredText reader: pandoc's test/rst-reader.rst and
+#            test/tables.rst, the Mini Six SRD and the SRD ten times over,
+#            to json, html, ms and context; the merchant scenario, with
+#            its includes, run in its directory; and generated inputs of
+#            12,000 anonymous references, substitutions, footnotes,
+#            citations and repeated section titles, to json, each once
+#            quadratic or worse in podoc. Both podoc builds are run.
 #
 # Memory-heavy: run it capped, for example
 #
@@ -37,6 +44,12 @@
 #   LOST_WORLDS  the Lost-Worlds checkout (~/Repos/RPG/Lost-Worlds), read
 #                only: outputs go to the scratch directory. Where it is
 #                missing, breakout, build and pdf are left out.
+#   RST_SRD      the Mini Six SRD
+#                (~/current/RPG/Mini-Six/SRD/minimal-opend6-srd.rst)
+#   RST_MERCHANT the merchant scenario (~/current/RPG/Campaigns/Alusia/
+#                Return/Scenarios/005-merchant/rst-version/
+#                return-005-merchant.rst), read only
+#                Where either is missing, it is left out.
 #   BENCH_TIME   GNU time, which measures the peak RSS (/usr/bin/time)
 #   RUNS         if set, the number of timed runs for every case (by
 #                default 20 for small inputs, down to 3 for MANUAL x10)
@@ -53,6 +66,10 @@ PANDOC_SRC = os.environ.get("PANDOC_SRC",
     "/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.10")
 LW = os.environ.get("LOST_WORLDS", HOME + "/Repos/RPG/Lost-Worlds")
 HAVE_LW = os.path.isfile(LW + "/001-breakout.md")
+SRD = os.environ.get("RST_SRD",
+    HOME + "/current/RPG/Mini-Six/SRD/minimal-opend6-srd.rst")
+MERCHANT = os.environ.get("RST_MERCHANT", HOME + "/current/RPG/Campaigns/"
+    "Alusia/Return/Scenarios/005-merchant/rst-version/return-005-merchant.rst")
 RUNS = int(os.environ["RUNS"]) if os.environ.get("RUNS") else None
 TIME = os.environ.get("BENCH_TIME", "/usr/bin/time")
 RSSFILE = None                          # set in main
@@ -97,7 +114,7 @@ def case(label, fmt, inp, n, podoc_args, pandoc_args,
         row[m] = bench([PODOC[m]] + podoc_args, n, cwd)
     results.append(row)
     p, o = row["pandoc"], row["podoc-OC"]
-    print(f"{label:10} {fmt:9} {inp:17} pandoc {p['wall']*1000:8.1f} ms "
+    print(f"{label:10} {fmt:9} {inp:19} pandoc {p['wall']*1000:8.1f} ms "
           f"{p['rss']/1024:7.1f} MiB {p['status']} | podoc {o['wall']*1000:8.1f} ms "
           f"{o['rss']/1024:7.1f} MiB {o['status']} | x{p['wall']/o['wall']:5.1f}",
           flush=True)
@@ -158,6 +175,56 @@ def pdf(out, subs):
         ["-s", "-F", "pandoc-include", "-t", "ms", "--pdf-engine=pdfroff",
          "001-breakout.md"] + FILTERS + ["-o", out + "/m.pdf"], subs)
 
+STRESS = 12000
+
+def stress(inp):
+    """The generated rST inputs, by name"""
+    n = STRESS
+    gen = {
+        "anonymous": "".join(f"See anon__.\n\n__ http://a.example/{i}\n\n"
+                             for i in range(n)),
+        "substitutions": "".join(f"A |s{i}|.\n\n" for i in range(n)) +
+            "".join(f".. |s{i}| replace:: sub {i}\n" for i in range(n)),
+        "footnotes": "".join(f"A note [#n{i}]_.\n\n" for i in range(n)) +
+            "".join(f".. [#n{i}] Note {i}.\n" for i in range(n)),
+        "citations": "".join(f"Cite [C{i * 1919 % n:05}]_.\n\n"
+                             for i in range(n)) +
+            "".join(f".. [C{i * 7919 % n:05}] Citation {i}.\n"
+                    for i in range(n)),
+        "titles": "".join(f"Section {i % 50}\n{'=' * len(f'Section {i % 50}')}"
+                          f"\n\nText `Section {i % 50}`_.\n\n"
+                          for i in range(n))}
+    for name, text in gen.items():
+        with open(f"{inp}/{name}.rst", "w") as f: f.write(text)
+    return list(gen)
+
+def rst(inp):
+    files = {"rst-reader.rst": 20, "tables.rst": 20}
+    for f in files:
+        shutil.copy(f"{PANDOC_SRC}/test/{f}", f"{inp}/{f}")
+    if os.path.isfile(SRD):
+        shutil.copy(SRD, inp + "/srd.rst")
+        srd = open(SRD, "rb").read()
+        with open(inp + "/srd10.rst", "wb") as f:
+            for _ in range(10): f.write(srd + b"\n")
+        files.update({"srd.rst": 10, "srd10.rst": 3})
+    else:
+        print(f"bench: {SRD} not found: left out", file=sys.stderr)
+    for f in files:
+        for fmt in ["json", "html", "ms", "context"]:
+            args = ["--wrap=none", "-f", "rst", "-t", fmt, f"{inp}/{f}"]
+            case("rst", fmt, f, files[f], args, args)
+    if os.path.isfile(MERCHANT):
+        d, f = os.path.split(MERCHANT)
+        for fmt in ["json", "html", "ms", "context"]:
+            args = ["--wrap=none", "-f", "rst", "-t", fmt, f]
+            case("rst", fmt, "merchant", 10, args, args, cwd=d)
+    else:
+        print(f"bench: {MERCHANT} not found: left out", file=sys.stderr)
+    for name in stress(inp):
+        args = ["-f", "rst", "-t", "json", f"{inp}/{name}.rst"]
+        case("rst", "json", f"{name} {STRESS}", 3, args, args)
+
 def main(tmp, which):
     global RSSFILE
     RSSFILE = tmp + "/rss"
@@ -177,21 +244,22 @@ def main(tmp, which):
                            stdout=f, check=True)
     elif set(which) & {"build", "pdf"}:
         print(f"bench: {LW} not found: build and pdf left out", file=sys.stderr)
-        which = [w for w in which if w == "convert"]
+        which = [w for w in which if w in ("convert", "rst")]
     print(f"# pandoc {PANDOC}; podoc {PD} at " + subprocess.run(
         ["git", "-C", PD, "describe", "--always", "--dirty"],
         capture_output=True, text=True).stdout.strip(), flush=True)
     if "convert" in which: convert(inp)
     if "build" in which: build(out, subs)
     if "pdf" in which: pdf(out, subs)
+    if "rst" in which: rst(inp)
     if os.environ.get("BENCH_JSON"):
         with open(os.environ["BENCH_JSON"], "w") as f:
             json.dump(results, f, indent=1)
 
 which = sys.argv[1:] or ["convert", "build"]
 for w in which:
-    if w not in ("convert", "build", "pdf"):
-        sys.exit("usage: bench [convert] [build] [pdf]")
+    if w not in ("convert", "build", "pdf", "rst"):
+        sys.exit("usage: bench [convert] [build] [pdf] [rst]")
 if PANDOC is None:
     sys.exit("bench: pandoc not found")
 if subprocess.run([TIME, "-f", "%M", "true"], capture_output=True).returncode:

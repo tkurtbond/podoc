@@ -9,12 +9,21 @@ IMPORT Ropes, Strings, Platform, Utf8, Unicode, PdIO, PdJson, PdSource, A := PdA
 
 CONST
   MaxStyles = 64;
+  TabSize = 4093; (* buckets in the note, substitution, citation and
+    identifier tables: a prime, as PdMarkdown.TableSize *)
   Quiet* = 0; WarnUnknown* = 1; FailUnknown* = 2; (* unknown *)
 
 TYPE
   Style = RECORD c: CHAR; double: BOOLEAN END;
   Note = POINTER TO NoteDesc;
-  NoteDesc = RECORD ref, raw: A.Rope; next: Note END;
+  NoteDesc = RECORD
+    ref, raw: A.Rope;
+    next: Note;
+    link: Note (* the next citation in the same bucket of citeTab *)
+  END;
+  CiteTab = POINTER TO ARRAY TabSize OF Note;
+  NoteTab = POINTER TO NoteTabDesc; (* the notes by ref, each bucket in document order *)
+  NoteTabDesc = RECORD head, tail: ARRAY TabSize OF Note END;
   Name = POINTER TO NameDesc;
   NameDesc = RECORD name: A.Rope; next: Name END;
   Message = ARRAY 1024 OF CHAR;
@@ -32,6 +41,7 @@ TYPE
   END;
   Subst = POINTER TO SubstDesc;
   SubstDesc = RECORD key: A.Rope; blocks: A.Block; next: Subst END;
+  SubstTab = POINTER TO ARRAY TabSize OF Subst;
   Pending = POINTER TO PendingDesc; (* a note whose text is resolved later *)
   PendingDesc = RECORD note: A.NoteInl; next: Pending END;
   SubstWalker = POINTER TO SubstWalkerDesc;
@@ -53,7 +63,12 @@ TYPE
     next: Inc (* the file that includes it *)
   END;
   Id = POINTER TO IdDesc;
-  IdDesc = RECORD id: A.Rope; next: Id END;
+  IdDesc = RECORD
+    id: A.Rope;
+    last: LONGINT; (* the last suffix tried with this as the base *)
+    next: Id
+  END;
+  IdTab = POINTER TO ARRAY TabSize OF Id;
 
 VAR
   autoIds*: BOOLEAN; (* auto_identifiers, on by default *)
@@ -66,14 +81,15 @@ VAR
   lastUnknown: LONGINT; (* where the last --unknown report was *)
   styles: ARRAY MaxStyles OF Style;
   nStyles: INTEGER;
-  ids: Id; (* the header identifiers used *)
+  ids: IdTab; (* the header identifiers used, or NIL for none *)
   highlight: A.Rope; (* the highlight directive's language, or NIL *)
   main: B.Text; mainLen: LONGINT;
-  notes, notesLast: Note; (* stateNotes, in document order *)
+  notes: NoteTab; (* stateNotes, or NIL for none *)
   inNote: BOOLEAN; (* whether Resolve is walking a note's text *)
   pending, pendingLast: Pending; (* notes made by Resolve, in order *)
-  citations: Note; (* stateCitations, sorted by ref *)
-  substs: Subst; (* stateSubstitutions *)
+  citations: Note; (* stateCitations, unsorted until CitationsDiv *)
+  citeTab: CiteTab; (* the citations by ref, or NIL for none *)
+  substs: SubstTab; (* stateSubstitutions, or NIL for none *)
   incs: Inc; (* the files being included, the innermost first *)
 
 PROCEDURE^ Block(VAR l: A.Blocks): BOOLEAN;
@@ -109,34 +125,46 @@ BEGIN
   RETURN i + 1
 END Level;
 
-PROCEDURE Used(id: A.Rope): BOOLEAN;
+(* The entry of the used identifier id, or NIL *)
+PROCEDURE FindId(id: A.Rope): Id;
   VAR p: Id;
 BEGIN
-  p := ids;
+  IF ids = NIL THEN RETURN NIL END;
+  p := ids[SHORT(Ropes.Hash(id) MOD TabSize)];
   WHILE (p # NIL) & ~Ropes.Equal(p.id, id) DO p := p.next END;
-  RETURN p # NIL
-END Used;
+  RETURN p
+END FindId;
 
 PROCEDURE Use(id: A.Rope);
-  VAR p: Id;
+  VAR p: Id; b: LONGINT;
 BEGIN
-  NEW(p); p.id := id; p.next := ids; ids := p
+  IF ids = NIL THEN NEW(ids); FOR b := 0 TO TabSize - 1 DO ids[b] := NIL END END;
+  b := SHORT(Ropes.Hash(id) MOD TabSize);
+  NEW(p); p.id := id; p.last := 0; p.next := ids[b]; ids[b] := p
 END Use;
 
 (* registerHeader: the attribute of a header with the text inl, with an
    identifier made unique if auto_identifiers is on *)
 PROCEDURE HeaderAttr(inl: A.Inline): A.Attr;
-  VAR id, try: A.Rope; n: LONGINT;
+  VAR id, try: A.Rope; n: LONGINT; base: Id;
 BEGIN
   IF ~autoIds THEN RETURN NIL END;
   id := MI.Identifier(inl);
   IF id = NIL THEN id := Ropes.FromString("section") END;
-  try := id; n := 0;
-  WHILE Used(try) DO
-    INC(n);
-    try := Ropes.Cat(Ropes.Cat(id, Ropes.FromString("-")), SH.IntRope(n))
+  try := id; base := FindId(id);
+  IF base # NIL THEN
+    (* identifiers are never removed, so no suffix below the last
+       tried is free; past 60,000, uniqueIdent repeats the base *)
+    n := base.last;
+    LOOP
+      IF n >= 60000 THEN try := id; EXIT END;
+      INC(n);
+      try := Ropes.Cat(Ropes.Cat(id, Ropes.FromString("-")), SH.IntRope(n));
+      IF FindId(try) = NIL THEN EXIT END
+    END;
+    base.last := n
   END;
-  Use(try);
+  IF FindId(try) = NIL THEN Use(try) END;
   RETURN A.NewAttr(try)
 END HeaderAttr;
 
@@ -641,30 +669,53 @@ BEGIN
   RETURN TRUE
 END NoteBlock0;
 
+(* The bucket of key in the note and substitution tables *)
+PROCEDURE TabBucket(key: A.Rope): LONGINT;
+BEGIN
+  RETURN SHORT(Ropes.Hash(key) MOD TabSize)
+END TabBucket;
+
 (* noteBlock *)
 PROCEDURE NoteBlock(VAR l: A.Blocks): BOOLEAN;
-  VAR n: Note;
+  VAR n: Note; b, i: LONGINT;
 BEGIN
   NEW(n);
   IF ~NoteBlock0(FALSE, n.ref, n.raw) THEN RETURN FALSE END;
   n.next := NIL;
-  IF notes = NIL THEN notes := n ELSE notesLast.next := n END;
-  notesLast := n;
+  IF notes = NIL THEN
+    NEW(notes); FOR i := 0 TO TabSize - 1 DO notes.head[i] := NIL; notes.tail[i] := NIL END
+  END;
+  b := TabBucket(n.ref);
+  IF notes.head[b] = NIL THEN notes.head[b] := n ELSE notes.tail[b].next := n END;
+  notes.tail[b] := n;
   RETURN TRUE
 END NoteBlock;
 
+(* The substitution key, or NIL *)
+PROCEDURE LookupSubst(key: A.Rope): Subst;
+  VAR sb: Subst;
+BEGIN
+  IF substs = NIL THEN RETURN NIL END;
+  sb := substs[TabBucket(key)];
+  WHILE (sb # NIL) & ~Ropes.Equal(sb.key, key) DO sb := sb.next END;
+  RETURN sb
+END LookupSubst;
+
 (* citationBlock *)
 PROCEDURE CitationBlock(VAR l: A.Blocks): BOOLEAN;
-  VAR n, p, prev: Note; a: A.Attr; c: INTEGER;
+  VAR n, p: Note; a: A.Attr; b: LONGINT;
 BEGIN
   NEW(n);
   IF ~NoteBlock0(TRUE, n.ref, n.raw) THEN RETURN FALSE END;
-  prev := NIL; p := citations; c := -1;
-  WHILE (p # NIL) & (Ropes.Compare(p.ref, n.ref) < 0) DO prev := p; p := p.next END;
-  IF (p # NIL) & (Ropes.Compare(p.ref, n.ref) = 0) THEN p.raw := n.raw
+  IF citeTab = NIL THEN
+    NEW(citeTab); FOR b := 0 TO TabSize - 1 DO citeTab[b] := NIL END
+  END;
+  b := TabBucket(n.ref); p := citeTab[b];
+  WHILE (p # NIL) & ~Ropes.Equal(p.ref, n.ref) DO p := p.link END;
+  IF p # NIL THEN p.raw := n.raw (* a Map: the last definition wins *)
   ELSE
-    n.next := p;
-    IF prev = NIL THEN citations := n ELSE prev.next := n END
+    n.link := citeTab[b]; citeTab[b] := n;
+    n.next := citations; citations := n
   END;
   a := A.NewAttr(NIL); A.AddClass(a, A.S("citation"));
   RI.SetKey(RI.RopeKey(n.ref), Ropes.Cat(A.S("#"), n.ref), NIL, a);
@@ -747,8 +798,8 @@ END TargetURI;
 
 (* anonymousKey and regularKey *)
 PROCEDURE ReferenceKey(VAR l: A.Blocks): BOOLEAN;
-  VAR p, q: LONGINT; src: A.Rope; names: Name; m: ARRAY 8 OF CHAR;
-    n: LONGINT; i: INTEGER;
+  VAR p, q: LONGINT; src: A.Rope; names: Name; m: ARRAY 16 OF CHAR;
+    n: LONGINT; i, j: INTEGER; c: CHAR;
 BEGIN
   p := B.pos; q := -1;
   IF B.Looking(p, ".. __:") THEN q := p + 6
@@ -757,8 +808,12 @@ BEGIN
   IF (q >= 0) & B.IsSpace(B.C(q)) THEN
     q := TargetURI(q, src);
     IF q >= 0 THEN
-      n := RI.keyCount; m := "_0000"; i := 4;
-      WHILE (i > 0) & (n > 0) DO m[i] := CHR(ORD("0") + n MOD 10); n := n DIV 10; DEC(i) END;
+      (* printf "_%04d" (M.size keys) *)
+      n := RI.keyCount; i := 0;
+      REPEAT m[i] := CHR(ORD("0") + n MOD 10); n := n DIV 10; INC(i) UNTIL n = 0;
+      WHILE i < 4 DO m[i] := "0"; INC(i) END;
+      m[i] := "_"; m[i + 1] := 0X; j := 0;
+      WHILE j < i DO c := m[j]; m[j] := m[i]; m[i] := c; INC(j); DEC(i) END;
       RI.SetKey(RI.RopeKey(A.S(m)), src, NIL, NIL);
       B.pos := B.SkipBlankLines(q);
       RETURN TRUE
@@ -2301,7 +2356,7 @@ END DirectiveBlock;
 (* substKey: .. |name| directive *)
 PROCEDURE SubstKey(VAR l: A.Blocks): BOOLEAN;
   VAR p, q, s: LONGINT; c: A.Inlines; alt: A.Inline; key: A.Rope; d: Directive;
-    res: A.Blocks; i: A.Inline; sb: Subst;
+    res: A.Blocks; i: A.Inline; sb: Subst; b: LONGINT;
 
   (* whether i is an Image with the alt text [Str "image"] *)
   PROCEDURE DefaultAlt(i: A.Inline): BOOLEAN;
@@ -2343,9 +2398,12 @@ BEGIN
       i(A.LinkInl).content(A.LinkInl).content := alt
     END
   END;
-  sb := substs;
-  WHILE (sb # NIL) & ~Ropes.Equal(sb.key, key) DO sb := sb.next END;
-  IF sb = NIL THEN NEW(sb); sb.key := key; sb.next := substs; substs := sb END;
+  sb := LookupSubst(key);
+  IF sb = NIL THEN
+    IF substs = NIL THEN NEW(substs); FOR b := 0 TO TabSize - 1 DO substs[b] := NIL END END;
+    b := TabBucket(key);
+    NEW(sb); sb.key := key; sb.next := substs[b]; substs[b] := sb
+  END;
   sb.blocks := res.first;
   RETURN TRUE
 END SubstKey;
@@ -3172,8 +3230,7 @@ PROCEDURE FindSubst(ref: A.Rope): Subst;
   VAR key: A.Rope; sb: Subst; m: Message;
 BEGIN
   key := RI.RopeKey(Ropes.Substring(ref, 1, Ropes.Length(ref) - 2));
-  sb := substs;
-  WHILE (sb # NIL) & ~Ropes.Equal(sb.key, key) DO sb := sb.next END;
+  sb := LookupSubst(key);
   IF sb = NIL THEN
     (* pandoc shows the key with tshow *)
     m := "Reference not found for '"; CatShow(m, key);
@@ -3201,7 +3258,7 @@ END Block;
 
 PROCEDURE (w: RefWalker) Inline*(i: A.Inline): A.Inline;
   VAR l: A.LinkInl; ref, key: A.Rope; k: RI.Key; n, prev: Note; nl: A.LinkInl;
-    saved, savedLast: Note; c: CHAR; sb: Subst; bl: A.Block; il: A.Inlines;
+    saved: NoteTab; b: LONGINT; c: CHAR; sb: Subst; bl: A.Block; il: A.Inlines;
     pn: Pending;
 BEGIN
   IF ~(i IS A.LinkInl) OR (i.kind # A.Link) THEN RETURN i END;
@@ -3226,18 +3283,21 @@ BEGIN
     IF (Ropes.Length(key) > 0) & (Ropes.Fetch(key, 0) = "_") THEN RI.DeleteKey(key) END;
     RETURN nl
   ELSIF Prefix(l.url, "##NOTE##", ref) THEN
-    prev := NIL; n := notes;
-    WHILE (n # NIL) & ~Ropes.Equal(n.ref, ref) DO prev := n; n := n.next END;
+    prev := NIL; n := NIL;
+    IF notes # NIL THEN
+      b := TabBucket(ref); n := notes.head[b];
+      WHILE (n # NIL) & ~Ropes.Equal(n.ref, ref) DO prev := n; n := n.next END
+    END;
     IF inNote THEN RETURN i END;
     IF n = NIL THEN NotFound(ref); RETURN i END;
-    saved := notes; savedLast := notesLast; notes := NIL; notesLast := NIL;
+    saved := notes; notes := NIL;
     i := A.NewNote(RopeBlocks(n.raw));
-    notes := saved; notesLast := savedLast;
+    notes := saved;
     IF Ropes.Length(ref) = 1 THEN
       c := Ropes.Fetch(ref, 0);
       IF (c = "*") OR (c = "#") THEN
-        IF prev = NIL THEN notes := n.next ELSE prev.next := n.next END;
-        IF notesLast = n THEN notesLast := prev END
+        IF prev = NIL THEN notes.head[b] := n.next ELSE prev.next := n.next END;
+        IF notes.tail[b] = n THEN notes.tail[b] := prev END
       END
     END;
     IF ~inNote THEN
@@ -3261,12 +3321,35 @@ BEGIN
   RETURN i
 END Inline;
 
+(* The list l sorted by ref, its refs all different *)
+PROCEDURE SortNotes(l: Note): Note;
+  VAR a, b, p, head, tail: Note;
+BEGIN
+  IF (l = NIL) OR (l.next = NIL) THEN RETURN l END;
+  (* split l in two halves, a and b *)
+  a := l; b := l.next;
+  WHILE (b # NIL) & (b.next # NIL) DO a := a.next; b := b.next.next END;
+  b := a.next; a.next := NIL; a := SortNotes(l); b := SortNotes(b);
+  head := NIL; tail := NIL;
+  WHILE (a # NIL) & (b # NIL) DO
+    IF Ropes.Compare(a.ref, b.ref) < 0 THEN p := a; a := a.next
+    ELSE p := b; b := b.next
+    END;
+    IF head = NIL THEN head := p ELSE tail.next := p END;
+    tail := p
+  END;
+  IF a = NIL THEN a := b END;
+  IF head = NIL THEN head := a ELSE tail.next := a END;
+  RETURN head
+END SortNotes;
+
 (* The citations Div, or NIL *)
 PROCEDURE CitationsDiv(): A.Block;
   VAR n: Note; items, last, d: A.DefItem; bl: A.BlockList; dl: A.Block;
     a: A.Attr;
 BEGIN
   IF citations = NIL THEN RETURN NIL END;
+  citations := SortNotes(citations);
   items := NIL; last := NIL; n := citations;
   WHILE n # NIL DO
     NEW(d); a := A.NewAttr(n.ref); A.AddClass(a, A.S("citation-label"));
@@ -3487,7 +3570,7 @@ BEGIN
   main := B.t; mainLen := n + 2 - k;
   nextKind := RI.OrgUnknown; nextName := NIL; lastUnknown := -1;
   RI.unknownRole := UnknownRole;
-  notes := NIL; notesLast := NIL; inNote := FALSE; citations := NIL; substs := NIL;
+  notes := NIL; inNote := FALSE; citations := NIL; citeTab := NIL; substs := NIL;
   nStyles := 0; ids := NIL; highlight := NIL; incs := NIL;
   RI.Reset;
   d := A.NewDoc();
@@ -3495,7 +3578,7 @@ BEGIN
   d.blocks := ParseBlocks();
   IF standalone THEN TitleTransform(d) END;
   Resolve(d);
-  ids := NIL; main := NIL; notes := NIL; notesLast := NIL; citations := NIL; substs := NIL;
+  ids := NIL; main := NIL; notes := NIL; citations := NIL; citeTab := NIL; substs := NIL;
   RETURN d
 END Read;
 

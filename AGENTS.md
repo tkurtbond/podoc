@@ -157,7 +157,7 @@ reinstall after upgrading poc.
   installed.
 - `tools/bench` times podoc, under both models, against pandoc. It
   reports wall and CPU time and peak RSS for conversions, the
-  Lost-Worlds builds and PDFs; run it under a `systemd-run` memory
+  Lost-Worlds builds, PDFs and reStructuredText (`rst`); run it under a `systemd-run` memory
   cap. Its results, the method and the changes made for performance
   are in `docs/developer/performance.md`. The layout writers' memory
   use, its fixes and what is left are in

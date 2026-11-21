@@ -20,7 +20,8 @@ IMPORT Ropes, Utf8, Unicode, Utf8Strings, A := PdAst, L := PdLayout, T := PdTemp
   PdHtml, PdIO;
 
 CONST
-  IdBuckets = 4096; (* hash buckets for the identifiers used *)
+  IdBuckets = 4093; (* hash buckets for the identifiers used: a prime, as
+    PdMarkdown.TableSize *)
 
 TYPE
   Rope = Ropes.Rope;

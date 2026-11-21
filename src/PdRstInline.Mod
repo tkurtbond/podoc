@@ -18,7 +18,8 @@ IMPORT Ropes, Utf8, Unicode, A := PdAst, B := PdMdBase, MI := PdMdInline,
   W := PdWords;
 
 CONST
-  TableSize = 1024; (* buckets in the key table *)
+  TableSize = 4093; (* buckets in the key table: a prime, as
+    PdMarkdown.TableSize *)
   MaxDepth* = 64; (* the texts deeper than this are not located *)
   OrgUnknown* = 0; OrgOffset* = 1; OrgLines* = 2;
 
@@ -26,6 +27,7 @@ TYPE
   Name* = B.Text;
   (* A reference key: the target src (and title) and attributes of the
      links that name it *)
+  Ropes1 = POINTER TO ARRAY OF A.Rope;
   Key* = POINTER TO KeyDesc;
   KeyDesc* = RECORD
     key*, src*, title*: A.Rope;
@@ -60,6 +62,10 @@ VAR
   unknownRole*: PROCEDURE (role: A.Rope; pos: LONGINT);
   rolePos: LONGINT;
   keys: ARRAY TableSize OF Key;
+  (* the keys that start with _, a min-heap in Ropes.Compare's order;
+     a key since deleted stays until it reaches the top *)
+  anon: Ropes1;
+  anonLen: LONGINT;
   keyCount*: LONGINT; (* M.size stateKeys *)
   roles: Role;
   defaultRole*: A.Rope; (* stateRstDefaultRole *)
@@ -105,6 +111,38 @@ BEGIN
   RETURN k
 END FindKey;
 
+(* Adds key to the heap anon *)
+PROCEDURE PushAnon(key: A.Rope);
+  VAR n: Ropes1; i, j: LONGINT; t: A.Rope;
+BEGIN
+  IF (anon = NIL) OR (anonLen = LEN(anon^)) THEN
+    IF anon = NIL THEN NEW(n, 64) ELSE NEW(n, 2 * LEN(anon^)) END;
+    FOR i := 0 TO anonLen - 1 DO n[i] := anon[i] END;
+    anon := n
+  END;
+  i := anonLen; anon[i] := key; INC(anonLen);
+  WHILE i > 0 DO
+    j := (i - 1) DIV 2;
+    IF Ropes.Compare(anon[i], anon[j]) >= 0 THEN i := 0
+    ELSE t := anon[i]; anon[i] := anon[j]; anon[j] := t; i := j
+    END
+  END
+END PushAnon;
+
+(* Removes the least key from the heap anon *)
+PROCEDURE PopAnon;
+  VAR i, j: LONGINT; t: A.Rope;
+BEGIN
+  DEC(anonLen); anon[0] := anon[anonLen]; anon[anonLen] := NIL; i := 0;
+  LOOP
+    j := 2 * i + 1;
+    IF j >= anonLen THEN EXIT END;
+    IF (j + 1 < anonLen) & (Ropes.Compare(anon[j + 1], anon[j]) < 0) THEN INC(j) END;
+    IF Ropes.Compare(anon[j], anon[i]) >= 0 THEN EXIT END;
+    t := anon[i]; anon[i] := anon[j]; anon[j] := t; i := j
+  END
+END PopAnon;
+
 (* M.insert key ((src, title), attr) stateKeys *)
 PROCEDURE SetKey*(key, src, title: A.Rope; attr: A.Attr);
   VAR k: Key; b: LONGINT;
@@ -112,7 +150,8 @@ BEGIN
   k := FindKey(key);
   IF k = NIL THEN
     NEW(k); k.key := key; b := Bucket(key);
-    k.next := keys[b]; keys[b] := k; INC(keyCount)
+    k.next := keys[b]; keys[b] := k; INC(keyCount);
+    IF (Ropes.Length(key) > 0) & (Ropes.Fetch(key, 0) = "_") THEN PushAnon(key) END
   END;
   k.src := src; k.title := title; k.attr := attr
 END SetKey;
@@ -131,20 +170,10 @@ END DeleteKey;
 
 (* The least of the anonymous keys (those that start with _), or NIL *)
 PROCEDURE FirstAnonymous*(): A.Rope;
-  VAR i: LONGINT; k: Key; best: A.Rope;
 BEGIN
-  best := NIL;
-  FOR i := 0 TO TableSize - 1 DO
-    k := keys[i];
-    WHILE k # NIL DO
-      IF (Ropes.Length(k.key) > 0) & (Ropes.Fetch(k.key, 0) = "_")
-          & ((best = NIL) OR (Ropes.Compare(k.key, best) < 0)) THEN
-        best := k.key
-      END;
-      k := k.next
-    END
-  END;
-  RETURN best
+  WHILE (anonLen > 0) & (FindKey(anon[0]) = NIL) DO PopAnon END;
+  IF anonLen = 0 THEN RETURN NIL END;
+  RETURN anon[0]
 END FirstAnonymous;
 
 (* toKey of the rope r *)
@@ -173,7 +202,7 @@ PROCEDURE Reset*;
   VAR i: LONGINT;
 BEGIN
   FOR i := 0 TO TableSize - 1 DO keys[i] := NIL END;
-  keyCount := 0; roles := NIL;
+  keyCount := 0; roles := NIL; anon := NIL; anonLen := 0;
   defaultRole := A.S("title-reference")
 END Reset;
 

@@ -25,7 +25,9 @@ CONST
   (* what starts a list item *)
   BulletItem = 1; OrderedItem = 2; DefItem = 3;
 
-  TableSize = 4096; (* the number of buckets in a HashTable *)
+  TableSize = 4093; (* the number of buckets in a HashTable: a prime, since
+    Ropes.Hash modulo a power of two leaves most buckets empty for keys
+    that differ only in their last characters *)
 
 TYPE
   (* A reference key and its target *)
@@ -42,6 +44,7 @@ TYPE
   SlotDesc = RECORD
     key: A.Rope;
     k: Key;
+    n: LONGINT; (* suffixes: the last suffix tried *)
     next: Slot
   END;
   HashTable = POINTER TO ARRAY TableSize OF Slot;
@@ -113,6 +116,9 @@ VAR
   (* ids, keys and headerKeys hashed, so that they are found without
      walking the lists, which are kept so that TableAt can go back *)
   idTable, keyTable, headerTable: HashTable;
+  suffixes: HashTable; (* for each base in it, the last suffix tried, in
+    the slot's n: none below it is free; NIL when TableAt took
+    identifiers out again *)
   notes: Note; (* the notes; the last defined first *)
   listItems: Item; (* the list items *)
   meta: A.MetaMapV; (* the document's metadata so far *)
@@ -194,7 +200,7 @@ PROCEDURE Add(t: HashTable; key: A.Rope; k: Key);
   VAR s: Slot; b: LONGINT;
 BEGIN
   b := Bucket(key);
-  NEW(s); s.key := key; s.k := k; s.next := t[b]; t[b] := s
+  NEW(s); s.key := key; s.k := k; s.n := 0; s.next := t[b]; t[b] := s
 END Add;
 
 (* The last added slot in t for the rope key itself (not one equal to
@@ -237,18 +243,23 @@ END Number;
 (* registerHeader: an identifier for a header without one, made unique
    as uniqueIdent makes it; either is recorded as used *)
 PROCEDURE RegisterHeader(attr: A.Attr; inl: A.Inline);
-  VAR base, id: A.Rope; n: LONGINT;
+  VAR base, id: A.Rope; n: LONGINT; s: Slot;
 BEGIN
   IF attr.id = NIL THEN
     base := I.Identifier(inl);
     IF base = NIL THEN base := A.S("section") END;
     id := base;
     IF Used(id) THEN
-      n := 1;
-      REPEAT
-        id := Ropes.Cat(Ropes.AppendChar(base, "-"), Number(n)); INC(n)
-      UNTIL ~Used(id) OR (n > 60000);
-      IF Used(id) THEN id := base END
+      IF suffixes = NIL THEN suffixes := NewTable() END;
+      s := Find(suffixes, base);
+      IF s = NIL THEN Add(suffixes, base, NIL); s := suffixes[Bucket(base)] END;
+      n := s.n;
+      LOOP
+        IF n >= 60000 THEN id := base; EXIT END;
+        INC(n); id := Ropes.Cat(Ropes.AppendChar(base, "-"), Number(n));
+        IF ~Used(id) THEN EXIT END
+      END;
+      s.n := n
     END;
     attr.id := id
   END;
@@ -1002,6 +1013,7 @@ BEGIN
   B.pos := p; A.InitBlocks(tmp);
   found := Table(tmp);
   B.pos := save; B.lastStrPos := sp; B.lastStrText := st;
+  IF ids # saveIds THEN suffixes := NIL END;
   WHILE ids # saveIds DO Remove(idTable, ids.s); ids := ids.next END;
   WHILE headerKeys # saveKeys DO
     Remove(headerTable, headerKeys.key); headerKeys := headerKeys.next
@@ -2374,7 +2386,7 @@ END Resolve;
 PROCEDURE Reset;
 BEGIN
   ids := NIL; keys := NIL; headerKeys := NIL; notes := NIL; listItems := NIL;
-  idTable := NewTable(); keyTable := NewTable(); headerTable := NewTable();
+  idTable := NewTable(); suffixes := NIL; keyTable := NewTable(); headerTable := NewTable();
   I.Reset
 END Reset;
 
@@ -2432,5 +2444,5 @@ BEGIN
 END ReadMetaFile;
 
 BEGIN
-  ids := NIL; idTable := NewTable(); gridTables := TRUE; titleBlock := TRUE; columns := 72
+  ids := NIL; idTable := NewTable(); suffixes := NIL; gridTables := TRUE; titleBlock := TRUE; columns := 72
 END PdMarkdown.
