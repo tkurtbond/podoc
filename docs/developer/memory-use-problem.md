@@ -47,6 +47,24 @@ for i in $(seq 10); do cat MANUAL.txt; echo; done > m10.md
 - **Failing at 1 GB does show that the memory still in use at ×40 is
   large**, but how large has not been measured.
 
+## Allocation takes half the time
+
+`perf` (cycles in user space, `-OC` build, `-t json` on MANUAL.txt
+×1 to ×40) put poc's `GarbageCollectedHeap` at 45–52% of podoc's
+cycles at every size:
+
+- `Allocate`: 20–24%;
+- `TakeFromFreeList`: 9–13%;
+- `MarkCandidate`: 7–10%.
+
+The share doesn't grow with the input, so the collector scales; podoc
+simply allocates a great deal. Fewer allocations, the aim of the likely
+fixes at the end of this note, would make podoc faster as well as smaller. Before the fixes
+of 2026-11-20 (b725290, and Ropes 7af2400 for `Ropes.Equal`), the
+share rose to 72% at ×10, which looked like the collector slowing
+down. It was podoc's quadratic lookups (see
+`docs/developer/performance.md`).
+
 ## Suspects
 
 These come from reading the code; none has been measured. The layout
