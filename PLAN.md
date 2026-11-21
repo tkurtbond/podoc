@@ -131,9 +131,11 @@ Made by the user on 2026-11-20, on the questions of §15.
     an image is converted, the `.ms` file and the converted PDFs are
     written to one directory: the one the user names, or else one
     podoc makes. A deliberate difference from pandoc, to be listed in
-    docs/user/differences.md. Planned as Phase 21. Which converter
-    to use for bitmaps is still open: img2pdf, then magick, is
-    proposed (Phase 21).
+    docs/user/differences.md. Planned as Phase 21. Bitmaps are
+    converted with the first of `img2pdf`, `magick` (or ImageMagick
+    6's `convert`) and `gm convert` found (decided 2026-11-20:
+    img2pdf keeps JPEGs unchanged and keeps transparency; gm loses
+    transparency).
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -1142,7 +1144,7 @@ ConTeXt.
   - SVG with `rsvg-convert -f pdf`, as ConTeXt PDFs do already
     (`PdPdf.ConvertSvg`);
   - bitmaps (PNG, JPEG, GIF, TIFF and the like) with the first
-    converter found; proposed order: `img2pdf`, then `magick` (or
+    converter found, in this order (decision 23): `img2pdf`, `magick` (or
     ImageMagick 6's `convert`), then `gm convert`;
   - when no converter is found or a conversion fails, a warning, and
     the image keeps pandoc's output.
