@@ -138,6 +138,12 @@ reinstall after upgrading poc.
   (decision 3).
 - `make compare` runs pandoc and podoc side by side, where pandoc is
   installed.
+- `tools/bench` times podoc, under both models, against pandoc. It
+  reports wall and CPU time and peak RSS for conversions, the
+  Lost-Worlds builds and PDFs; run it under a `systemd-run` memory
+  cap. Its results, the method and the changes made for performance
+  are in `docs/developer/performance.md`. The layout writers' memory
+  use, still open, is in `docs/developer/memory-use-problem.md`.
 - `make install` installs the `-OC` podoc and `subs2yaml` (`PREFIX`,
   `~/.local` by default; `MODEL`, `DESTDIR`); `make uninstall`.
 - Tested on Fedora (atla), FreeBSD (alerik), NetBSD (artos, terhali;
