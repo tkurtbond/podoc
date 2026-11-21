@@ -134,8 +134,8 @@ Made by the user on 2026-11-20, on the questions of §15.
       `img2pdf`, `magick` (or ImageMagick 6's `convert`) and `gm
       convert` found (img2pdf keeps JPEGs unchanged and keeps
       transparency; gm loses transparency).
-      **Changed 2026-11-21, during Phase 21, for the user to confirm:**
-      `gm` is not used. GraphicsMagick 1.3.45's PDFs hold a malformed
+      **Changed 2026-11-21, during Phase 21; confirmed by the user the
+      same day:** `gm` is not used. GraphicsMagick 1.3.45's PDFs hold a malformed
       object (`<< >> endstream` with no `stream`), and gropdf fails on
       them in groff 1.23.0, 1.24.2 and 1.25.0. The chain is `img2pdf`,
       then `magick` (or `convert`). And for groff, `rsvg-convert` is
@@ -2244,7 +2244,7 @@ ConTeXt.
     show for `pdfroff` and `groff`.
   - The converter chain is `rsvg-convert` (PDF 1.4 for groff), then
     `img2pdf`, then `magick` or `convert`; `gm` was dropped (decision
-    23, changed for the user to confirm). magick is given 96 dpi
+    23, changed, and confirmed by the user the same day). magick is given 96 dpi
     when `identify` reports no resolution: a 100x75 PNG gives a
     75x56.25 pt page, as with img2pdf.
   - Checked against pandoc 3.10: `--extract-media=media` with `-t
@@ -2488,3 +2488,7 @@ ConTeXt.
     pandoc's JSON byte for byte (`-OC`). `make test` passed under
     `-O2` and `-OC` on atla (288 case tests, 23 round trips, 6 image
     tests).
+- 2026-11-21: The user confirmed decision 23's change: `gm` stays out
+  of the image converter chain (`img2pdf`, then `magick` or
+  `convert`), since gropdf cannot read GraphicsMagick 1.3.45's PDFs.
+  The code already did without it; only PLAN.md changed.
