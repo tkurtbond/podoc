@@ -1263,6 +1263,18 @@ ConTeXt.
   contents of Strikeout, Quoted and Link are not trimmed again after
   resolving.
 - Citations, `--citeproc`.
+- rST footnotes as docutils has them (the user's choice, 2026-11-21,
+  over leaving them or approximating them; see decision 25). pandoc's
+  AST puts a note's text where it is referenced, so its reader, and
+  podoc's, copy a footnote referenced twice into two footnotes, drop
+  a footnote nothing references, and leave a footnote reference inside
+  a footnote (`[2]_`) as a link to `##NOTE##2`. docutils keeps the
+  footnotes as one list, each printed once, linked to from each
+  reference and back. Doing that would need footnotes held apart from
+  the text and cross-references between them in every writer (HTML,
+  ms with its `\**` numbering, ConTeXt, markdown, plain), going past
+  matching pandoc; a phase of its own, if the user's documents come
+  to need it. None of the 73 rST files does (2026-11-21).
 - Writer extensions for `-t markdown` (`-raw_html`, `-pipe_tables`,
   ...), and with them the approximate pipe table pandoc writes for a
   table with spans when raw HTML is off.
