@@ -1381,16 +1381,16 @@ END MetaString;
 
 PROCEDURE MonthName(VAR s: ARRAY OF CHAR; VAR i: LONGINT; n: LONGINT; full: BOOLEAN;
   VAR m: LONGINT): BOOLEAN;
-  CONST names = "january  february march    april    may      june     july     august   september october  november december ";
-  VAR k, j, len: LONGINT; ok: BOOLEAN; name: ARRAY 112 OF CHAR;
+  CONST names = "january   february  march     april     may       june      july      august    september october   november  december  ";
+  VAR k, j, len: LONGINT; ok: BOOLEAN; name: ARRAY 124 OF CHAR;
 BEGIN
   name := names;
   FOR k := 0 TO 11 DO
-    len := 0; WHILE name[k * 9 + len] # " " DO INC(len) END;
+    len := 0; WHILE name[k * 10 + len] # " " DO INC(len) END;
     IF ~full THEN len := 3 END;
     ok := i + len <= n; j := 0;
     WHILE ok & (j < len) DO
-      ok := Ropes.LowerChar(s[i + j]) = name[k * 9 + j]; INC(j)
+      ok := Ropes.LowerChar(s[i + j]) = name[k * 10 + j]; INC(j)
     END;
     IF ok THEN m := k + 1; INC(i, len); RETURN TRUE END
   END;
@@ -1432,7 +1432,14 @@ BEGIN
       | "B": ok := MonthName(s, i, n, TRUE, m)
       END
     ELSIF fmt[j] = " " THEN
-      WHILE (i < n) & IsSpace(s[i]) DO INC(i) END; INC(j)
+      (* white space, with U+00A0, which smart typing puts after "Dec." *)
+      LOOP
+        IF (i < n) & IsSpace(s[i]) THEN INC(i)
+        ELSIF (i + 1 < n) & (s[i] = 0C2X) & (s[i + 1] = 0A0X) THEN INC(i, 2)
+        ELSE EXIT
+        END
+      END;
+      INC(j)
     ELSE
       ok := (i < n) & (s[i] = fmt[j]); INC(i); INC(j)
     END

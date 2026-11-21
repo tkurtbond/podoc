@@ -95,6 +95,7 @@ PROCEDURE ReadDoc(text: PdIO.Text; len: LONGINT): A.Doc;
   VAR m: A.MetaMapV; f: O.File; d: A.Doc;
 BEGIN
   PdMarkdown.gridTables := O.gridTables;
+  PdMarkdown.titleBlock := O.titleBlock;
   PdMarkdown.columns := O.columns; PdRst.columns := O.columns;
   m := A.NewMetaMap();
   f := O.metaFiles;

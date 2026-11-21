@@ -19,8 +19,8 @@ in PLAN.md) is listed by the writer.
 - `-t source` writes the input as the reader would see it (joined,
   CRs removed, tabs expanded); pandoc has no such format.
 - podoc reads only `markdown` and `rst`. For `markdown` it turns
-  only `grid_tables` on or off (`gutenberg`, which pandoc's reader
-  ignores, it takes and ignores); for `rst`, only `auto_identifiers`
+  only `grid_tables` and `pandoc_title_block` on or off (`gutenberg`,
+  which pandoc's reader ignores, it takes and ignores); for `rst`, only `auto_identifiers`
   and `literate_haskell` (`lhs`). Any other extension, such as
   `-f markdown+smart`, `-f markdown-smart` or `-f rst+smart`, ends
   podoc with exit status 23, and another format, or an input whose
@@ -127,7 +127,6 @@ podoc reads the markdown the user's documents use. It does not yet
 read:
 
 - table cells that hold blank lines, but for grid tables;
-- the `%` title block;
 - raw TeX blocks, LaTeX environments and macros, and the commands
   pandoc's LaTeX reader reads specially (podoc keeps every `\command`
   with its options and arguments as a raw TeX inline);

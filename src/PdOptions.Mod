@@ -55,6 +55,8 @@ VAR
   lhs*: BOOLEAN; (* rst's literate_haskell *)
   gridTables*: BOOLEAN; (* the grid_tables extension: TRUE unless -f
     markdown-grid_tables *)
+  titleBlock*: BOOLEAN; (* the pandoc_title_block extension: TRUE unless
+    -f markdown-pandoc_title_block *)
   to*: String; (* -t; the writer after Resolve, without extensions *)
   gutenberg*: BOOLEAN; (* after Resolve: -t plain+gutenberg *)
   pdf*: BOOLEAN; (* after Resolve: the output is PDF *)
@@ -643,12 +645,30 @@ BEGIN
   PdIO.Message(m)
 END CouldNotDeduce;
 
+(* Whether ext is one of the names in list, separated by spaces *)
+PROCEDURE InList(ext, list: ARRAY OF CHAR): BOOLEAN;
+  VAR i, j: LONGINT;
+BEGIN
+  i := 0;
+  WHILE list[i] # 0X DO
+    WHILE list[i] = " " DO INC(i) END;
+    j := 0;
+    WHILE (list[i] # 0X) & (list[i] # " ") & (ext[j] # 0X) & (list[i] = ext[j]) DO
+      INC(i); INC(j)
+    END;
+    IF (ext[j] = 0X) & ((list[i] = 0X) OR (list[i] = " ")) & (j > 0) THEN RETURN TRUE END;
+    WHILE (list[i] # 0X) & (list[i] # " ") DO INC(i) END
+  END;
+  RETURN FALSE
+END InList;
+
 (* The extensions in spec from i on, as pandoc's parseFlavoredFormat
    and applyExtensionsDiff take them: each +ext enables ext and each
    -ext disables it, and an extension enabled anywhere is on, whatever
    disables it. a and b are the extensions the format takes ("" for
-   none); on is a's state, its default on entry. Returns FALSE, with
-   bad the extension, at the first that is neither a nor b. *)
+   none, and b may name several, separated by spaces); on is a's
+   state, its default on entry. Returns FALSE, with bad the extension,
+   at the first that is neither a nor one of b's. *)
 PROCEDURE Extensions(spec: ARRAY OF CHAR; i: LONGINT; a, b: ARRAY OF CHAR;
                      VAR on: BOOLEAN; VAR bad: ARRAY OF CHAR): BOOLEAN;
   VAR j: LONGINT; ext: String; plus, enabled, disabled: BOOLEAN;
@@ -662,7 +682,7 @@ BEGIN
     ext[j] := 0X;
     IF (a # "") & (ext = a) THEN
       IF plus THEN enabled := TRUE ELSE disabled := TRUE END
-    ELSIF (b = "") OR (ext # b) THEN COPY(ext, bad); RETURN FALSE
+    ELSIF ~InList(ext, b) THEN COPY(ext, bad); RETURN FALSE
     END
   END;
   on := enabled OR on & ~disabled;
@@ -708,7 +728,7 @@ END ExpandLhs;
 
 (* Ends podoc if the reader is not markdown: 21 for another format, 23
    for an extension of markdown that podoc does not take. grid_tables
-   sets gridTables; gutenberg, which pandoc's reader ignores, is
+   sets gridTables, pandoc_title_block titleBlock; gutenberg, which pandoc's reader ignores, is
    taken and ignored. *)
 PROCEDURE CheckReader;
   VAR i, j: LONGINT; name, ext, spec: String;
@@ -728,7 +748,8 @@ BEGIN
     PdIO.Message3("Unknown input format '", name, "'");
     PdIO.Exit(PdIO.UnknownReader)
   END;
-  IF ~Extensions(from, i, "grid_tables", "gutenberg", gridTables, ext) THEN
+  IF ~Extensions(from, i, "grid_tables", "gutenberg pandoc_title_block", gridTables, ext)
+      OR ~Extensions(from, i, "pandoc_title_block", "gutenberg grid_tables", titleBlock, ext) THEN
     PdIO.Message3("The extension '", ext, "' is not supported by podoc.");
     PdIO.Exit(PdIO.UnsupportedExtension)
   END
@@ -872,7 +893,7 @@ END Resolve;
 BEGIN
   files := NIL; lastFile := NIL; metaFiles := NIL; lastMetaFile := NIL;
   cmdMeta := A.NewMetaMap();
-  output := ""; from := ""; gridTables := TRUE; to := ""; gutenberg := FALSE; pdf := FALSE;
+  output := ""; from := ""; gridTables := TRUE; titleBlock := TRUE; to := ""; gutenberg := FALSE; pdf := FALSE;
   pdfEngine := ""; extractMedia := "";
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;

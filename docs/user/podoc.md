@@ -124,9 +124,12 @@ podoc reads pandoc's markdown with its default extensions, among them:
   and inlines, raw HTML, fenced divs, bracketed spans, and automatic
   header identifiers.
 
-The `%` title block, raw TeX blocks, and citations are not read. Of
-the extensions, only `grid_tables` can be turned off, with
-`-f markdown-grid_tables`; as in pandoc, an extension both turned on
+The `%` title block at the top of a document gives the title, the
+authors (separated by `;` or line ends) and the date, as in pandoc;
+a YAML metadata block wins over it. Raw TeX blocks and citations are
+not read. Of the extensions, only `grid_tables` and
+`pandoc_title_block` can be turned off, with `-f markdown-grid_tables`
+or `-f markdown-pandoc_title_block`; as in pandoc, an extension both turned on
 and off (`-f markdown-grid_tables+grid_tables`, in either order) is
 on. The full list of what is not read is in
 [differences.md](differences.md).

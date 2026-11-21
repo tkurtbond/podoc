@@ -102,6 +102,9 @@ TYPE
 VAR
   gridTables*: BOOLEAN; (* the grid_tables extension: grid tables are
     read; TRUE unless podoc is told otherwise *)
+  titleBlock*: BOOLEAN; (* the pandoc_title_block extension: % lines at
+    the start give the title, authors and date; TRUE unless podoc is
+    told otherwise *)
   columns*: LONGINT; (* pandoc's readerColumns, from --columns: 72 unless
     podoc is told otherwise; the widths of tables are relative to it *)
   ids: A.StrList; (* the header identifiers used so far *)
@@ -491,6 +494,89 @@ BEGIN
   B.pos := e;
   RETURN TRUE
 END YamlBlock;
+
+(* The title block *)
+
+(* rawTitleBlockLine: the line at B.pos, which starts with %, and its
+   continuation lines (each starting with a space or tab and not blank),
+   put in b without the % and the spaces that start each line, joined
+   by new lines and trimmed. B.pos is left after them. FALSE if there
+   is no % line at B.pos. *)
+PROCEDURE RawTitleLine(VAR b: B.Buf): BOOLEAN;
+  VAR p, e, i: LONGINT;
+BEGIN
+  p := B.pos;
+  IF (p >= B.len) OR (B.C(p) # "%") THEN RETURN FALSE END;
+  B.InitBuf(b);
+  p := B.SkipSpaces(p + 1);
+  LOOP
+    e := B.LineEnd(p);
+    B.Put(b, p, e); B.PutChar(b, 0AX);
+    IF e >= B.len THEN p := e; EXIT END;
+    p := e + 1;
+    IF ~B.IsSpace(B.C(p)) OR (B.BlankLine(p + 1) >= 0) THEN EXIT END;
+    p := B.SkipSpaces(p + 1)
+  END;
+  B.pos := p;
+  (* trim *)
+  WHILE (b.len > 0) & B.IsWhite(b.t[b.len - 1]) DO DEC(b.len) END;
+  b.t[b.len] := 0X;
+  i := 0;
+  WHILE (i < b.len) & B.IsWhite(b.t[i]) DO INC(i) END;
+  IF i > 0 THEN
+    FOR e := i TO b.len DO b.t[e - i] := b.t[e] END;
+    DEC(b.len, i)
+  END;
+  RETURN TRUE
+END RawTitleLine;
+
+(* Where the authors line's authors stop: ; or a new line *)
+PROCEDURE AuthorStop(p: LONGINT): BOOLEAN;
+BEGIN
+  RETURN (B.C(p) = ";") OR (B.C(p) = 0AX)
+END AuthorStop;
+
+(* authorsLine's authors in the text in b: inlines separated by ; and
+   any white space after it, or by a new line, each trimmed; an empty
+   one after a separator too *)
+PROCEDURE AuthorsOf(VAR b: B.Buf): A.MetaListV;
+  VAR f: B.Frame; l: A.Inlines; r: A.MetaListV; any: BOOLEAN;
+BEGIN
+  r := A.NewMetaList();
+  B.Enter(f, b.t, b.len);
+  LOOP
+    A.InitInlines(l);
+    any := I.Inlines(l, AuthorStop);
+    A.AddMetaItem(r, A.NewMetaInlines(I.Trim(l)));
+    IF B.pos >= B.len THEN EXIT
+    ELSIF B.C(B.pos) = ";" THEN
+      INC(B.pos);
+      WHILE (B.pos < B.len) & B.IsWhite(B.C(B.pos)) DO INC(B.pos) END
+    ELSIF B.C(B.pos) = 0AX THEN INC(B.pos)
+    ELSE EXIT
+    END
+  END;
+  B.Leave(f);
+  RETURN r
+END AuthorsOf;
+
+(* pandocTitleBlock: the title, authors and date lines at the start of
+   the document, and the blank lines after them, set in its metadata.
+   An empty title or date sets nothing. *)
+PROCEDURE TitleBlock;
+  VAR b: B.Buf; inl: A.Inline;
+BEGIN
+  IF RawTitleLine(b) THEN
+    inl := InlinesOf(b);
+    IF inl # NIL THEN A.SetMeta(meta, A.S("title"), A.NewMetaInlines(inl)) END
+  END;
+  IF RawTitleLine(b) THEN A.SetMeta(meta, A.S("author"), AuthorsOf(b)) END;
+  IF RawTitleLine(b) THEN
+    inl := InlinesOf(b);
+    IF inl # NIL THEN A.SetMeta(meta, A.S("date"), A.NewMetaInlines(inl)) END
+  END;
+  B.pos := B.SkipBlankLines(B.pos)
+END TitleBlock;
 
 (* Code *)
 
@@ -2308,6 +2394,7 @@ BEGIN
   Reset;
   d := A.NewDoc();
   meta := d.meta;
+  IF titleBlock & (B.C(B.pos) = "%") THEN TitleBlock END;
   d.blocks := ParseBlocks();
   Resolve(d);
   keys := NIL; headerKeys := NIL; notes := NIL; meta := NIL; main := NIL;
@@ -2345,5 +2432,5 @@ BEGIN
 END ReadMetaFile;
 
 BEGIN
-  ids := NIL; idTable := NewTable(); gridTables := TRUE; columns := 72
+  ids := NIL; idTable := NewTable(); gridTables := TRUE; titleBlock := TRUE; columns := 72
 END PdMarkdown.

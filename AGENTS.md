@@ -59,6 +59,7 @@ directives) and 19.5 (`-s`'s title and docinfo, `--verbose` and
 podoc's `--unknown=warn|error`; the user's 73 rST files match pandoc):
 `PdRst` and `PdRstInline`. Read `docs/research/rst-implementation.md`
 first.
+Phase 20 (the `%` title block, `pandoc_title_block`) is done too.
 See PLAN.md's State.
 
 ## Reference material

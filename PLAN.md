@@ -1110,15 +1110,15 @@ All of this runs under `-O2` and `-OC`, as every phase does.
 - docs/user/podoc.md: the translation advice for rST is replaced by
   `-f rst`.
 
-## Phase 20: The `%` title block
+## Phase 20: The `%` title block [done]
 
 pandoc markdown's `pandoc_title_block` extension, on by default:
 up to three lines starting with `%` at the top of a document give
 the title, the authors and the date (`pandocTitleBlock`,
 `Readers/Markdown.hs`). The user's documents use YAML instead, but
-pandoc's `test/testsuite.txt` starts with one. It is the one
-difference left between podoc's and pandoc's reading of the test
-inputs. This phase does not depend on Phase 19 and can be done
+pandoc's `test/testsuite.txt` starts with one. It was one of two
+differences left between podoc's and pandoc's reading of the test
+inputs; the other, the raw TeX block (`\begin{tabular}`), remains. This phase does not depend on Phase 19 and can be done
 before it.
 
 - **The lines** (`rawTitleBlockLine`):
@@ -1154,8 +1154,8 @@ before it.
     - the extension off;
     - `-s` and the `ms`, ConTeXt, HTML and markdown writers through
       the templates' `title`, `author` and `date`;
-  - `testsuite.txt` reading as pandoc reads it, byte for byte, and
-    the testsuite entries in `make compare` the same.
+  - `testsuite.txt`'s metadata reading as pandoc reads it (its raw
+    TeX block still differs), and `make compare` no worse.
 - **Not part of this phase:** writing a `%` title block. pandoc's
   markdown writer does that only under
   `-t markdown-yaml_metadata_block`, a writer extension, already in
@@ -2406,3 +2406,30 @@ ConTeXt.
     and an anonymous reference with no target (a warning; pandoc
     fails with status 64). docs/user/podoc.md documents `-f rst`,
     `--verbose` and `--unknown`, and the translation advice is gone.
+- 2026-11-21: Phase 20 done: the `%` title block.
+  - `PdMarkdown.TitleBlock` reads the block at the very start of the
+    input: the title, the authors (split on a top-level `;` and the
+    white space after it, or on a line end, empty ones kept as pandoc
+    keeps them) and the date, with continuation lines; a YAML block
+    wins over it. `-f markdown-pandoc_title_block` turns it off
+    (`PdOptions`; `gutenberg` names it as well as `grid_tables`).
+  - Checked against pandoc 3.10 on 27 inputs (empty lines, `%` alone,
+    `A;;B;`, continuations, markup, YAML, the extension off and on
+    and off together), JSON byte for byte under `-O2` and `-OC`;
+    `testsuite.txt`'s metadata is now pandoc's, and only its raw TeX
+    block differs.
+  - The HTML writer's `dcterms.date` had missed every date in
+    October, November and December (the month table was misaligned)
+    and dates with smart typing's no-break space (`Dec. 3, 2026`):
+    both fixed in `PdHtml`, and checked against pandoc on ten date
+    forms.
+  - New cases `title-block`, `title-block-empty`, `title-block-yaml`,
+    `title-block-off`, `title-block-standalone` (`-s` with the html,
+    ms, context, markdown and plain writers) and `html-date-abbrev`,
+    pandoc's output.
+  - `make test` passed under `-O2` and `-OC` on atla (285 case tests,
+    23 round trips, 6 image tests). `make compare`: 1462 of 1672 the
+    same; the 210 that differ are those of 2026-11-21's earlier
+    entry. Not run on the BSDs: the change is portable Oberon only.
+  - docs/user/podoc.md and differences.md no longer list the title
+    block as unread, and name `pandoc_title_block`.
