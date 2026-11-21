@@ -1,0 +1,23 @@
+# 🏛️ The Grand Senate Chamber of Galactic Hunters Reconvenes
+
+👨‍👩‍👧 family 👍🏽 thumbs 1️⃣ keycap ❤️‍🔥 heart
+🇺🇸 flag a🏽 tone x️ selector words to
+wrap 🏛️ 👍🏽 👩🏽‍💻 and more words to wrap 🏳️‍🌈
+end.
+
+  emoji   name
+  ------- -----------------------------
+  🏛️      classical building
+  👍🏽      thumbs up, medium skin tone
+  👨‍👩‍👧      family
+  1️⃣      keycap one
+
+  🏛️ b   
+  ------ ---
+  x      y
+
++------+------+------+
+| 👍🏽   | b    |      |
++------+------+------+
+| 1️⃣   | 👨‍👩‍👧          |
++------+-------------+

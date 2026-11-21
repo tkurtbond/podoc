@@ -1265,18 +1265,6 @@ BEGIN
   WHILE (to > from) & IsWS(B.t[to - 1]) DO DEC(to) END
 END TrimRange;
 
-(* realLength: the width of t[from .. to-1] *)
-PROCEDURE RealLength(from, to: LONGINT): LONGINT;
-  VAR w, q: LONGINT;
-BEGIN
-  w := 0;
-  IF (from < to) & I.CombiningAt(from) THEN (* doclayout counts it 1 *)
-    w := 1 (* its own width is 0 *)
-  END;
-  WHILE from < to DO INC(w, I.CharWidth(from, q)); from := q END;
-  RETURN w
-END RealLength;
-
 (* The number of characters in t[from .. to-1] *)
 PROCEDURE CharCount(from, to: LONGINT): LONGINT;
   VAR n: LONGINT;
@@ -1357,7 +1345,7 @@ BEGIN
     l := l.next
   END;
   IF bs < 0 THEN RETURN A.AlignDefault END;
-  left := B.IsSpace(B.t[bs]); right := RealLength(bs, be) < len;
+  left := B.IsSpace(B.t[bs]); right := I.RealLength(bs, be) < len;
   IF left & right THEN RETURN A.AlignCenter
   ELSIF left THEN RETURN A.AlignRight
   ELSIF right THEN RETURN A.AlignLeft
@@ -1781,7 +1769,7 @@ PROCEDURE LineWidth(l: RawLine; n: LONGINT): LONGINT;
   VAR k, w: LONGINT;
 BEGIN
   w := 0; k := 0;
-  WHILE (k < l.m) & (k < n) DO INC(w, RealLength(l.s[k], l.f[k])); INC(k) END;
+  WHILE (k < l.m) & (k < n) DO INC(w, I.RealLength(l.s[k], l.f[k])); INC(k) END;
   RETURN w
 END LineWidth;
 

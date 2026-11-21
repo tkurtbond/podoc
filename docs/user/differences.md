@@ -127,10 +127,6 @@ read:
 - citations, example references (`@label`), wikilinks and base64
   data URIs.
 
-A table's column widths count characters as pandoc's doclayout does
-(its `charWidth` table), but emoji sequences joined by U+200D or
-followed by U+FE0F are not counted as one wide character.
-
 ## YAML metadata
 
 podoc reads YAML with its own small reader, `PdYaml`, not libyaml.
@@ -223,11 +219,8 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
 - Output is wrapped at `--columns` (72) as pandoc wraps it;
   `--wrap=preserve` keeps the input's line breaks. On the user's 54
   markdown documents, at 40, 72 and 100 columns, with and without
-  `-s`, podoc's output is pandoc's except for highlighted code and,
-  at 40 columns, one heading: an emoji followed by U+FE0F is one
-  column wide to podoc and two to pandoc (see the note on character
-  widths above), so the heading wraps one word later. As in pandoc,
-  a line block's long lines are wrapped too, and since
+  `-s`, podoc's output is pandoc's except for highlighted code. As
+  in pandoc, a line block's long lines are wrapped too, and since
   `\startlines` keeps line breaks, they break in the PDF.
 - Raw blocks and inlines are passed through for the formats `context`
   and `tex` only.

@@ -60,30 +60,23 @@ VAR
 
 (* Widths *)
 
-(* The width of s[i .. n-1] *)
+(* The width of s[i .. n-1], as doclayout's realLength *)
 PROCEDURE CharsWidth(VAR s: ARRAY OF CHAR; i, n: LONGINT): LONGINT;
-  VAR w, q, first: LONGINT; r: Utf8.Rune; k: INTEGER;
+  VAR q: LONGINT; r: Utf8.Rune; st: W.State;
 BEGIN
-  w := 0; first := i;
+  W.Start(st);
   WHILE i < n DO
-    IF ORD(s[i]) < 80H THEN
-      (* doclayout: control characters have width 0 *)
-      IF (s[i] >= " ") & (s[i] # 7FX) THEN INC(w) END;
-      INC(i)
+    IF ORD(s[i]) < 80H THEN r := ORD(s[i]); INC(i)
     ELSE
       q := i;
       IF ~Utf8.Decode(s, q, r) OR (q <= i) OR (q > n) THEN
         r := 0FFFDH; q := i + 1
       END;
-      k := W.Class(r);
-      (* realLength: a combining character first is 1 *)
-      IF (k = W.combining) & (i = first) THEN INC(w)
-      ELSE INC(w, W.Width(r))
-      END;
       i := q
-    END
+    END;
+    W.Add(st, r)
   END;
-  RETURN w
+  RETURN W.Total(st)
 END CharsWidth;
 
 (* doclayout's realLength: the width of r in columns *)

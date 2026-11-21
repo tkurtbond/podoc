@@ -143,14 +143,15 @@ BEGIN
   RETURN CW.Width(r)
 END CharWidth;
 
-(* Whether the character at p is a combining one, which realLength
-   counts as 1 at the start of a text *)
-PROCEDURE CombiningAt*(p: LONGINT): BOOLEAN;
-  VAR r: Utf8.Rune; q: LONGINT;
+(* doclayout's realLength: the width of t[from .. to-1], emoji
+   sequences joined (PdWidth.State) *)
+PROCEDURE RealLength*(from, to: LONGINT): LONGINT;
+  VAR r: Utf8.Rune; st: CW.State;
 BEGIN
-  q := RuneAt(p, r);
-  RETURN CW.Class(r) = CW.combining
-END CombiningAt;
+  CW.Start(st);
+  WHILE from < to DO from := RuneAt(from, r); CW.Add(st, r) END;
+  RETURN CW.Total(st)
+END RealLength;
 
 (* isAlphaNum: whether the character at p is a letter or a number *)
 PROCEDURE AlnumAt(p: LONGINT): BOOLEAN;

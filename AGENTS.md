@@ -43,8 +43,9 @@ are done too: 16.1 (`-t plain`), 16.2 (grid tables in the reader,
 `PdGridTable`; character widths from doclayout's table, `PdWidth`),
 16.3 (grid and pipe tables in the markdown and plain writers), 16.4
 (`-t plain+gutenberg`), 17.1 (`--wrap=auto` and `--columns` for
-plain), 17.2 (wrapping for markdown), 18.1 (wrapping for ms) and
-18.2 (wrapping for ConTeXt). Further work is in PLAN.md's "Later".
+plain), 17.2 (wrapping for markdown), 18.1 (wrapping for ms), 18.2
+(wrapping for ConTeXt) and 18.3 (emoji sequences in `PdWidth`, as
+doclayout counts them). Further work is in PLAN.md's "Later".
 See PLAN.md's State.
 
 ## Reference material

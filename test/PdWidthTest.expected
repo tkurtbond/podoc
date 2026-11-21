@@ -1,0 +1,19 @@
+ok   - empty
+ok   - ascii
+ok   - wide
+ok   - combining first
+ok   - combining after a letter
+ok   - emoji with U+FE0F
+ok   - U+FE0F after a letter
+ok   - U+FE0F alone
+ok   - emoji with a skin tone
+ok   - skin tone after a letter
+ok   - skin tone alone
+ok   - emoji ZWJ sequence
+ok   - ZWJ after a letter
+ok   - ZWJ alone
+ok   - emoji then ZWJ
+ok   - keycap
+ok   - skin tone then ZWJ
+ok   - U+FE0F then ZWJ
+ok   - emoji then a letter

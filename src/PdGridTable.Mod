@@ -8,9 +8,10 @@ MODULE PdGridTable;
 
    The table's lines are laid out on a grid of character columns, East
    Asian wide characters taking two, as doclayout measures them
-   (PdMdInline.CharWidth). Cells are traced from their top-left
-   corners, in order, as gridtables traces them, misaligned last
-   columns included. *)
+   (PdMdInline.CharWidth), the grid as wide as the widest line's
+   realLength (PdMdInline.RealLength). Cells are traced from their
+   top-left corners, in order, as gridtables traces them, misaligned
+   last columns included. *)
 
 IMPORT Utf8, Unicode, B := PdMdBase, I := PdMdInline;
 
@@ -178,8 +179,7 @@ PROCEDURE CharGrid(s, e: Longs; n: LONGINT);
 BEGIN
   nr := n; nc := 0;
   FOR k := 0 TO n - 1 DO
-    w := 0; p := s[k];
-    WHILE p < e[k] DO INC(w, I.CharWidth(p, q)); p := q END;
+    w := I.RealLength(s[k], e[k]); (* toCharGrid's realLength *)
     IF w > nc THEN nc := w END
   END;
   NEW(kind, nr * nc + 1); NEW(gs, nr * nc + 1); NEW(ge, nr * nc + 1);

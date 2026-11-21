@@ -1,0 +1,97 @@
+\startsectionlevel[title={🏛️ The Grand
+Senate Chamber of Galactic Hunters
+Reconvenes},reference={the-grand-senate-chamber-of-galactic-hunters-reconvenes}]
+
+👨‍👩‍👧 family 👍🏽 thumbs 1️⃣ keycap ❤️‍🔥 heart
+🇺🇸 flag a🏽 tone x️ selector words to
+wrap 🏛️ 👍🏽 👩🏽‍💻 and more words to wrap 🏳️‍🌈
+end.
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell emoji \stopxcell
+\startxcell name \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell 🏛️ \stopxcell
+\startxcell classical
+building \stopxcell
+\stopxrow
+\startxrow
+\startxcell 👍🏽 \stopxcell
+\startxcell thumbs up, medium skin
+tone \stopxcell
+\stopxrow
+\startxrow
+\startxcell 👨‍👩‍👧 \stopxcell
+\startxcell family \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell 1️⃣ \stopxcell
+\startxcell keycap one \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell 🏛️ b \stopxcell
+\startxcell  \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablehead
+\startxtablebody[body]
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell x \stopxcell
+\startxcell y \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\startplacetable[location=none]
+\startxtable
+\startxtablehead[head]
+\stopxtablehead
+\startxtablebody[body]
+\startxrow
+\startxcell[width={0.18\textwidth}]
+👍🏽 \stopxcell
+\startxcell[width={0.18\textwidth}]
+b \stopxcell
+\startxcell[width={0.08\textwidth}]
+ \stopxcell
+\stopxrow
+\startxrowgroup[lastrow]
+\startxrow
+\startxcell[width={0.18\textwidth}]
+1️⃣ \stopxcell
+\startxcell[width={0.25\textwidth},nc=2]
+👨‍👩‍👧 \stopxcell
+\stopxrow
+\stopxrowgroup
+\stopxtablebody
+\startxtablefoot[foot]
+\stopxtablefoot
+\stopxtable
+\stopplacetable
+
+\stopsectionlevel
