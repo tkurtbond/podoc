@@ -1,0 +1,33 @@
+.HEADING 1 NAMED images-icon "Images icon"
+.PDF_IMAGE -C "fig.pdf" 144.00p 108.00p CAPTION "A \f[I]figure\f[R], sized" TARGET fig:one
+.PDF_IMAGE -C "half.pdf" \n[.l]/100*5000/100 72.00p CAPTION "Half the line"
+.PP
+Not a PDF
+.PP
+No size, not found
+.PP
+Text with
+.PDF_IMAGE -L "inline.pdf" 12.00p 8.00p
+in it, and
+.PDF_IMAGE -L "inline.pdf" 12.00p 8.00p
+, then more.
+.nr pd:hym \n[.hym]
+.nr pd:hys \n[.hys]
+.TS H CAPTION "A table, captioned"
+delim(@@) tab(	);
+l l.
+T{
+A
+T}	T{
+B
+T}
+_
+.TH
+T{
+1
+T}	T{
+2
+T}
+.TE
+.hym \n[pd:hym]u
+.hys \n[pd:hys]u

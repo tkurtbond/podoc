@@ -1369,7 +1369,7 @@ the body.
   under `-ww`, so with groff's default warnings), after a
   `.PRINTSTYLE TYPESET` and `.START`.
 
-### Phase 23.3: Tables and figures
+### Phase 23.3: Tables and figures [done]
 
 - **Tables:** tbl through `PdRoff`, with mom's `.TS` arguments
   (`CAPTION`; `H` for a header row).
@@ -2791,4 +2791,36 @@ the body.
   and "cannot adjust line" warnings in narrow table cells, as ms
   does. `mom-features` with footnotes and with endnotes, and the
   merchant scenario on statement paper with a contents page, were made
-  into PDFs with `pdfmom` and looked at. Phase 23.3 next.
+  into PDFs with `pdfmom` and looked at.
+- 2026-11-21: Phase 23.3 done. Tables are `.TS H` with `.TH` after
+  the header rows when there is a header, and `CAPTION "..."` in place
+  of the caption paragraph. Images are `.PDF_IMAGE`: a figure of one
+  image `-C` with `CAPTION` and `TARGET`, an image in text `-L`; the
+  size from `width`/`height` (a percentage width is
+  `\n[.l]/100*N/100`) or else from `pdfinfo`'s page size
+  (`PdImages.PageSize`), scaled to the line length when wider; a depth
+  from a width is `W/1000*R`, as `W*h/w` overflows groff's
+  arithmetic. Not-PDF images and images of unknown size are left out
+  with a warning; the figure keeps its caption, the inline image its
+  description. EPS and PostScript are converted for mom as for ms
+  (`PdImages.ConvertPostScript`). Filters: `box` is `.BOX OUTLINED
+  black INSET 4p` and `keep` is `.FLOAT FORCE` for mom, and the
+  general filter's span escapes (small caps, colour and the rest) are
+  written for mom as for ms: my extension, as mom takes roff escapes
+  (the `.color` note stays ms's). Tried in groff 1.23: captions go
+  below images only with `.CAPTION_AFTER_LABEL IMG` (for the template,
+  23.4); a table that ends exactly at a page's foot leaves a stray
+  header on the next page, in 1.23, 1.24 and 1.25 alike, so mom's
+  doing; a caption is set no wider than its table. As for ms, a
+  converted image's path is relative to the output's directory and an
+  unconverted PDF's to the working directory, which differ when `-o`
+  is elsewhere. `tools/runcases` now also takes `<name>.<ext>.errors`
+  (links.md's image warnings are mom's alone). `make test` passed
+  under `-O2` and `-OC` (300 case tests, with `mom-images` and
+  `filter-general-mom` new; 9 image tests, with `mom-eps`, which
+  renders its output with `pdfmom` when groff 1.23 or later is
+  present). `mom-images` and `filter-general-mom`, rendered with
+  `pdfmom -t` (1.23.0), gave only a "cannot break line" warning for a
+  word in the narrow table's caption; figures, captions, percentage
+  widths, inline images, repeated table headers, boxes and keeps were
+  looked at in PDFs. Phase 23.4 next.

@@ -277,6 +277,24 @@ for groff 1.23 and later.
   restored, as groff 1.23's tbl sets them wrongly after a table.
 - Raw blocks and inlines are passed through for the format `mom`
   only.
+- Images are `.PDF_IMAGE`, which shows only PDF: an image that is not
+  a `.pdf` is left out with a warning, except EPS and PostScript,
+  which, as for ms, are converted to PDF with Ghostscript beside the
+  output (or with `--extract-media`). A left-out figure keeps its
+  caption, and a left-out inline image its description.
+- An image's size is its `width` and `height`, where a percentage
+  width is of the line length. Without them it is the PDF's page size
+  from `pdfinfo`, scaled down to the line length when wider; with
+  neither, the image is left out with a warning.
+- A figure of one image is centred, with its caption (`CAPTION`) and
+  id (`TARGET`); mom puts the caption above the image unless the
+  template has `.CAPTION_AFTER_LABEL IMG`. An image in text is set at
+  the left margin on a line of its own, since mom floats every image.
+- Tables with a header row are `.TS H`, the header repeated on each
+  page, and a table's caption is mom's `CAPTION`, above the table and
+  no wider than it. A table that ends exactly at the foot of a page
+  leaves its header alone at the top of the next (mom's behaviour in
+  groff 1.23 to 1.25).
 
 ## The ConTeXt writer
 

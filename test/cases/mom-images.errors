@@ -1,0 +1,2 @@
+podoc: [WARNING] picture.png: image left out, not a PDF (mom shows only PDF images)
+podoc: [WARNING] nothere.pdf: image left out, its size unknown (pdfinfo cannot read it)

@@ -12,7 +12,9 @@
 # PATH: "convert" converts with the converters found there, and is
 # skipped without rsvg-convert and one of img2pdf and magick (or
 # convert); "pdf-eps" makes a PDF with groff from an EPS image
-# (decision 26), and is skipped without groff, gs and pdftotext.
+# (decision 26), and is skipped without groff, gs and pdftotext;
+# "mom-eps" writes mom with an EPS image (decision 27), and is skipped
+# without gs and pdfinfo.
 # Prints an "ok   - " or "FAIL - " line for each, and exits 1 if any
 # failed.
 
@@ -100,6 +102,38 @@ if have groff && have gs && have pdftotext; then
   check $name
 else
   echo "skip - images pdf-eps: no groff, gs or pdftotext"
+fi
+
+# mom (decision 27): EPS converted with Ghostscript, and the sizes
+# .PDF_IMAGE needs read with pdfinfo; with groff 1.23 or later, the
+# text drawn in the EPS is found in the PDF pdfmom makes
+if have gs && have pdfinfo; then
+  name=mom-eps; w=$outdir/$name
+  mkdir -p "$w" && cp -R test/images/. "$w/" || exit 2
+  (cd "$w/doc" && "$podoc" img/mom.md -t mom -o out.mom > ../out 2> ../err)
+  echo "status $?" >> "$w/out"
+  cat "$w/doc/out.mom" >> "$w/out"
+  check $name
+  v=$(groff -v 2>/dev/null | sed -n 's/^GNU groff version \([0-9]*\)\.\([0-9]*\).*/\1 \2/p')
+  set -- $v
+  if have pdfmom && have pdftotext && [ $# -eq 2 ] &&
+     { [ "$1" -gt 1 ] || [ "$2" -ge 23 ]; }; then
+    total=$((total + 1)); n=0
+    (cd "$w/doc" &&
+     { printf '.PRINTSTYLE TYPESET\n.START\n'; cat out.mom; } > pdf.mom &&
+     pdfmom pdf.mom > pdf.pdf 2> pdf.err) &&
+    n=$(pdftotext "$w/doc/pdf.pdf" - 2>/dev/null | grep -c EPSMARK)
+    if [ "$n" = 1 ] && [ ! -s "$w/doc/pdf.err" ]; then
+      echo "ok   - images mom-eps pdf"
+    else
+      echo "FAIL - images mom-eps pdf"; cat "$w/doc/pdf.err"
+      failed=$((failed + 1))
+    fi
+  else
+    echo "skip - images mom-eps pdf: no pdfmom of groff 1.23 or later, or no pdftotext"
+  fi
+else
+  echo "skip - images mom-eps: no gs or pdfinfo"
 fi
 
 echo "$((total - failed)) of $total image tests passed"

@@ -1,0 +1,38 @@
+.PP
+Text \fIt\fP \S'15's\S'0' \S'15'a\S'0' \fBn\fP \fBp\fP \f[BI]bi\fP
+\m[red]r\m[] \m[green]g\m[] \m[blue]b\m[] \F[C]f\F[] \f[CB]c\fP
+\f[BI]ap\fP none \fBtwo\fP \fB\fP \fB\f[I]em\f[R]\fP.
+.BOX OUTLINED black INSET 4p
+.PP
+Boxed \fBn\fP.
+.FLOAT FORCE
+.PP
+Kept inside.
+.FLOAT OFF
+.BOX OFF
+.FLOAT FORCE
+.PP
+Kept.
+.FLOAT OFF
+.nr pd:hym \n[.hym]
+.nr pd:hys \n[.hys]
+.TS H
+delim(@@) tab(	);
+l l.
+T{
+a
+T}	T{
+b
+T}
+_
+.TH
+T{
+1
+T}	T{
+2
+T}
+.TE
+.hym \n[pd:hym]u
+.hys \n[pd:hys]u
+.PP
+\m[red]r2\m[]

@@ -12,7 +12,7 @@ MODULE PdMom;
    warning. *)
 
 IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
-  Sh := PdShared, Ro := PdRoff, PdIO;
+  Sh := PdShared, Ro := PdRoff, PdIO, PdImages, Run := PdRun;
 
 TYPE
   Rope = Ropes.Rope;
@@ -21,6 +21,7 @@ VAR
   (* options *)
   preserve, wantToc, endnotes: BOOLEAN;
   width: LONGINT; (* the width lines are wrapped at, 0 for none *)
+  outDir: Run.Path; (* the output's directory, "" for the current one *)
 
   (* the writer's state *)
   smallCaps, inHeader, inArg, hadEndnote: BOOLEAN;
@@ -192,11 +193,120 @@ BEGIN
   RETURN L.Cat3(BeforeMacro(prev), L.Cat3(Lit(".PDF_TARGET "), Name(id), L.Cr()), d)
 END Span;
 
-PROCEDURE Image(i: A.LinkInl): L.Doc;
+(* Images: mom's .PDF_IMAGE, which shows only PDF and needs the
+   image's size (decision 27): from its width and height, a percentage
+   width being of the line length; what is missing from them, from the
+   PDF's page size, read with pdfinfo, the natural size scaled down to
+   the line length when wider. An image with no size, or not a PDF, is
+   left out with a warning. *)
+
+(* x points, to two places, as "12.34p" *)
+PROCEDURE Pt(x: LONGREAL): L.Doc;
+  VAR n: LONGINT; f: Rope;
+BEGIN
+  n := ENTIER(x * 100 + 0.5);
+  f := Sh.IntRope(n MOD 100);
+  IF n MOD 100 < 10 THEN f := Cat(R("0"), f) END;
+  RETURN L.Literal(CatS(Cat(CatS(Sh.IntRope(n DIV 100), "."), f), "p"))
+END Pt;
+
+(* The percentage width of attr, in hundredths, 0 if it has none *)
+PROCEDURE Percent(attr: A.Attr): LONGINT;
+  VAR v, int, frac, unit: Rope; found: BOOLEAN; n, k: LONGINT; i: INTEGER;
+    ch: CHAR;
+BEGIN
+  IF attr = NIL THEN RETURN 0 END;
+  v := A.GetKeyVal(attr, "width", found);
+  IF ~found OR ~Sh.NumUnit(v, int, frac, unit) OR ~Eq(unit, "%") THEN RETURN 0 END;
+  n := 0; k := 0;
+  WHILE (k < Len(int)) & (n < 100000) DO
+    n := n * 10 + ORD(Ropes.Fetch(int, k)) - ORD("0"); INC(k)
+  END;
+  n := n * 100;
+  FOR i := 0 TO 1 DO
+    IF (frac # NIL) & (i < Len(frac)) THEN
+      ch := Ropes.Fetch(frac, i);
+      IF i = 0 THEN INC(n, (ORD(ch) - ORD("0")) * 10) ELSE INC(n, ORD(ch) - ORD("0")) END
+    END
+  END;
+  RETURN n
+END Percent;
+
+(* Sets path to the file of the image url: as written, if it is there,
+   or else in the output's directory, where podoc's converted images
+   are (PdImages.ForMs) *)
+PROCEDURE ImagePath(url: Rope; VAR path: ARRAY OF CHAR);
+  VAR s: Run.Path;
+BEGIN
+  path[0] := 0X;
+  IF Len(url) >= Run.PathLen - 1 THEN RETURN END;
+  Ropes.ToString(url, s);
+  IF (s[0] = "/") OR (outDir = "") OR PdIO.Exists(s) THEN COPY(s, path)
+  ELSE COPY(outDir, path); Run.Append(path, "/"); Run.Append(path, s)
+  END
+END ImagePath;
+
+(* Sets w and h to the size of the image l, as groff expressions;
+   FALSE, with a warning, if it has none *)
+PROCEDURE ImageSize(l: A.LinkInl; VAR w, h: L.Doc): BOOLEAN;
+  VAR pct, ratio: LONGINT; pw, ph, nw, nh: LONGREAL; hasW, hasH: BOOLEAN;
+    path: Run.Path; m: ARRAY Run.PathLen + 100 OF CHAR;
+BEGIN
+  pct := Percent(l.attr);
+  hasW := (pct = 0) & Ro.Points(l.attr, "width", pw) & (pw > 0);
+  hasH := Ro.Points(l.attr, "height", ph) & (ph > 0);
+  IF pct > 0 THEN
+    w := L.Cat3(Lit("\n[.l]/100*"), L.Literal(Sh.IntRope(pct)), Lit("/100"))
+  ELSIF hasW THEN w := Pt(pw)
+  END;
+  IF hasH THEN h := Pt(ph) END;
+  IF (hasW OR (pct > 0)) & hasH THEN RETURN TRUE END;
+  IF Len(l.url) < Run.PathLen THEN Ropes.ToString(l.url, m) ELSE m := "an image" END;
+  ImagePath(l.url, path);
+  IF (path = "") OR ~PdImages.PageSize(path, nw, nh) THEN
+    Run.Append(m, ": image left out, its size unknown (pdfinfo cannot read it)");
+    PdIO.Warn(m); RETURN FALSE
+  END;
+  IF hasW THEN h := Pt(pw * nh / nw)
+  ELSIF hasH THEN w := Pt(ph * nw / nh)
+  ELSE
+    ratio := ENTIER(nh / nw * 1000 + 0.5);
+    IF pct = 0 THEN w := L.Cat3(Lit("(\n[.l]<?"), Pt(nw), Lit(")")) END;
+    (* groff evaluates from left to right; in basic units, the width
+       times the ratio could overflow *)
+    h := L.Cat3(w, Lit("/1000*"), L.Literal(Sh.IntRope(ratio)))
+  END;
+  RETURN TRUE
+END ImageSize;
+
+(* The .PDF_IMAGE line for the image l, at the position pos (-L, -C),
+   with the caption capt and the target id, if not NIL; NIL if it has
+   none *)
+PROCEDURE PdfImage(l: A.LinkInl; pos: ARRAY OF CHAR; capt: L.Doc; id: Rope): L.Doc;
+  VAR w, h, d: L.Doc; m: ARRAY 200 OF CHAR;
+BEGIN
+  IF ~Eq(Ro.Extension(l.url), ".pdf") THEN
+    IF Len(l.url) < 100 THEN Ropes.ToString(l.url, m) ELSE m := "an image" END;
+    Run.Append(m, ": image left out, not a PDF (mom shows only PDF images)");
+    PdIO.Warn(m); RETURN NIL
+  END;
+  IF ~ImageSize(l, w, h) THEN RETURN NIL END;
+  d := L.Cat3(Lit(".PDF_IMAGE "), Lit(pos), L.Space());
+  d := L.Cat3(d, DQ(L.Literal(l.url)), L.Cat3(L.Space(), w, L.Cat(L.Space(), h)));
+  IF capt # NIL THEN d := L.Cat3(d, Lit(" CAPTION "), DQ(capt)) END;
+  IF Len(id) > 0 THEN d := L.Cat3(d, Lit(" TARGET "), Name(id)) END;
+  RETURN L.NoWrap(d)
+END PdfImage;
+
+(* An image in text, after the inline prev; in a macro's argument, or
+   when the image is left out, its description *)
+PROCEDURE Image(i: A.LinkInl; prev: A.Inline): L.Doc;
   VAR d: L.Doc;
 BEGIN
-  d := L.Cat3(Lit("[IMAGE: "), L.Literal(Ro.EscapeStr(Sh.Stringify(i.content))), L.Char("]"));
-  RETURN d
+  IF inArg THEN RETURN StrDoc(Sh.Stringify(i.content)) END;
+  d := PdfImage(i, "-L", NIL, AttrId(i.attr));
+  IF d = NIL THEN RETURN Inlines(i.content) END;
+  RETURN L.Cat3(BeforeMacro(prev), d, L.Cr())
 END Image;
 
 PROCEDURE Inline(i, prev: A.Inline): L.Doc;
@@ -246,7 +356,7 @@ BEGIN
     IF Eq(i(A.RawInl).format, "mom") THEN RETURN L.Literal(i(A.RawInl).text) END;
     RETURN NIL
   | A.Link: RETURN NIL (* in Inlines *)
-  | A.Image: RETURN Image(i(A.LinkInl))
+  | A.Image: RETURN Image(i(A.LinkInl), prev)
   | A.Note: RETURN Note(i(A.NoteInl), prev)
   END
 END Inline;
@@ -388,20 +498,25 @@ BEGIN
   RETURN Above(d, Lit(".PARA_INDENT \n[pd:pi]u"))
 END DefList;
 
-(* Tables: tbl, through PdRoff (the caption, and mom's .TS arguments,
-   are Phase 23.3's). groff 1.23's tbl restores the hyphenation margin
-   and space in ems that it saved in basic units, so they grow with
-   each table until groff reports a numeric overflow; mom sets them
-   (ms does not), so they are kept in pd:hym and pd:hys meanwhile. *)
+(* Tables: tbl, through PdRoff, with mom's .TS arguments: H, when
+   there is a header, which mom repeats on each page the table runs
+   onto (after .TH), and the CAPTION. groff 1.23's tbl restores the
+   hyphenation margin and space in ems that it saved in basic units,
+   so they grow with each table until groff reports a numeric
+   overflow; mom sets them (ms does not), so they are kept in pd:hym
+   and pd:hys meanwhile. *)
 PROCEDURE Table(t: A.TableBlk): L.Doc;
-  VAR il: A.Inlines; simple: BOOLEAN; caption, colheadings, body, d, desc: L.Doc;
+  VAR il: A.Inlines; simple: BOOLEAN; ts, colheadings, body, d, desc: L.Doc;
 BEGIN
+  simple := Ro.TableParts(t, Blocks, desc, colheadings, body);
+  ts := Lit(".TS");
+  IF colheadings # NIL THEN
+    ts := L.Cat(ts, Lit(" H")); colheadings := Above(colheadings, Lit(".TH"))
+  END;
   A.InitInlines(il);
   Sh.BlocksToInlines(il, t.caption.blocks);
-  caption := NIL;
-  IF il.first # NIL THEN caption := Para(il.first) END;
-  simple := Ro.TableParts(t, Blocks, desc, colheadings, body);
-  d := Above3(caption, Above(Lit(".nr pd:hym \n[.hym]"), Lit(".nr pd:hys \n[.hys]")), Lit(".TS"));
+  IF il.first # NIL THEN ts := L.Cat3(ts, Lit(" CAPTION "), DQ(Arg(il.first))) END;
+  d := Above3(Lit(".nr pd:hym \n[.hym]"), Lit(".nr pd:hys \n[.hys]"), L.NoWrap(ts));
   d := Above3(Above(d, Lit("delim(@@) tab(	);")), desc, colheadings);
   RETURN Above3(Above(d, body), Lit(".TE"), Above(Lit(".hym \n[pd:hym]u"), Lit(".hys \n[pd:hys]u")))
 END Table;
@@ -411,8 +526,28 @@ BEGIN
   RETURN Above(Target(AttrId(attr)), Blocks(bs))
 END DivDoc;
 
+(* A figure: one of only an image is a .PDF_IMAGE with its caption;
+   any other, its blocks and caption *)
 PROCEDURE Figure(f: A.FigureBlk): L.Doc;
+  VAR b: A.Block; i: A.Inline; il: A.Inlines; capt, d: L.Doc; id: Rope;
 BEGIN
+  b := f.blocks; i := NIL;
+  IF (b # NIL) & (b.next = NIL) & ((b.kind = A.Plain) OR (b.kind = A.Para)) THEN
+    i := b(A.InlinesBlk).inlines
+  END;
+  IF (i # NIL) & (i.next = NIL) & (i.kind = A.Image) THEN
+    A.InitInlines(il);
+    Sh.BlocksToInlines(il, f.caption.blocks);
+    capt := NIL;
+    IF il.first # NIL THEN capt := Arg(il.first) END;
+    id := AttrId(f.attr);
+    IF Len(id) = 0 THEN id := AttrId(i(A.LinkInl).attr) END;
+    d := PdfImage(i(A.LinkInl), "-C", capt, id);
+    IF d # NIL THEN RETURN d END;
+    d := NIL;
+    IF il.first # NIL THEN d := Para(il.first) END;
+    RETURN Above(Target(id), d)
+  END;
   RETURN Above(DivDoc(f.attr, f.blocks), Blocks(f.caption.blocks))
 END Figure;
 
@@ -501,6 +636,20 @@ BEGIN
   width := w
 END SetWidth;
 
+(* Sets the output file, whose directory images converted for mom are
+   in (PdImages.ForMs); "" or "-" for standard output *)
+PROCEDURE SetOutput*(output: ARRAY OF CHAR);
+  VAR i, k: LONGINT;
+BEGIN
+  outDir := ""; k := -1; i := 0;
+  WHILE (i < LEN(output)) & (output[i] # 0X) DO IF output[i] = "/" THEN k := i END; INC(i) END;
+  IF k = 0 THEN outDir := "/"
+  ELSIF (k > 0) & (k < Run.PathLen) THEN
+    FOR i := 0 TO k - 1 DO outDir[i] := output[i] END;
+    outDir[k] := 0X
+  END
+END SetOutput;
+
 (* .ENDNOTES, if there were endnotes *)
 PROCEDURE EndnotesDoc(): L.Doc;
 BEGIN
@@ -546,5 +695,6 @@ BEGIN
 END WriteDoc;
 
 BEGIN
-  preserve := FALSE; wantToc := FALSE; endnotes := FALSE; width := 0
+  preserve := FALSE; wantToc := FALSE; endnotes := FALSE; width := 0;
+  outDir := ""
 END PdMom.

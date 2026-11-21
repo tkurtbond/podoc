@@ -1,0 +1,2 @@
+podoc: [WARNING] img.png: image left out, not a PDF (mom shows only PDF images)
+podoc: [WARNING] fig.png: image left out, not a PDF (mom shows only PDF images)

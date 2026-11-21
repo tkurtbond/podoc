@@ -1,0 +1,8 @@
+status 0
+.HEADING 1 NAMED mom "mom"
+.PDF_IMAGE -C "out-media/mark.pdf" (\n[.l]<?144.00p) (\n[.l]<?144.00p)/1000*250 CAPTION "An EPS figure" TARGET fig:mark
+.PDF_IMAGE -C "img/page.pdf" 40.00p 30.00p CAPTION "A PDF"
+.PP
+A PDF in text:
+.PDF_IMAGE -L "img/page.pdf" 4.00p 3.00p
+\&.

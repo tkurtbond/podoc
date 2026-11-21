@@ -13,7 +13,7 @@ MODULE PdImages;
    PdPdf uses it for the images of a PDF made with groff or pdfroff,
    and with groff for PostScript images too (decision 26). *)
 
-IMPORT Ropes, A := PdAst, PdIO, R := PdRun, PdMime, PdSha1;
+IMPORT Ropes, Strings, A := PdAst, PdIO, R := PdRun, PdMime, PdSha1;
 
 CONST
   Missing = 0; Local = 1; (* Item.state *)
@@ -52,6 +52,7 @@ VAR
   items, last: Item;
   names: Name;
   convertMs: BOOLEAN; (* whether Collect marks images to convert *)
+  convertPs: BOOLEAN; (* whether it marks PostScript too (for mom) *)
 
 (* Paths *)
 
@@ -335,6 +336,54 @@ BEGIN
   RETURN FALSE
 END Convert;
 
+(* Sets w and h to the size in points of the first page of the PDF at
+   path, as pdfinfo reports it ("Page size: 595.28 x 841.89 pts");
+   returns FALSE, with no warning, if pdfinfo is not found or cannot
+   read it. For mom's .PDF_IMAGE, which needs a size (decision 27). *)
+PROCEDURE PageSize*(VAR path: ARRAY OF CHAR; VAR w, h: LONGREAL): BOOLEAN;
+  VAR dir, out: Path; ok: BOOLEAN; c: R.Command; t: PdIO.Text; len, i: LONGINT;
+
+  (* The number at t[i], skipping spaces before it, in x *)
+  PROCEDURE Number(VAR x: LONGREAL): BOOLEAN;
+    VAR s: ARRAY 32 OF CHAR; k: LONGINT;
+  BEGIN
+    WHILE (i < len) & (t[i] = " ") DO INC(i) END;
+    k := 0;
+    WHILE (i < len) & (k < LEN(s) - 1) & ((t[i] >= "0") & (t[i] <= "9") OR (t[i] = ".")) DO
+      s[k] := t[i]; INC(k); INC(i)
+    END;
+    s[k] := 0X;
+    IF k = 0 THEN RETURN FALSE END;
+    Strings.StrToLongReal(s, x);
+    RETURN x > 0
+  END Number;
+
+BEGIN
+  IF ~R.Found("pdfinfo") THEN RETURN FALSE END;
+  R.MakeTempDir(dir, ok);
+  IF ~ok THEN RETURN FALSE END;
+  COPY(dir, out); R.Append(out, "/size");
+  c := R.New(); R.AddText(c, "pdfinfo"); R.Add(c, path);
+  R.AddText(c, " 2>/dev/null </dev/null | grep '^Page size:' >"); R.Add(c, out);
+  ok := R.Run(c) = 0;
+  IF ok THEN PdIO.ReadFile(out, t, len) END;
+  R.RemoveDir(dir);
+  IF ~ok OR (len <= 10) THEN RETURN FALSE END;
+  i := 10; (* after "Page size:" *)
+  IF ~Number(w) THEN RETURN FALSE END;
+  WHILE (i < len) & (t[i] = " ") DO INC(i) END;
+  IF (i >= len) OR (t[i] # "x") THEN RETURN FALSE END;
+  INC(i);
+  RETURN Number(h)
+END PageSize;
+
+(* Makes the next ForMs and Extract convert PostScript (.eps and .ps)
+   to PDF too, as mom's .PDF_IMAGE shows only PDF (on TRUE) *)
+PROCEDURE ConvertPostScript*(on: BOOLEAN);
+BEGIN
+  convertPs := on
+END ConvertPostScript;
+
 (* The document's images *)
 
 (* A Span of the image's description in place of the image l, which
@@ -381,7 +430,7 @@ BEGIN
   IF (it = NIL) & add THEN
     NEW(it); it.key := key; it.src := url; it.url := NIL; it.next := NIL;
     IF PdIO.Exists(s) THEN it.state := Local ELSE it.state := Missing END;
-    it.convert := convertMs & (it.state = Local) & Convertible(n);
+    it.convert := convertMs & (it.state = Local) & (Convertible(n) OR convertPs & PostScript(n));
     IF last = NIL THEN items := it ELSE last.next := it END;
     last := it
   END;
@@ -534,7 +583,11 @@ BEGIN
   WHILE it # NIL DO any := any OR it.convert; it := it.next END;
   IF ~any THEN RETURN END;
   IF (output = "") OR (output = "-") THEN
-    PdIO.Warn("Images not converted to PDF for ms written to standard output: use -o FILE or --extract-media=DIR");
+    IF convertPs THEN
+      PdIO.Warn("Images not converted to PDF for mom written to standard output: use -o FILE or --extract-media=DIR")
+    ELSE
+      PdIO.Warn("Images not converted to PDF for ms written to standard output: use -o FILE or --extract-media=DIR")
+    END;
     RETURN
   END;
   DirName(output, outDir);
@@ -569,5 +622,5 @@ BEGIN
 END ForMs;
 
 BEGIN
-  items := NIL; last := NIL; names := NIL; convertMs := FALSE
+  items := NIL; last := NIL; names := NIL; convertMs := FALSE; convertPs := FALSE
 END PdImages.

@@ -11,8 +11,8 @@
 # (podoc reads a .rst input as reStructuredText, from its extension)
 #
 # in CASEDIR, and compares its standard output with <name>.<ext> and its
-# standard error with <name>.errors, or with nothing if there is no such
-# file, and its exit status with the number in <name>.status, or with 0
+# standard error with <name>.<ext>.errors, or <name>.errors, or with
+# nothing if there is neither, and its exit status with the number in <name>.status, or with 0
 # if there is no such file. Results go in OUTDIR. Prints an "ok   - " or "FAIL - " line for
 # each, and exits 1 if any failed.
 
@@ -44,7 +44,9 @@ for md in *.md *.rst; do
     "$podoc" -t "$ext" "$md" $args > "$outdir/$name.$ext" 2> "$outdir/$name.$ext.err"
     status=$?
     errors=/dev/null
-    [ -f "$name.errors" ] && errors=$name.errors
+    if [ -f "$name.$ext.errors" ]; then errors=$name.$ext.errors
+    elif [ -f "$name.errors" ]; then errors=$name.errors
+    fi
     want=0
     [ -f "$name.status" ] && want=$(cat "$name.status")
     if [ "$status" -eq "$want" ] &&

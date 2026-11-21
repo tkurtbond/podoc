@@ -1,8 +1,6 @@
-.PP
-A pipe table
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H CAPTION "A pipe table"
 delim(@@) tab(	);
 l c r l.
 T{
@@ -15,6 +13,7 @@ T}	T{
 Default
 T}
 _
+.TH
 T{
 \f[CR]a|b\f[R]
 T}	T{
@@ -33,11 +32,9 @@ T}
 .TE
 .hym \n[pd:hym]u
 .hys \n[pd:hys]u
-.PP
-A simple table.
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H CAPTION "A simple table."
 delim(@@) tab(	);
 r l c l.
 T{
@@ -50,6 +47,7 @@ T}	T{
 Default
 T}
 _
+.TH
 T{
 12
 T}	T{
@@ -97,12 +95,9 @@ T}
 .TE
 .hym \n[pd:hym]u
 .hys \n[pd:hys]u
-.PP
-Here\(cqs the caption.
-It, too, may span multiple lines.
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H CAPTION "Here\(cqs the caption. It, too, may span multiple lines."
 delim(@@) tab(	);
 cw(11.7n) lw(7.8n) rw(15.6n) lw(25.3n).
 T{
@@ -115,6 +110,7 @@ T}	T{
 Left Aligned
 T}
 _
+.TH
 T{
 .nr LL 11.7n
 First
@@ -147,7 +143,7 @@ T}
 .hys \n[pd:hys]u
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H
 delim(@@) tab(	);
 lw(23.3n) lw(46.7n).
 T{
@@ -156,6 +152,7 @@ T}	T{
 and the second one, which is also long
 T}
 _
+.TH
 T{
 .nr LL 23.3n
 x

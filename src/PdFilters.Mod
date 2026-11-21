@@ -230,6 +230,8 @@ BEGIN
     ELSIF A.HasClass(a, "box") THEN
       IF w.format = "ms" THEN
         RETURN Around(w, ".sp 0.2v|.B1", ".sp 0.2v|.B2|.sp 0.2v", b)
+      ELSIF w.format = "mom" THEN
+        RETURN Around(w, ".BOX OUTLINED black INSET 4p", ".BOX OFF", b)
       ELSIF w.format = "context" THEN
         RETURN Around(w,
           "\startframedtext[width=broad,rulethickness=0.75pt,offset=3pt,aligned=yes]",
@@ -238,7 +240,9 @@ BEGIN
         RETURN Around(w, '<div style="border:solid">', "</div>", b)
       END
     ELSIF A.HasClass(a, "keep") THEN
-      IF w.format = "ms" THEN RETURN Around(w, ".KS|", ".KE|", b) END
+      IF w.format = "ms" THEN RETURN Around(w, ".KS|", ".KE|", b)
+      ELSIF w.format = "mom" THEN RETURN Around(w, ".FLOAT FORCE", ".FLOAT OFF", b)
+      END
     END
   ELSIF (b.kind = A.Table) & (w.format = "ms") THEN
     RETURN Around(w, ".na|", ".ad|", b)
@@ -259,6 +263,13 @@ BEGIN
   first.next := A.NewRawInline(A.S(w.format), A.S(after))
 END Wrap;
 
+(* Whether the format is a roff one, ms or mom, whose spans are written
+   with the same escapes (mom's are podoc's own, decision 27) *)
+PROCEDURE Roff(w: GeneralWalker): BOOLEAN;
+BEGIN
+  RETURN (w.format = "ms") OR (w.format = "mom")
+END Roff;
+
 (* The message general.lua writes for what a format does not do *)
 PROCEDURE Unimplemented(w: GeneralWalker; what: ARRAY OF CHAR);
 BEGIN
@@ -270,8 +281,8 @@ END Unimplemented;
 PROCEDURE Color(w: GeneralWalker; s: A.SpanInl; ms, cap: ARRAY OF CHAR);
   VAR t: ARRAY 64 OF CHAR;
 BEGIN
-  IF w.format = "ms" THEN
-    IF ~w.colorSeen THEN
+  IF Roff(w) THEN
+    IF ~w.colorSeen & (w.format = "ms") THEN
       w.colorSeen := TRUE;
       PdIO.Note('Format "', w.format, '" requires .color in a template.')
     END;
@@ -295,27 +306,27 @@ BEGIN
   IF i.kind # A.Span THEN RETURN i END;
   s := i(A.SpanInl); a := s.attr;
   IF A.HasClass(a, "title-ref") THEN
-    IF w.format = "ms" THEN Wrap(w, s, "\fI", "\fP")
+    IF Roff(w) THEN Wrap(w, s, "\fI", "\fP")
     ELSIF w.format = "context" THEN Wrap(w, s, "{\it ", "}")
     ELSIF w.format = "html" THEN Wrap(w, s, "<cite>", "</cite>")
     ELSE Unimplemented(w, '" title-ref unimplemented.')
     END
   ELSIF A.HasClass(a, "skill") OR A.HasClass(a, "att") OR A.HasClass(a, "spell")
      OR A.HasClass(a, "power") OR A.HasClass(a, "edge") THEN
-    IF w.format = "ms" THEN Wrap(w, s, "\S'15'", "\S'0'")
+    IF Roff(w) THEN Wrap(w, s, "\S'15'", "\S'0'")
     ELSIF w.format = "context" THEN Wrap(w, s, "{\it ", "}")
     ELSIF w.format = "html" THEN Wrap(w, s, "<i>", "</i>")
     ELSE Unimplemented(w, '" skill, att, spell, power, edge unimplemented.')
     END
   ELSIF A.HasClass(a, "name") OR A.HasClass(a, "place") OR A.HasClass(a, "money")
      OR A.HasClass(a, "room") OR A.HasClass(a, "item") THEN
-    IF w.format = "ms" THEN Wrap(w, s, "\fB", "\fP")
+    IF Roff(w) THEN Wrap(w, s, "\fB", "\fP")
     ELSIF w.format = "context" THEN Wrap(w, s, "{\bf ", "}")
     ELSIF w.format = "html" THEN Wrap(w, s, "<b>", "</b>")
     ELSE Unimplemented(w, '" name, money, room unimplemented.')
     END
   ELSIF A.HasClass(a, "bi") THEN
-    IF w.format = "ms" THEN Wrap(w, s, "\f[BI]", "\fP")
+    IF Roff(w) THEN Wrap(w, s, "\f[BI]", "\fP")
     ELSIF w.format = "context" THEN Wrap(w, s, "{\bi ", "}")
     ELSIF w.format = "html" THEN Wrap(w, s, "<b><i>", "</i></b>")
     ELSE Unimplemented(w, '" bi unimplemented.')
@@ -324,17 +335,17 @@ BEGIN
   ELSIF A.HasClass(a, "green") THEN Color(w, s, "green", "Green")
   ELSIF A.HasClass(a, "blue") THEN Color(w, s, "blue", "Blue")
   ELSIF A.HasClass(a, "file") THEN
-    IF w.format = "ms" THEN Wrap(w, s, "\F[C]", "\F[]")
+    IF Roff(w) THEN Wrap(w, s, "\F[C]", "\F[]")
     ELSIF w.format = "html" THEN Wrap(w, s, "<code>", "</code>")
     ELSE Unimplemented(w, '" file unimplemented.')
     END
   ELSIF A.HasClass(a, "cmd") THEN
-    IF w.format = "ms" THEN Wrap(w, s, "\f[CB]", "\fP")
+    IF Roff(w) THEN Wrap(w, s, "\f[CB]", "\fP")
     ELSIF w.format = "html" THEN Wrap(w, s, "<b><code>", "</code></b>")
     ELSE Unimplemented(w, '" file unimplemented.')
     END
   ELSIF A.HasClass(a, "app") THEN
-    IF w.format = "ms" THEN Wrap(w, s, "\f[BI]", "\fP")
+    IF Roff(w) THEN Wrap(w, s, "\f[BI]", "\fP")
     ELSIF w.format = "context" THEN
       PdIO.Note("Hit app in context", "", "");
       Wrap(w, s, "{\bi ", "}")
@@ -346,7 +357,7 @@ BEGIN
 END Inline;
 
 (* general.lua, for the writer format, as Lua's FORMAT names it (html,
-   html5, ms, context, json, markdown): Divs of class for-format that do not have
+   html5, ms, mom, context, json, markdown): Divs of class for-format that do not have
    the format as a class are removed, Divs of class box and keep and
    Tables are put between raw blocks, and Spans of the classes
    general.lua knows have their content put between raw inlines, as

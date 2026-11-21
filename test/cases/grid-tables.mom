@@ -1,8 +1,6 @@
-.PP
-Sample grid table.
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H CAPTION "Sample grid table."
 delim(@@) tab(	);
 lw(15.6n) lw(15.6n) lw(20.4n).
 T{
@@ -13,6 +11,7 @@ T}	T{
 Advantages
 T}
 _
+.TH
 T{
 .nr LL 15.6n
 Bananas
@@ -48,7 +47,7 @@ T}
 .hys \n[pd:hys]u
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H
 delim(@@) tab(	);
 rw(15.6n) lw(15.6n) cw(20.4n).
 T{
@@ -59,6 +58,7 @@ T}	T{
 Centered
 T}
 _
+.TH
 T{
 .nr LL 15.6n
 Bananas
@@ -92,7 +92,7 @@ T}
 .hys \n[pd:hys]u
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H
 delim(@@) tab(	);
 lw(13.6n) lw(7.8n) lw(10.7n).
 T{
@@ -102,6 +102,7 @@ T}	T{
 Earth
 T}
 _
+.TH
 T{
 .nr LL 13.6n
 Temperature 1961-1990
@@ -135,7 +136,7 @@ T}
 .hys \n[pd:hys]u
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H
 delim(@@) tab(	);
 lw(13.6n) lw(7.8n) lw(10.7n).
 T{
@@ -146,6 +147,7 @@ T}	T{
 c
 T}
 _
+.TH
 T{
 .nr LL 13.6n
 body
@@ -217,7 +219,7 @@ T}
 .HEADING 2 NAMED grid-tables "Grid Tables"
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H
 delim(@@) tab(	);
 lw(18.5n) lw(11.7n) lw(12.6n).
 T{
@@ -228,6 +230,7 @@ T}	T{
 col 3
 T}
 _
+.TH
 T{
 .nr LL 18.5n
 r1 a r1 bis
@@ -285,7 +288,7 @@ T}
 With alignments
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H
 delim(@@) tab(	);
 rw(18.5n) lw(11.7n) cw(12.6n).
 T{
@@ -296,6 +299,7 @@ T}	T{
 col 3
 T}
 _
+.TH
 T{
 .nr LL 18.5n
 r1 a r1 bis
@@ -502,7 +506,7 @@ T}
 Table with cells spanning multiple rows or columns:
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H
 delim(@@) tab(	);
 lw(13.6n) lw(7.8n) lw(10.7n).
 T{
@@ -512,6 +516,7 @@ T}	T{
 Earth
 T}
 _
+.TH
 T{
 .nr LL 13.6n
 Temperature 1961-1990
@@ -547,7 +552,7 @@ T}
 Table with complex header:
 .nr pd:hym \n[.hym]
 .nr pd:hys \n[.hys]
-.TS
+.TS H
 delim(@@) tab(	);
 lw(21.4n) lw(7.8n) lw(7.8n) lw(7.8n).
 T{
@@ -558,6 +563,7 @@ T}	T{
 T}	T{
 T}
 _
+.TH
 T{
 .nr LL 21.4n
 T}	T{

@@ -196,9 +196,11 @@ BEGIN
     PdPdf.Source(src); PdIO.OpenOutput(src)
   ELSE
     (* local images: copied by --extract-media; for ms, converted to
-       PDF (decision 23) *)
-    IF O.extractMedia # "" THEN PdImages.Extract(Doc(text, len), O.extractMedia, to = "ms")
-    ELSIF to = "ms" THEN PdImages.ForMs(Doc(text, len), O.output)
+       PDF (decision 23), and for mom PostScript too (decision 27) *)
+    PdImages.ConvertPostScript(to = "mom");
+    IF O.extractMedia # "" THEN
+      PdImages.Extract(Doc(text, len), O.extractMedia, (to = "ms") OR (to = "mom"))
+    ELSIF (to = "ms") OR (to = "mom") THEN PdImages.ForMs(Doc(text, len), O.output)
     END;
     PdIO.OpenOutput(O.output)
   END;
@@ -219,6 +221,7 @@ BEGIN
     PdMs.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "mom" THEN
     PdMom.SetOptions(O.wrap = "preserve", O.toc, O.referenceLocation = "document");
+    PdMom.SetOutput(O.output);
     IF O.wrap = "auto" THEN PdMom.SetWidth(O.columns) ELSE PdMom.SetWidth(0) END;
     PdMom.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "context" THEN
