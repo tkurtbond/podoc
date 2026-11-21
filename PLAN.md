@@ -29,7 +29,8 @@ State section at the end records what was verified.
 - Output equivalent to pandoc 3.10's (decision 3): the same AST, and
   writer output that gives the same PDF or rendered HTML.
 
-Not in scope: other input formats, reStructuredText included;
+Not in scope: other input formats (reStructuredText came into scope
+on 2026-11-20, decisions 18 to 22; not yet scheduled as a phase);
 citations; mermaid (decision 4); Lua filters (decision 6); VAX/VMS
 (decision 1). Plain text output, grid tables (reader and writers) and
 output wrapping came into scope on 2026-11-20 (decisions 10 to 15,
@@ -91,6 +92,35 @@ Made by the user on 2026-11-20, on the questions of §15.
     0.1.5's base emoji (Phase 18.3), so that a line or table holding
     `🏛️` (U+1F3DB U+FE0F) and the like is laid out as pandoc lays
     it out.
+18. **A reStructuredText reader** (2026-11-20). podoc reads rST as
+    pandoc 3.10's `-f rst` does, its JSON matching pandoc's byte for
+    byte (docs/research/rst-implementation.md). This reverses "Not in
+    scope: reStructuredText" in the goal above.
+19. **No rST writer for now** (2026-11-20). `-t rst` goes to "Later":
+    no build writes rST with pandoc.
+20. **All of pandoc's rST reader** (2026-11-20), not only what the
+    user's pandoc-built files use: every directive and role
+    `Readers/RST.hs` handles, held to pandoc's `test/rst-reader.rst`,
+    `test/tables.rst` and the command tests that read rST, as well as
+    to the user's files.
+21. **The rST of the docutils and Nikola projects too** (2026-11-20).
+    podoc must read the standard rST in the `.rst` files the user
+    builds with docutils (`current/RPG/Campaigns/Possible`,
+    `current/RPG/WVHTCF`, ...) and with Nikola
+    (`~/Repos/tkurtbond.github.io`), as pandoc reads them. podoc does
+    not take over those tools' output: not docutils' LaTeX writer,
+    not Nikola's templates, blog pages or its own directives and
+    roles. Those come out as pandoc gives them: an unknown directive
+    as a `Div` with its name as a class, an unknown role as `Code`
+    with the class `interpreted-text`.
+22. **Reporting what the rST reader drops** (2026-11-20). By default
+    podoc is silent, as pandoc is; `--verbose` prints pandoc's
+    `[INFO] Skipped ...` lines. A podoc option, proposed as
+    `--unknown=warn|error` (the name can change when it is built),
+    reports, with file, line and column, every unknown directive and
+    role and anything else pandoc drops or skips: as a warning, or as
+    an error ending podoc with status 64. podoc's own addition, to be
+    listed in docs/user/differences.md.
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -877,6 +907,7 @@ pandoc's at 40 columns.
 
 ## Later, not scheduled
 
+- An rST writer, `-t rst` (decision 19).
 - Full YAML through polibfyaml, as `make YAML=libfyaml` (decision 2).
 - Embedded Lua 5.4 and a `pandoc` module written in Lua (§8), if a
   filter appears that native code does not cover (decision 6).
@@ -1683,3 +1714,11 @@ pandoc's at 40 columns.
   under `-O2` and `-OC`: 246 case tests and 23 round trips.
   `make compare`: 1385 of 1595 the same, the 11 new comparisons all
   the same and the differences as before.
+- 2026-11-20: research on reading reStructuredText,
+  docs/research/rst-implementation.md; the user's decisions 18 to 22.
+  The JSON writer now writes U+0008 and U+000C as `\u0008` and
+  `\u000c`, as pandoc's aeson does, where it wrote `\b` and `\f`
+  (found by reading the user's rST, translated to markdown, in podoc
+  and pandoc: two files with form feeds). New case `json-control-chars`
+  (expected JSON pandoc's). `make test` passed under `-O2` and `-OC`:
+  247 case tests and 23 round trips.

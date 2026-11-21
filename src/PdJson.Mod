@@ -32,9 +32,7 @@ BEGIN
       | 0AX: PdIO.WriteString("\n")
       | 09X: PdIO.WriteString("\t")
       | 0DX: PdIO.WriteString("\r")
-      | 08X: PdIO.WriteString("\b")
-      | 0CX: PdIO.WriteString("\f")
-      ELSE
+      ELSE (* aeson writes U+0008 and U+000C as \u0008 and \u000c too *)
         PdIO.WriteString("\u00");
         PdIO.WriteChar(hex[ORD(ch) DIV 16]); PdIO.WriteChar(hex[ORD(ch) MOD 16])
       END;
