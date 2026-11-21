@@ -219,7 +219,9 @@ Made by the user on 2026-11-20, on the questions of §15.
       template like the user's `statement.ms` (statement page,
       Optima, the contents first), which the user may copy; podoc
       never writes to `~/.pandoc`.
-    - **Notes** (Q6): footnotes, or endnotes on request.
+    - **Notes** (Q6): footnotes, or endnotes with
+      `--reference-location=document` (settled by the user the same
+      day).
     - **Raw formats** (Q7): raw `mom` blocks and inlines are passed to
       mom unchanged, so they may hold anything mom accepts, roff
       requests and escapes included. Other raw formats, `ms` and
@@ -1348,9 +1350,8 @@ the body.
   - `.BLOCKQUOTE`;
   - code blocks and line blocks in no-fill;
   - rules;
-  - `.FOOTNOTE` notes, or endnotes on request (decision 27; the
-    switch to be settled when written, e.g.
-    `--reference-location=document`);
+  - `.FOOTNOTE` notes, or endnotes with
+    `--reference-location=document` (decision 27);
   - raw `mom`, passed unchanged; other raw formats dropped;
   - `.PDF_TARGET` for ids on divs and spans.
 - **Inlines:**
