@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+# bench: times podoc against pandoc and measures their memory use
+# (docs/developer/performance.md):
+#
+#   tools/bench [convert] [build] [pdf]
+#
+# With no arguments, runs convert and build. Each case is run once to
+# warm the file cache, then RUNS times; the median wall-clock and CPU
+# (user + system) times and the largest peak RSS are reported, with the
+# exit statuses (above 128, 128 + a signal). Each line reads
+#
+#   case format input  pandoc <ms> <MiB> [status] | podoc <ms> <MiB> [status] | x<pandoc/podoc>
+#
+# the podoc figures being the -OC build's.
+#
+#   convert  pandoc's test/testsuite.txt, the Lost-Worlds 001-breakout.md
+#            (without its includes), MANUAL.txt and MANUAL.txt ten times
+#            over, plus an empty file, to json, html, ms, context, markdown
+#            and plain with --wrap=none; html, ms and context with -s; and
+#            plain, markdown, ms and context with default wrapping. Both
+#            podoc builds are run.
+#   build    the Lost-Worlds builds, run in its directory: 001-breakout.md
+#            to HTML and to ConTeXt, and the ten-file digest, each with
+#            the project's filters. pandoc runs pandoc-include and the Lua
+#            filters; podoc gets the substitutions with --metadata-file, as
+#            tools/subs2yaml makes them.
+#   pdf      001-breakout.md to PDF through context and through pdfroff.
+#
+# Memory-heavy: run it capped, for example
+#
+#   systemd-run --user --scope -q -p MemoryMax=16G -p MemorySwapMax=0 tools/bench
+#
+# From the environment:
+#   PANDOC       the pandoc to compare with (pandoc on PATH)
+#   PANDOC_SRC   pandoc 3.10's source, for MANUAL.txt and testsuite.txt
+#                (/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.10)
+#   LOST_WORLDS  the Lost-Worlds checkout (~/Repos/RPG/Lost-Worlds), read
+#                only: outputs go to the scratch directory. Where it is
+#                missing, breakout, build and pdf are left out.
+#   BENCH_TIME   GNU time, which measures the peak RSS (/usr/bin/time)
+#   RUNS         if set, the number of timed runs for every case (by
+#                default 20 for small inputs, down to 3 for MANUAL x10)
+#   BENCH_JSON   if set, a file to write every result to, as JSON
+#   TMPDIR       where the scratch directory is made, and removed
+#                afterwards (/usr/local/sw/tmp if it exists)
+import json, os, shutil, statistics, subprocess, sys, tempfile, time
+
+HOME = os.path.expanduser("~")
+PD = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PODOC = {"podoc-OC": PD + "/build/OC/podoc", "podoc-O2": PD + "/build/O2/podoc"}
+PANDOC = shutil.which(os.environ.get("PANDOC", "pandoc"))
+PANDOC_SRC = os.environ.get("PANDOC_SRC",
+    "/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.10")
+LW = os.environ.get("LOST_WORLDS", HOME + "/Repos/RPG/Lost-Worlds")
+HAVE_LW = os.path.isfile(LW + "/001-breakout.md")
+RUNS = int(os.environ["RUNS"]) if os.environ.get("RUNS") else None
+TIME = os.environ.get("BENCH_TIME", "/usr/bin/time")
+RSSFILE = None                          # set in main
+
+def run(argv, cwd=None):
+    """(wall s, user s, sys s, max RSS KiB, exit status) of one run.
+    A child of this Python reports this Python's peak RSS as its own
+    (Linux keeps it across exec, and posix_spawn's child shares our
+    memory until exec), so the RSS is GNU time's %M for its own child.
+    The CPU times, from wait4, include GNU time's, which is negligible;
+    a signal shows as GNU time's status, 128 + the signal."""
+    t0 = time.perf_counter()
+    pid = os.fork()
+    if pid == 0:
+        try:
+            if cwd: os.chdir(cwd)
+            fd = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(fd, 1); os.dup2(fd, 2)
+            os.execv(TIME, [TIME, "-f", "%M", "-o", RSSFILE] + argv)
+        finally:
+            os._exit(127)
+    _, st, ru = os.wait4(pid, 0)
+    wall = time.perf_counter() - t0
+    with open(RSSFILE) as f:
+        rss = int(f.read().split()[-1])
+    return (wall, ru.ru_utime, ru.ru_stime, rss, os.waitstatus_to_exitcode(st))
+
+def bench(argv, n, cwd=None):
+    run(argv, cwd)                      # warm the cache
+    rs = [run(argv, cwd) for _ in range(RUNS or n)]
+    return {"wall": statistics.median(r[0] for r in rs),
+            "cpu": statistics.median(r[1] + r[2] for r in rs),
+            "rss": max(r[3] for r in rs),
+            "status": sorted({r[4] for r in rs})}
+
+results = []
+def case(label, fmt, inp, n, podoc_args, pandoc_args,
+         models=("podoc-OC", "podoc-O2"), cwd=None):
+    row = {"case": label, "format": fmt, "input": inp,
+           "pandoc": bench([PANDOC] + pandoc_args, n, cwd)}
+    for m in models:
+        row[m] = bench([PODOC[m]] + podoc_args, n, cwd)
+    results.append(row)
+    p, o = row["pandoc"], row["podoc-OC"]
+    print(f"{label:10} {fmt:9} {inp:17} pandoc {p['wall']*1000:8.1f} ms "
+          f"{p['rss']/1024:7.1f} MiB {p['status']} | podoc {o['wall']*1000:8.1f} ms "
+          f"{o['rss']/1024:7.1f} MiB {o['status']} | x{p['wall']/o['wall']:5.1f}",
+          flush=True)
+
+FORMATS = ["json", "html", "ms", "context", "markdown", "plain"]
+N = {"empty.md": 20, "testsuite.md": 20, "breakout.md": 10,
+     "manual.md": 5, "manual10.md": 3}
+PANDOC_CONVERT = ["--syntax-highlighting=none", "-f", "markdown"]
+
+def convert(inp):
+    files = [f for f in N if f != "breakout.md" or HAVE_LW]
+    for f in files:
+        for fmt in FORMATS:
+            case("convert", fmt, f, N[f], ["--wrap=none", "-t", fmt, f"{inp}/{f}"],
+                 ["--wrap=none"] + PANDOC_CONVERT + ["-t", fmt, f"{inp}/{f}"])
+    for f in [f for f in ("breakout.md", "manual.md") if f in files]:
+        for fmt in ["html", "ms", "context"]:
+            case("standalone", fmt, f, N[f],
+                 ["-s", "--wrap=none", "-t", fmt, f"{inp}/{f}"],
+                 ["-s", "--wrap=none"] + PANDOC_CONVERT + ["-t", fmt, f"{inp}/{f}"])
+    for fmt in ["plain", "markdown", "ms", "context"]:
+        case("wrap", fmt, "manual.md", N["manual.md"],
+             ["-t", fmt, f"{inp}/manual.md"],
+             PANDOC_CONVERT + ["-t", fmt, f"{inp}/manual.md"])
+
+CTX = ["-H", "cstyle.tex", "--include-in-header=header-includes.context"]
+COMBINE = ["setting-summary", "semiotic-resonance-lattice", "adventure-ideas",
+           "npcs-ideas", "huns_peacekeepers_sci_fi", "seltroti_society_overview",
+           "lo_kaurgunma_society_overview", "lo_kaurgunma_safeguards",
+           "yibadoob_society_overview", "drives_and_fuel"]
+FILTERS = ["--lua-filter=subs.lua", "--lua-filter=strip-comments.lua"]
+
+def lost_worlds(label, fmt, inp, n, args, subs):
+    case(label, fmt, inp, n, ["--metadata-file=" + subs] + args, args,
+         models=("podoc-OC",), cwd=LW)
+
+def build(out, subs):
+    lost_worlds("build", "html", "001-breakout", 10,
+        ["-s", "-F", "pandoc-include", "001-breakout.md"] + FILTERS +
+        ["-o", out + "/b.html"], subs)
+    lost_worlds("build", "context", "001-breakout", 10,
+        ["-s", "-F", "pandoc-include", "-t", "context"] + CTX +
+        ["001-breakout.md"] + FILTERS + ["--lua-filter=toc-columns.lua",
+         "-o", out + "/b.tex"], subs)
+    lost_worlds("build", "context", "digest (10 files)", 5,
+        ["-s", "-f", "markdown", "-t", "context"] + CTX +
+        ["-H", "cstyle-digest.tex", "-M", "title=Lost Worlds Digest"] +
+        sum([["-M", f"combine={c}.md"] for c in COMBINE], []) +
+        ["--lua-filter=combine-docs.lua"] + FILTERS +
+        ["--lua-filter=toc-columns.lua", "/dev/null", "-o", out + "/d.tex"], subs)
+
+def pdf(out, subs):
+    lost_worlds("pdf", "context", "001-breakout", 3,
+        ["-s", "-F", "pandoc-include", "--pdf-engine=context"] + CTX +
+        ["001-breakout.md"] + FILTERS + ["--lua-filter=toc-columns.lua",
+         "-o", out + "/b.pdf"], subs)
+    lost_worlds("pdf", "ms", "001-breakout", 3,
+        ["-s", "-F", "pandoc-include", "-t", "ms", "--pdf-engine=pdfroff",
+         "001-breakout.md"] + FILTERS + ["-o", out + "/m.pdf"], subs)
+
+def main(tmp, which):
+    global RSSFILE
+    RSSFILE = tmp + "/rss"
+    inp, out = tmp + "/in", tmp + "/out"
+    os.mkdir(inp); os.mkdir(out)
+    open(inp + "/empty.md", "w").close()
+    shutil.copy(PANDOC_SRC + "/test/testsuite.txt", inp + "/testsuite.md")
+    shutil.copy(PANDOC_SRC + "/MANUAL.txt", inp + "/manual.md")
+    manual = open(inp + "/manual.md", "rb").read()
+    with open(inp + "/manual10.md", "wb") as f:
+        for _ in range(10): f.write(manual + b"\n")
+    subs = out + "/substitutions.yaml"
+    if HAVE_LW:
+        shutil.copy(LW + "/001-breakout.md", inp + "/breakout.md")
+        with open(subs, "w") as f:
+            subprocess.run([PD + "/tools/subs2yaml", LW + "/substitutions.lua"],
+                           stdout=f, check=True)
+    elif set(which) & {"build", "pdf"}:
+        print(f"bench: {LW} not found: build and pdf left out", file=sys.stderr)
+        which = [w for w in which if w == "convert"]
+    print(f"# pandoc {PANDOC}; podoc {PD} at " + subprocess.run(
+        ["git", "-C", PD, "describe", "--always", "--dirty"],
+        capture_output=True, text=True).stdout.strip(), flush=True)
+    if "convert" in which: convert(inp)
+    if "build" in which: build(out, subs)
+    if "pdf" in which: pdf(out, subs)
+    if os.environ.get("BENCH_JSON"):
+        with open(os.environ["BENCH_JSON"], "w") as f:
+            json.dump(results, f, indent=1)
+
+which = sys.argv[1:] or ["convert", "build"]
+for w in which:
+    if w not in ("convert", "build", "pdf"):
+        sys.exit("usage: bench [convert] [build] [pdf]")
+if PANDOC is None:
+    sys.exit("bench: pandoc not found")
+if subprocess.run([TIME, "-f", "%M", "true"], capture_output=True).returncode:
+    sys.exit(f"bench: {TIME} is not GNU time (set BENCH_TIME)")
+for p in PODOC.values():
+    if not os.access(p, os.X_OK): sys.exit(f"bench: {p} not built: run make")
+base = os.environ.get("TMPDIR") or (
+    "/usr/local/sw/tmp" if os.path.isdir("/usr/local/sw/tmp") else None)
+tmp = tempfile.mkdtemp(prefix="podoc-bench-", dir=base)
+try:
+    main(tmp, which)
+finally:
+    shutil.rmtree(tmp)
