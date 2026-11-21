@@ -122,6 +122,19 @@ Made by the user on 2026-11-20, on the questions of §15.
     an error ending podoc with status 64. podoc's own addition, to be
     listed in docs/user/differences.md.
 
+23. **Images in ms output** (2026-11-20). pandoc's ms writer writes
+    `.PDFPIC` only for `.pdf` files and `.PSPIC` for `.ps` and `.eps`;
+    any other image (SVG, PNG, JPEG) becomes a groff comment and is
+    missing from the PDF, and pandoc converts images only for its TeX
+    engines. podoc will convert such images to PDF and write
+    `.PDFPIC`, both for PDF output and for `-t ms`. With `-t ms`, when
+    an image is converted, the `.ms` file and the converted PDFs are
+    written to one directory: the one the user names, or else one
+    podoc makes. A deliberate difference from pandoc, to be listed in
+    docs/user/differences.md. Planned as Phase 21. Which converter
+    to use for bitmaps is still open: img2pdf, then magick, is
+    proposed (Phase 21).
+
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
 JSON AST compared byte for byte.
@@ -1113,6 +1126,63 @@ before it.
   `-t markdown-yaml_metadata_block`, a writer extension, already in
   "Later".
 
+## Phase 21: Images in ms output
+
+Decision 23. Today podoc writes what pandoc writes: `.PDFPIC` for
+`.pdf`, `.PSPIC` for `.ps` and `.eps`, and for any other image, in a
+figure `\" .IMAGE "src" size`, inline `[IMAGE: alt] \" "src" size`
+(`Writers/Ms.hs`, checked identical 2026-11-20). `PdPdf.Fetch` copies
+images into the temporary directory but converts SVG only for
+ConTeXt.
+
+- **Which images:** local files whose extension is not `.pdf`,
+  `.ps` or `.eps`, in a figure or inline. URLs and `data:` URIs keep
+  pandoc's output.
+- **Conversion:**
+  - SVG with `rsvg-convert -f pdf`, as ConTeXt PDFs do already
+    (`PdPdf.ConvertSvg`);
+  - bitmaps (PNG, JPEG, GIF, TIFF and the like) with the first
+    converter found; proposed order: `img2pdf`, then `magick` (or
+    ImageMagick 6's `convert`), then `gm convert`;
+  - when no converter is found or a conversion fails, a warning, and
+    the image keeps pandoc's output.
+- **The ms written:** `.PDFPIC "converted.pdf"` with the image's size
+  attributes, in place of the comment, in a figure and inline (the
+  `[IMAGE: alt]` text goes). Check what `pdfroff` and `groff -Tpdf` do
+  with a converted image that has no width (its PDF page size), and
+  that `-U` is passed, as it is now when the source has `.PDFPIC`.
+- **PDF output** (`--pdf-engine=pdfroff` or `groff`): the converted
+  files go in podoc's temporary directory, beside the copies it
+  makes now, and are removed with it.
+- **`-t ms`:** when an image is converted, the `.ms` file and the
+  converted PDFs are written to one directory, so that the `.ms`
+  file finds them:
+  - the directory the user names, with a new podoc option (name to
+    be settled when it is built);
+  - otherwise a directory podoc makes; podoc says on standard error
+    where it is.
+  - To settle when this is built: where podoc makes that directory
+    and what it is called; what happens with `-o file.ms` and with
+    output to standard output; the converted files' names (from the
+    image's name, kept unique).
+- **The converters compared** (2026-11-20, on atla; a JPEG photo, a
+  PNG with transparency, a plain PNG):
+  - `img2pdf` 0.6.3: embeds the JPEG unchanged (lossless); keeps the
+    PNG's transparency as a soft mask; sizes the page from the
+    image's resolution (96 dpi when it has none: 800 pixels give
+    600 points). Python; bitmaps only.
+  - `magick` 7.1.2: re-encodes the JPEG (a small loss); keeps the
+    transparency; 72 dpi pages (800 pixels give 800 points). Reads
+    nearly every format.
+  - `gm` 1.3.45: re-encodes the JPEG; drops the transparency (no
+    soft mask); 72 dpi pages.
+  - Still to check: which of them the BSDs' packages provide.
+- **Tests:** case tests for the ms written with each kind of image
+  (they must not need the converters: the conversion is checked by
+  a test that is skipped when the tool is missing); a PDF built with
+  an SVG, a PNG and a JPEG, each image found in it (`pdfimages
+  -list`).
+
 ## Later, not scheduled
 
 - An rST writer, `-t rst` (decision 19).
@@ -1973,3 +2043,8 @@ before it.
   - `make test` passed under `-O2` and `-OC`, 23 round trips.
     `make compare`: 1396 of 1606 the same; 210 differ, as many as
     before.
+- 2026-11-20: Phase 21, images in ms output (decision 23), planned.
+  podoc's ms output for `.pdf`, `.svg` with a width, `.png` and
+  `.eps` images was checked identical to pandoc 3.10's; neither
+  converts images for ms. img2pdf, magick and gm compared on a JPEG
+  and two PNGs (Phase 21).
