@@ -30,7 +30,7 @@ State section at the end records what was verified.
   writer output that gives the same PDF or rendered HTML.
 
 Not in scope: other input formats (reStructuredText came into scope
-on 2026-11-20, decisions 18 to 22; not yet scheduled as a phase);
+on 2026-11-20, decisions 18 to 22, Phase 19);
 citations; mermaid (decision 4); Lua filters (decision 6); VAX/VMS
 (decision 1). Plain text output, grid tables (reader and writers) and
 output wrapping came into scope on 2026-11-20 (decisions 10 to 15,
@@ -904,6 +904,163 @@ pandoc's at 40 columns.
   `splitAtWidth`).
 - Checked against pandoc 3.10, a unit test (`PdWidthTest`) and a case
   (`emoji-widths`).
+
+## Phase 19: The reStructuredText reader
+
+podoc reads rST as pandoc 3.10's `-f rst` does, all of
+`Readers/RST.hs` (decisions 18, 20 and 21;
+docs/research/rst-implementation.md). The output is the same AST the
+markdown reader builds, so the writers, templates, built-in filters
+and PDF output need no change.
+
+The modules are:
+
+- `PdRst`: blocks, directives and the passes after parsing;
+- `PdRstInline`: inline markup, roles, references and substitutions;
+- `PdRstTable`, if `PdRst` grows too big: simple, list and CSV
+  tables.
+
+They reuse `PdMdBase`'s text buffer and character classes,
+`PdMdInline.RealLength` and `CharWidth`, and `PdGridTable.Trace`.
+The estimate is about 4,500 lines.
+
+Each sub-phase is checked against `pandoc -f rst -t json`, byte for
+byte, with and without `-s`:
+
+- **case tests:** `test/cases/<name>.rst`, with expected JSON and,
+  where a construct reaches a writer in a new way, ms, ConTeXt, HTML
+  and markdown. `tools/runcases` learns `.rst` inputs.
+- **pandoc's fixtures:** the parts of `test/rst-reader.rst` and
+  `test/tables.rst` the sub-phase covers, and the command tests that
+  read rST (61 in `test/command/*.md`).
+- **the user's corpus:**
+  - the 526 rST files of the 50 pandoc builds, each read from its own
+    directory so that includes resolve;
+  - the standard rST of the docutils projects and the Nikola site
+    (decision 21);
+  - `make compare` gains these comparisons, where pandoc is
+    installed.
+
+All of this runs under `-O2` and `-OC`, as every phase does.
+
+### Phase 19.1: Blocks
+
+- `-f rst` and `-r rst`, and `.rst` inputs when there is no `-f`
+  (today these exit with status 21; differences.md changes).
+- Sections:
+  - over- and underlined titles;
+  - levels in the order their adornments first appear;
+  - `auto_identifiers`, the one extension pandoc enables for rST,
+    and `-f rst-auto_identifiers`.
+- Paragraphs, transitions (`HorizontalRule`) and comments.
+- Literal blocks: `::` and its expanded and partly minimized forms,
+  quoted literal blocks, and doctest blocks.
+- Block quotes, with attributions.
+- Lists:
+  - bullet lists;
+  - enumerated lists, in every numbering style and with `#`;
+  - definition lists, with classifiers;
+  - field lists;
+  - option lists.
+- Line blocks, keeping their leading spaces as U+00A0.
+- `rst+lhs` (literate Haskell, `lhsCodeBlock`), as pandoc gives it.
+
+### Phase 19.2: Inlines
+
+- Emphasis, strong and inline literals. pandoc's recognition rules
+  for where inline markup starts and ends (`notAfterString`, ...) are
+  followed, not docutils'.
+- Escapes, with `\ ` as nothing.
+- Interpreted text, with every standard role pandoc handles:
+  - `emphasis`, `strong`, `literal`, `code`;
+  - `sup`/`superscript`, `sub`/`subscript`, `mark`;
+  - `math`, `title-reference`/`title`/`t`, `span`, `raw`;
+  - `rfc-reference`, `pep-reference`.
+
+  A role can come before or after the text. `default-role` is also
+  in this sub-phase.
+- `.. role::`, with a base role (`ss(emphasis)`) and the options
+  `class`, `language` and `format`. An unknown role becomes `Code`
+  with the class `interpreted-text`.
+- Hyperlinks:
+  - named, anonymous and embedded references;
+  - standalone URIs and e-mail addresses (the class `uri`);
+  - internal targets, inline targets and indirect targets.
+- Footnotes (numbered, `#`, `#label` and `*`) and citations, with
+  pandoc's ordering of notes and its `citations` Div.
+- Substitutions: `replace`, `unicode`, `date` and image
+  substitutions, inline and as a whole paragraph
+  (`resolveBlockSubstitutions`).
+- The passes after parsing, which resolve references and
+  substitutions over the whole document, including those defined
+  after their use. pandoc's messages for a missing or circular
+  reference are given too.
+
+### Phase 19.3: Directives
+
+- Every directive pandoc handles:
+  - `raw`, `container`, `class`, `compound`, `line-block`;
+  - `pull-quote`, `epigraph`, `highlights`, `rubric`;
+  - `admonition` and the named admonitions, `sidebar`, `topic`;
+  - `image` and `figure`, with their options (`:align:` as an
+    `align-` class, `:scale:`, `:width:`, `:height:`, ...);
+  - `code`/`code-block`/`sourcecode`, `highlight`, `math`, `aafig`;
+  - `bibliography`, `replace`, `date`, `unicode`, `role`,
+    `default-role`.
+- `include`, relative to the including file:
+  - the options `start-line`, `end-line`, `literal` and `code`
+    (pandoc ignores `tab-width` and `encoding`);
+  - read in the includer's state, sharing its roles, substitutions
+    and targets;
+  - guarded against recursion;
+  - pandoc's errors and exit statuses for a missing file.
+- An unknown directive becomes a `Div` with its name as a class and
+  its options as attributes (pandoc's `SkippedContent`).
+
+### Phase 19.4: Tables
+
+- Grid tables through `PdGridTable`, the same `gridTableWith` the
+  markdown reader uses. The tracer reads from `PdMdBase`'s buffer;
+  the rST reader shares that buffer, or the tracer takes its text as
+  a parameter.
+- Simple tables:
+  - column boundaries from the `=` borders;
+  - continuation lines;
+  - column spans marked by `-` underlines;
+  - several header rows.
+- The `table` directive (caption, `:widths:`),
+  `list-table` (`:header-rows:`, `:stub-columns:`, `:widths:`) and
+  `csv-table` (inline, `:file:`, `:delim:`, `:quote:`, `:escape:`,
+  `:header:`, `:header-rows:`).
+
+### Phase 19.5: Standalone, reporting, the corpus
+
+- Under `-s`:
+  - `titleTransform`: a lone top section, and a subtitle under it,
+    become `title` and `subtitle`;
+  - docinfo field lists become metadata (`author`, `authors`,
+    `date`, ...).
+
+  The reader takes `-s` from `PdOptions`, since the AST depends on
+  it.
+- Reporting what the reader drops (decision 22):
+  - `--verbose` prints pandoc's `[INFO]` lines (`Skipped ...`,
+    reference not found, ...);
+  - a podoc option, proposed as `--unknown=warn|error`, reports every
+    unknown directive and role and anything else pandoc skips, with
+    file, line and column, as a warning or as an error with status
+    64.
+
+  Listed in docs/user/differences.md and documented in
+  docs/user/podoc.md.
+- The whole corpus:
+  - all of the user's pandoc-built rST files match pandoc's JSON;
+  - PDFs from a few rST builds (Mini-Six SRD, Red-Planet-Blue-Helmets
+    2ER, an Alusia scenario) are compared with pandoc's, as in Phase
+    15;
+  - podoc builds and passes its tests on the BSDs.
+- docs/user/podoc.md: the translation advice for rST is replaced by
+  `-f rst`.
 
 ## Later, not scheduled
 

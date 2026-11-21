@@ -48,8 +48,8 @@ plain), 17.2 (wrapping for markdown), 18.1 (wrapping for ms), 18.2
 doclayout counts them). Further work is in PLAN.md's "Later".
 
 A reStructuredText reader, all of pandoc's `-f rst`, came into scope
-on 2026-11-20 (PLAN.md's decisions 18 to 22); it is not yet scheduled
-as a phase. Read `docs/research/rst-implementation.md` first.
+on 2026-11-20 (PLAN.md's decisions 18 to 22), planned as Phase 19,
+not yet started. Read `docs/research/rst-implementation.md` first.
 See PLAN.md's State.
 
 ## Reference material
