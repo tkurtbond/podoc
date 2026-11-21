@@ -1307,7 +1307,7 @@ or when it fails, podoc warns and the image keeps `.PSPIC`. Tested by
 draws the text `EPSMARK`, found in it with `pdftotext`; skipped
 without groff, gs and pdftotext.
 
-## Phase 23: mom output and PDF through pdfmom [planned]
+## Phase 23: mom output and PDF through pdfmom [in progress]
 
 Scheduled 2026-11-21 by decision 27, which settles the research's
 questions (docs/research/pdfmom-backend.md §9). The acceptance
@@ -1325,7 +1325,7 @@ podoc's own, checked by hand and in groff. The checks are:
 
 Each subphase passes `make test` under `-O2` and `-OC`.
 
-### Phase 23.1: Shared roff code
+### Phase 23.1: Shared roff code [done]
 
 - **Change:** move from `PdMs` into a new `PdRoff`:
   - escaping;
@@ -2750,3 +2750,13 @@ the body.
   27 schedules Phase 23 [planned], with the 005-merchant scenario's
   statement-sized PDF as its acceptance target. Nothing implemented
   yet.
+- 2026-11-21: Phase 23.1 done: `PdRoff` holds what the roff writers
+  share, moved from `PdMs`: the escapes (`EscapeStr`, `ToSmallCaps`,
+  `ToAscii`, `EscapePDFString`, `EscapeUri`), the font state
+  (`Fonts`, `Toggle`, `FontChange`), the plain text for bookmarks,
+  `Points`, `Roman`, `Extension`, `Height`, and the tbl table's parts
+  (`TableParts`, with the writer's `Blocks` for the cells). Wrapping
+  stays in `PdLayout`, which both writers use. `make test` passed
+  under `-O2` and `-OC` (288 case tests, 23 round trips, 7 image
+  tests), every ms case byte for byte; the 005-merchant scenario's
+  `-s -t ms --toc` output is the same as the installed podoc's.

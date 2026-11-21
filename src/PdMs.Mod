@@ -10,20 +10,12 @@ MODULE PdMs;
    written, the fonts, small caps) changes as pandoc's does, in the
    same order. *)
 
-IMPORT Ropes, Strings, Utf8, Unicode, A := PdAst, L := PdLayout, T := PdTemplate,
-  C := PdContext, Sh := PdShared, PdAscii, PdIO;
+IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
+  Sh := PdShared, Ro := PdRoff, PdIO;
 
 TYPE
   Rope = Ropes.Rope;
   MathFinder = POINTER TO RECORD (A.WalkerDesc) found: BOOLEAN END;
-  Buf = POINTER TO ARRAY OF CHAR;
-
-  (* a list of Docs *)
-  Docs = POINTER TO DocsDesc;
-  DocsDesc = RECORD
-    d: L.Doc;
-    next: Docs
-  END;
 
 VAR
   (* options *)
@@ -34,7 +26,7 @@ VAR
 
   (* the writer's state *)
   firstPara, smallCaps, inHeader, hasInlineMath: BOOLEAN;
-  fontI, fontB, fontC, fontV: BOOLEAN;
+  fonts: Ro.Fonts;
   notes: A.BlockList; (* the notes waiting to be written, newest first *)
 
 (* Ropes *)
@@ -69,46 +61,10 @@ BEGIN
   RETURN Ropes.EqualString(r, s)
 END Eq;
 
-(* The text of r in a new buffer, 0X after it *)
-PROCEDURE ToBuf(r: Rope): Buf;
-  VAR b: Buf; n: LONGINT;
-BEGIN
-  n := Len(r); NEW(b, n + 1);
-  IF n > 0 THEN Ropes.Blit(r, 0, b^, 0, n) END;
-  b[n] := 0X;
-  RETURN b
-END ToBuf;
-
 PROCEDURE StartsWithChar(r: Rope; ch: CHAR): BOOLEAN;
 BEGIN
   RETURN (Len(r) > 0) & (Ropes.Fetch(r, 0) = ch)
 END StartsWithChar;
-
-(* The rune ru, encoded *)
-PROCEDURE RuneRope(ru: Utf8.Rune): Rope;
-  VAR s: ARRAY 8 OF CHAR; k: LONGINT;
-BEGIN
-  k := 0;
-  IF Utf8.Encode(ru, s, k) THEN RETURN Ropes.FromSubchars(s, 0, k) END;
-  RETURN NIL
-END RuneRope;
-
-(* r with each rune mapped to upper case (up) or lower case *)
-PROCEDURE MapCase(r: Rope; up: BOOLEAN): Rope;
-  VAR b: Buf; n, i, q: LONGINT; out: Rope; ru: Utf8.Rune;
-BEGIN
-  n := Len(r); b := ToBuf(r); out := NIL; i := 0;
-  WHILE i < n DO
-    q := i;
-    IF Utf8.Decode(b^, q, ru) & (q > i) THEN
-      IF up THEN ru := Unicode.ToUpper(ru) ELSE ru := Unicode.ToLower(ru) END;
-      out := Cat(out, RuneRope(ru))
-    ELSE out := CatC(out, b[i]); q := i + 1
-    END;
-    i := q
-  END;
-  RETURN out
-END MapCase;
 
 (* Docs *)
 
@@ -133,210 +89,6 @@ BEGIN
   RETURN L.Cat3(L.Char(22X), d, L.Char(22X))
 END DQ;
 
-PROCEDURE AddDoc(VAR first, last: Docs; d: L.Doc);
-  VAR n: Docs;
-BEGIN
-  NEW(n); n.d := d; n.next := NIL;
-  IF first = NIL THEN first := n ELSE last.next := n END;
-  last := n
-END AddDoc;
-
-(* Escapes *)
-
-(* pandoc's escapeString False AllowUTF8: roff's special characters
-   as escapes, and \& before a period that starts a line *)
-PROCEDURE EscapeStr(r: Rope): Rope;
-  VAR b: Buf; n, i, start, k: LONGINT; out: Rope; rep: ARRAY 8 OF CHAR;
-BEGIN
-  n := Len(r);
-  IF n = 0 THEN RETURN NIL END;
-  b := ToBuf(r);
-  out := NIL; start := 0; i := 0;
-  WHILE i < n DO
-    rep[0] := 0X; k := 1;
-    CASE b[i] OF
-      0AX:
-      IF (i + 1 < n) & (b[i + 1] = ".") THEN
-        rep[0] := 0AX; rep[1] := "\"; rep[2] := "&"; rep[3] := "."; rep[4] := 0X; k := 2
-      END
-    | "'": rep := "\(aq"
-    | 22X: rep := "\(dq"
-    | "`": rep := "\(ga"
-    | "^": rep := "\(ha"
-    | "~": rep := "\(ti"
-    | "\": rep := "\(rs"
-    | "@": rep := "\(at"
-    | 0C2X:
-      IF (i + 1 < n) & (b[i + 1] = 0A0X) THEN rep := "\ "; k := 2 END
-    | 0E2X:
-      IF (i + 2 < n) & (b[i + 1] = 80X) THEN
-        CASE b[i + 2] OF
-          98X: rep := "\(oq"
-        | 99X: rep := "\(cq"
-        | 9CX: rep := "\(lq"
-        | 9DX: rep := "\(rq"
-        | 94X: rep := "\(em"
-        | 93X: rep := "\(en"
-        | 0A6X: rep := "\&..."
-        ELSE
-        END;
-        IF rep[0] # 0X THEN k := 3 END
-      END
-    ELSE
-    END;
-    IF rep[0] # 0X THEN
-      IF i > start THEN out := Cat(out, Ropes.Substring(r, start, i - start)) END;
-      out := CatS(out, rep); INC(i, k); start := i
-    ELSE INC(i)
-    END
-  END;
-  IF start = 0 THEN RETURN r END; (* nothing escaped *)
-  IF n > start THEN out := Cat(out, Ropes.Substring(r, start, n - start)) END;
-  RETURN out
-END EscapeStr;
-
-(* toSmallCaps: each run of lower case letters in upper case and
-   smaller, \s-2 ... \s0; everything else escaped *)
-PROCEDURE ToSmallCaps(r: Rope): Rope;
-  VAR b: Buf; n, i, q: LONGINT; out, run: Rope; ru: Utf8.Rune; lower: BOOLEAN;
-BEGIN
-  n := Len(r); b := ToBuf(r);
-  out := NIL; run := NIL; lower := FALSE; i := 0;
-  WHILE i < n DO
-    q := i;
-    IF ~Utf8.Decode(b^, q, ru) OR (q <= i) THEN ru := -1; q := i + 1 END;
-    IF (ru >= 0) & (Unicode.Category(ru) = Unicode.Ll) THEN
-      run := Cat(run, RuneRope(Unicode.ToUpper(ru))); lower := TRUE
-    ELSE
-      IF lower THEN
-        out := CatS(Cat(CatS(out, "\s-2"), EscapeStr(run)), "\s0"); run := NIL; lower := FALSE
-      END;
-      out := Cat(out, EscapeStr(Ropes.Substring(r, i, q - i)))
-    END;
-    i := q
-  END;
-  IF lower THEN out := CatS(Cat(CatS(out, "\s-2"), EscapeStr(run)), "\s0") END;
-  RETURN out
-END ToSmallCaps;
-
-(* toAscii: an identifier for a PDF anchor *)
-PROCEDURE ToAscii(r: Rope): Rope;
-  VAR b: Buf; n, i, q: LONGINT; out: Rope; ru: Utf8.Rune; ch: CHAR;
-BEGIN
-  n := Len(r); b := ToBuf(r);
-  out := NIL; i := 0;
-  WHILE i < n DO
-    q := i;
-    IF ~Utf8.Decode(b^, q, ru) OR (q <= i) THEN ru := ORD(b[i]); q := i + 1 END;
-    IF PdAscii.ToAscii(ru, ch) & (ch # "/") THEN out := CatC(out, ch)
-    ELSE out := CatS(Cat(CatS(out, "_u"), Sh.IntRope(ru)), "_")
-    END;
-    i := q
-  END;
-  RETURN out
-END ToAscii;
-
-PROCEDURE Octal(VAR out: Rope; v: LONGINT);
-  VAR s: ARRAY 5 OF CHAR;
-BEGIN
-  s[0] := "\"; s[1] := CHR(ORD("0") + v DIV 64); s[2] := CHR(ORD("0") + v DIV 8 MOD 8);
-  s[3] := CHR(ORD("0") + v MOD 8); s[4] := 0X;
-  out := CatS(out, s)
-END Octal;
-
-(* escapePDFString: as it is, if it is ASCII without ( ) \ and ";
-   otherwise UTF-16BE, each byte in octal, after a byte order mark *)
-PROCEDURE EscapePDFString(r: Rope): Rope;
-  VAR b: Buf; n, i, q: LONGINT; out: Rope; ru, lo, hi: LONGINT; x: Utf8.Rune;
-    plain: BOOLEAN; ch: CHAR;
-BEGIN
-  n := Len(r); b := ToBuf(r);
-  plain := TRUE; i := 0;
-  WHILE plain & (i < n) DO
-    ch := b[i];
-    IF (ORD(ch) >= 80H) OR (ch = "(") OR (ch = ")") OR (ch = "\") OR (ch = 22X) THEN plain := FALSE END;
-    INC(i)
-  END;
-  IF plain THEN RETURN r END;
-  out := R("\376\377"); i := 0;
-  WHILE i < n DO
-    ch := b[i];
-    IF (ORD(ch) < 80H) & (ch # "\") & (ch # "(") & (ch # ")") THEN
-      out := CatC(CatS(out, "\000"), ch); INC(i)
-    ELSE
-      q := i;
-      IF ~Utf8.Decode(b^, q, x) OR (q <= i) THEN x := 0FFFDH; q := i + 1 END;
-      ru := x;
-      IF ru >= 10000H THEN
-        DEC(ru, 10000H); hi := 0D800H + ru DIV 400H; lo := 0DC00H + ru MOD 400H;
-        Octal(out, hi DIV 256); Octal(out, hi MOD 256);
-        Octal(out, lo DIV 256); Octal(out, lo MOD 256)
-      ELSE
-        Octal(out, ru DIV 256); Octal(out, ru MOD 256)
-      END;
-      i := q
-    END
-  END;
-  RETURN out
-END EscapePDFString;
-
-(* Whether ch may stand in a URI as it is (isAllowedInURI), @ apart *)
-PROCEDURE UriChar(ch: CHAR): BOOLEAN;
-BEGIN
-  CASE ch OF
-    "0" .. "9", "A" .. "Z", "a" .. "z",
-    "-", "_", ".", "~", ":", "/", "?", "#", "[", "]", "!", "$", "&", "'",
-    "(", ")", "*", "+", ",", ";", "=", "%": RETURN TRUE
-  ELSE RETURN FALSE
-  END
-END UriChar;
-
-(* escapeUri: what is not allowed in a URI, and @, %-encoded byte by
-   byte *)
-PROCEDURE EscapeUri(r: Rope): Rope;
-  VAR b: Buf; n, i: LONGINT; out: Rope; ch: CHAR; s: ARRAY 4 OF CHAR; hex: ARRAY 17 OF CHAR;
-BEGIN
-  hex := "0123456789ABCDEF";
-  n := Len(r); b := ToBuf(r); out := NIL;
-  FOR i := 0 TO n - 1 DO
-    ch := b[i];
-    IF UriChar(ch) THEN out := CatC(out, ch)
-    ELSE
-      s[0] := "%"; s[1] := hex[ORD(ch) DIV 16]; s[2] := hex[ORD(ch) MOD 16]; s[3] := 0X;
-      out := CatS(out, s)
-    END
-  END;
-  RETURN out
-END EscapeUri;
-
-(* Fonts *)
-
-PROCEDURE Toggle(c: CHAR);
-BEGIN
-  CASE c OF
-    "I": fontI := ~fontI
-  | "B": fontB := ~fontB
-  | "C": fontC := ~fontC
-  | "V": fontV := ~fontV
-  END
-END Toggle;
-
-(* fontChange: the font for the features on *)
-PROCEDURE FontChange(): L.Doc;
-  VAR s: ARRAY 10 OF CHAR; k: INTEGER;
-BEGIN
-  s := "\f["; k := 3;
-  IF fontC THEN s[k] := "C"; INC(k) END;
-  IF fontV THEN s[k] := "V"; INC(k) END;
-  IF inHeader OR fontB THEN s[k] := "B"; INC(k) END;
-  IF fontI THEN s[k] := "I"; INC(k) END;
-  IF k = 3 THEN RETURN Lit("\f[R]")
-  ELSIF (k = 4) & fontC THEN RETURN Lit("\f[CR]")
-  END;
-  s[k] := "]"; s[k + 1] := 0X;
-  RETURN Lit(s)
-END FontChange;
-
 (* Inlines *)
 
 PROCEDURE^ Inlines(i: A.Inline; bts: BOOLEAN): L.Doc;
@@ -349,10 +101,10 @@ PROCEDURE^ Block(b: A.Block): L.Doc;
 PROCEDURE WithFont(c: CHAR; i: A.Inline; bts, withNotes: BOOLEAN): L.Doc;
   VAR begin, d: L.Doc;
 BEGIN
-  Toggle(c); begin := FontChange();
+  Ro.Toggle(fonts, c); begin := Ro.FontChange(fonts, inHeader);
   IF withNotes THEN d := InlinesP(i, bts) ELSE d := Inlines(i, bts) END;
-  Toggle(c);
-  RETURN L.Cat3(begin, d, FontChange())
+  Ro.Toggle(fonts, c);
+  RETURN L.Cat3(begin, d, Ro.FontChange(fonts, inHeader))
 END WithFont;
 
 (* blockToMs (Plain i) *)
@@ -398,61 +150,20 @@ PROCEDURE StrDoc(s: Rope): L.Doc;
 BEGIN
   shim := NIL;
   IF StartsWithChar(s, ".") THEN shim := L.AfterBreak("\&") END;
-  IF smallCaps THEN RETURN L.Cat(shim, L.Literal(ToSmallCaps(s))) END;
-  RETURN L.Cat(shim, L.Literal(EscapeStr(s)))
+  IF smallCaps THEN RETURN L.Cat(shim, L.Literal(Ro.ToSmallCaps(s))) END;
+  RETURN L.Cat(shim, L.Literal(Ro.EscapeStr(s)))
 END StrDoc;
-
-(* The extension of the path s, as takeExtension finds it *)
-PROCEDURE Extension(s: Rope): Rope;
-  VAR n, i: LONGINT; ch: CHAR;
-BEGIN
-  n := Len(s); i := n;
-  WHILE i > 0 DO
-    DEC(i); ch := Ropes.Fetch(s, i);
-    IF ch = "/" THEN RETURN NIL
-    ELSIF ch = "." THEN RETURN Ropes.Substring(s, i, n - i)
-    END
-  END;
-  RETURN NIL
-END Extension;
 
 (* The command for a picture with the path src, "" if there is none *)
 PROCEDURE PicCmd(src: Rope; VAR cmd: ARRAY OF CHAR);
   VAR ext: Rope;
 BEGIN
-  ext := Extension(src);
+  ext := Ro.Extension(src);
   IF Eq(ext, ".ps") OR Eq(ext, ".eps") THEN COPY(".PSPIC", cmd)
   ELSIF Eq(ext, ".pdf") THEN COPY(".PDFPIC", cmd)
   ELSE cmd[0] := 0X
   END
 END PicCmd;
-
-(* The dimension key of attr in points (inPoints), FALSE if it has
-   none *)
-PROCEDURE Points(attr: A.Attr; key: ARRAY OF CHAR; VAR p: LONGREAL): BOOLEAN;
-  VAR v, int, frac, unit, num: Rope; found: BOOLEAN; s: ARRAY 64 OF CHAR; x: LONGREAL;
-BEGIN
-  IF attr = NIL THEN RETURN FALSE END;
-  v := A.GetKeyVal(attr, key, found);
-  IF ~found OR ~Sh.NumUnit(v, int, frac, unit) THEN RETURN FALSE END;
-  num := int;
-  IF frac # NIL THEN num := Cat(CatS(num, "."), frac) END;
-  IF Len(num) >= LEN(s) THEN RETURN FALSE END;
-  Ropes.ToString(num, s);
-  Strings.StrToLongReal(s, x);
-  IF Eq(unit, "px") OR (unit = NIL) OR Eq(unit, "") THEN x := ENTIER(x) / 96.0D0
-  ELSIF Eq(unit, "cm") THEN x := x * 0.3937007874D0
-  ELSIF Eq(unit, "mm") THEN x := x * 0.03937007874D0
-  ELSIF Eq(unit, "in") OR Eq(unit, "inch") THEN
-  ELSIF Eq(unit, "%") THEN x := 0
-  ELSIF Eq(unit, "pt") THEN x := x / 72.0D0
-  ELSIF Eq(unit, "pc") THEN x := x / 6.0D0
-  ELSIF Eq(unit, "em") THEN x := x * (11.0D0 / 64.0D0)
-  ELSE RETURN FALSE
-  END;
-  p := x * 72.0D0;
-  RETURN TRUE
-END Points;
 
 PROCEDURE PointsDoc(p: LONGREAL): L.Doc;
 BEGIN
@@ -463,8 +174,8 @@ END PointsDoc;
 PROCEDURE SizeAttrs(attr: A.Attr): L.Doc;
   VAR w, h: LONGREAL;
 BEGIN
-  IF ~Points(attr, "width", w) THEN RETURN NIL END;
-  IF ~Points(attr, "height", h) THEN RETURN PointsDoc(w) END;
+  IF ~Ro.Points(attr, "width", w) THEN RETURN NIL END;
+  IF ~Ro.Points(attr, "height", h) THEN RETURN PointsDoc(w) END;
   RETURN L.Cat(PointsDoc(w), PointsDoc(h))
 END SizeAttrs;
 
@@ -484,9 +195,9 @@ BEGIN
   contents := InlinesP(i.content, TRUE);
   IF ~hasEngine THEN RETURN contents END;
   IF StartsWithChar(i.url, "#") THEN
-    RETURN PdfHref(".pdfhref L -D ", ToAscii(Ropes.Substring(i.url, 1, Len(i.url) - 1)), contents)
+    RETURN PdfHref(".pdfhref L -D ", Ro.ToAscii(Ropes.Substring(i.url, 1, Len(i.url) - 1)), contents)
   END;
-  RETURN PdfHref(".pdfhref W -D ", EscapeUri(i.url), contents)
+  RETURN PdfHref(".pdfhref W -D ", Ro.EscapeUri(i.url), contents)
 END Link;
 
 PROCEDURE Image(i: A.LinkInl): L.Doc;
@@ -494,7 +205,7 @@ PROCEDURE Image(i: A.LinkInl): L.Doc;
 BEGIN
   PicCmd(i.url, cmd);
   IF cmd[0] = 0X THEN
-    d := L.Cat3(Lit("[IMAGE: "), L.Literal(EscapeStr(Sh.Stringify(i.content))), L.Char("]"));
+    d := L.Cat3(Lit("[IMAGE: "), L.Literal(Ro.EscapeStr(Sh.Stringify(i.content))), L.Char("]"));
     d := L.Cat3(d, Lit(' \" '), L.Cat(DQ(L.Literal(i.url)), SizeAttrs(i.attr)))
   ELSE
     d := L.Cat(L.Hsep(Lit(cmd), DQ(L.Literal(i.url))), SizeAttrs(i.attr))
@@ -529,8 +240,8 @@ BEGIN
     RETURN L.Cat3(Lit("\(lq"), d, Lit("\(rq"))
   | A.Cite, A.Span: RETURN Inlines(i(A.ContInl).content, FALSE)
   | A.Code:
-    Toggle("C"); begin := FontChange(); Toggle("C");
-    RETURN L.Cat3(begin, L.Literal(EscapeStr(i(A.CodeInl).text)), FontChange())
+    Ro.Toggle(fonts, "C"); begin := Ro.FontChange(fonts, inHeader); Ro.Toggle(fonts, "C");
+    RETURN L.Cat3(begin, L.Literal(Ro.EscapeStr(i(A.CodeInl).text)), Ro.FontChange(fonts, inHeader))
   | A.Space: RETURN HandleNotes(L.Space())
   | A.SoftBreak:
     IF ~bts & preserve THEN RETURN HandleNotes(L.Cr()) END;
@@ -566,118 +277,12 @@ BEGIN
   RETURN d
 END Inlines;
 
-(* The plain text of inlines, for PDF bookmarks: an approximation of
-   pandoc's plain writer *)
-
-(* Appends the inlines i to r as Unicode superscripts (sup) or
-   subscripts; FALSE if they have characters that have none *)
-PROCEDURE Scripts(VAR r: Rope; i: A.Inline; sup: BOOLEAN): BOOLEAN;
-  VAR b: Buf; n, k, q: LONGINT; ru, x: Utf8.Rune; out: Rope;
-BEGIN
-  out := NIL;
-  WHILE i # NIL DO
-    CASE i.kind OF
-      A.Space, A.SoftBreak: out := CatS(out, " ")
-    | A.LineBreak: out := CatC(out, 0AX)
-    | A.Span: IF ~Scripts(out, i(A.ContInl).content, sup) THEN RETURN FALSE END
-    | A.Str:
-      b := ToBuf(i(A.StrInl).text); n := Len(i(A.StrInl).text); k := 0;
-      WHILE k < n DO
-        q := k;
-        IF ~Utf8.Decode(b^, q, ru) OR (q <= k) THEN RETURN FALSE END;
-        x := -1;
-        IF (ru >= ORD("0")) & (ru <= ORD("9")) THEN
-          IF ~sup THEN x := 2080H + ru - ORD("0")
-          ELSIF ru = ORD("1") THEN x := 0B9H
-          ELSIF ru = ORD("2") THEN x := 0B2H
-          ELSIF ru = ORD("3") THEN x := 0B3H
-          ELSE x := 2070H + ru - ORD("0")
-          END
-        ELSIF ru = ORD("+") THEN x := 207AH
-        ELSIF (ru = ORD("-")) OR (ru = 2212H) THEN x := 207BH
-        ELSIF ru = ORD("=") THEN x := 207CH
-        ELSIF ru = ORD("(") THEN x := 207DH
-        ELSIF ru = ORD(")") THEN x := 207EH
-        ELSIF Unicode.IsSpace(ru) THEN x := ru
-        END;
-        IF x < 0 THEN RETURN FALSE END;
-        IF ~sup & (x >= 207AH) & (x <= 207EH) THEN INC(x, 10H) END;
-        out := Cat(out, RuneRope(x));
-        k := q
-      END
-    ELSE RETURN FALSE
-    END;
-    i := i.next
-  END;
-  r := Cat(r, out);
-  RETURN TRUE
-END Scripts;
-
-PROCEDURE PlainTo(VAR r, nt: Rope; VAR nn: LONGINT; i: A.Inline);
-  VAR c: Rope; t: A.RawInl;
-BEGIN
-  WHILE i # NIL DO
-    CASE i.kind OF
-      A.Str: r := Cat(r, i(A.StrInl).text)
-    | A.Space, A.SoftBreak: r := CatS(r, " ")
-    | A.LineBreak: r := CatC(r, 0AX)
-    | A.Code: r := Cat(r, i(A.CodeInl).text)
-    | A.Math: r := Cat(r, i(A.MathInl).text)
-    | A.RawInline:
-      t := i(A.RawInl);
-      IF Eq(t.format, "plain") THEN r := Cat(r, t.text) END
-    | A.Quoted:
-      IF i(A.QuotedInl).quote = A.DoubleQuote THEN
-        r := CatS(r, "“"); PlainTo(r, nt, nn, i(A.ContInl).content); r := CatS(r, "”")
-      ELSE
-        r := CatS(r, "‘"); PlainTo(r, nt, nn, i(A.ContInl).content); r := CatS(r, "’")
-      END
-    | A.Image:
-      r := CatS(r, "["); PlainTo(r, nt, nn, i(A.ContInl).content); r := CatS(r, "]")
-    | A.SmallCaps:
-      c := NIL; PlainTo(c, nt, nn, i(A.ContInl).content); r := Cat(r, MapCase(c, TRUE))
-    | A.Superscript, A.Subscript:
-      IF ~Scripts(r, i(A.ContInl).content, i.kind = A.Superscript) THEN
-        IF i.kind = A.Superscript THEN r := CatS(r, "^(") ELSE r := CatS(r, "_(") END;
-        PlainTo(r, nt, nn, i(A.ContInl).content); r := CatS(r, ")")
-      END
-    | A.Note:
-      INC(nn);
-      r := CatS(Cat(CatS(r, "["), Sh.IntRope(nn)), "]");
-      nt := CatS(Cat(CatS(CatC(CatC(nt, 0AX), 0AX), "["), Sh.IntRope(nn)), "] ");
-      nt := Cat(nt, Sh.StringifyBlocks(i(A.NoteInl).blocks))
-    ELSE
-      IF i IS A.ContInl THEN PlainTo(r, nt, nn, i(A.ContInl).content) END
-    END;
-    i := i.next
-  END
-END PlainTo;
-
-PROCEDURE IsBlank(ch: CHAR): BOOLEAN;
-BEGIN
-  RETURN (ch = " ") OR (ch = 9X) OR (ch = 0AX) OR (ch = 0DX)
-END IsBlank;
-
-(* inlinesToPlain: the plain text of i, stripped *)
-PROCEDURE PlainText(i: A.Inline): Rope;
-  VAR r, nt: Rope; nn, s, e: LONGINT;
-BEGIN
-  r := NIL; nt := NIL; nn := 0;
-  PlainTo(r, nt, nn, i);
-  r := Cat(r, nt);
-  s := 0; e := Len(r);
-  WHILE (s < e) & IsBlank(Ropes.Fetch(r, s)) DO INC(s) END;
-  WHILE (e > s) & IsBlank(Ropes.Fetch(r, e - 1)) DO DEC(e) END;
-  IF e = s THEN RETURN NIL END;
-  RETURN Ropes.Substring(r, s, e - s)
-END PlainText;
-
 (* Blocks *)
 
 (* .pdfhref M "id" *)
 PROCEDURE Anchor(id: Rope): L.Doc;
 BEGIN
-  RETURN L.NoWrap(L.Cat(Lit(".pdfhref M "), DQ(L.Literal(ToAscii(id)))))
+  RETURN L.NoWrap(L.Cat(Lit(".pdfhref M "), DQ(L.Literal(Ro.ToAscii(id)))))
 END Anchor;
 
 PROCEDURE AttrId(a: A.Attr): Rope;
@@ -750,12 +355,12 @@ BEGIN
   v := A.GetKeyVal(a, "entry-spacing", found);
   IF ~found THEN RETURN FALSE END;
   n := Len(v); i := 0; digits := FALSE; pos := FALSE;
-  WHILE (i < n) & IsBlank(Ropes.Fetch(v, i)) DO INC(i) END;
+  WHILE (i < n) & Ro.IsBlank(Ropes.Fetch(v, i)) DO INC(i) END;
   WHILE (i < n) & (Ropes.Fetch(v, i) >= "0") & (Ropes.Fetch(v, i) <= "9") DO
     ch := Ropes.Fetch(v, i); IF ch # "0" THEN pos := TRUE END;
     digits := TRUE; INC(i)
   END;
-  WHILE (i < n) & IsBlank(Ropes.Fetch(v, i)) DO INC(i) END;
+  WHILE (i < n) & Ro.IsBlank(Ropes.Fetch(v, i)) DO INC(i) END;
   RETURN digits & pos & (i = n)
 END EntrySpacing;
 
@@ -788,7 +393,7 @@ BEGIN
   firstPara := TRUE;
   inHeader := TRUE;
   contents := InlinesP(h.inlines, TRUE);
-  plain := PlainText(h.inlines);
+  plain := Ro.PlainText(h.inlines);
   inHeader := FALSE;
   IF numberSections & ~A.HasClass(h.attr, "unnumbered") THEN
     d := Lit(".NH"); secnum := R("\*[SN]")
@@ -798,10 +403,10 @@ BEGIN
   anchor := NIL;
   IF Len(id) > 0 THEN anchor := Anchor(id) END;
   IF secnum # NIL THEN t := CatS(secnum, "  ") ELSE t := NIL END;
-  IF groff THEN t := Cat(t, plain) ELSE t := Cat(t, EscapePDFString(plain)) END;
+  IF groff THEN t := Cat(t, plain) ELSE t := Cat(t, Ro.EscapePDFString(plain)) END;
   bookmark := L.Cat3(Lit(".pdfhref O "), L.Literal(CatS(Sh.IntRope(h.level), " ")),
     L.NoWrap(DQ(L.Literal(t))));
-  backlink := L.NoWrap(L.Cat3(Lit(".pdfhref L -D "), DQ(L.Literal(ToAscii(id))),
+  backlink := L.NoWrap(L.Cat3(Lit(".pdfhref L -D "), DQ(L.Literal(Ro.ToAscii(id))),
     L.Cat(L.Space(), Lit("\"))));
   backlink := L.Cat3(backlink, L.Cr(), Lit(" -- "));
   toc := NIL;
@@ -827,7 +432,7 @@ BEGIN
   firstPara := TRUE;
   d := NIL;
   IF StartsWithChar(c.text, ".") THEN d := Lit("\&") END;
-  d := L.Cat(d, L.Literal(EscapeStr(c.text)));
+  d := L.Cat(d, L.Literal(Ro.EscapeStr(c.text)));
   RETURN Above3(Above3(Lit(".IP"), Lit(".nf"), Lit("\f[C]")), d, Above(Lit("\f[]"), Lit(".fi")))
 END CodeBlock;
 
@@ -876,28 +481,6 @@ BEGIN
   RETURN d
 END BulletList;
 
-(* toRomanNumeral *)
-PROCEDURE Roman(n: LONGINT): Rope;
-  VAR r: Rope;
-BEGIN
-  IF (n >= 4000) OR (n < 0) THEN RETURN R("?") END;
-  r := NIL;
-  WHILE n >= 1000 DO r := CatC(r, "M"); DEC(n, 1000) END;
-  IF n >= 900 THEN r := CatS(r, "CM"); DEC(n, 900) END;
-  IF n >= 500 THEN r := CatC(r, "D"); DEC(n, 500) END;
-  IF n >= 400 THEN r := CatS(r, "CD"); DEC(n, 400) END;
-  WHILE n >= 100 DO r := CatC(r, "C"); DEC(n, 100) END;
-  IF n >= 90 THEN r := CatS(r, "XC"); DEC(n, 90) END;
-  IF n >= 50 THEN r := CatC(r, "L"); DEC(n, 50) END;
-  IF n >= 40 THEN r := CatS(r, "XL"); DEC(n, 40) END;
-  WHILE n >= 10 DO r := CatC(r, "X"); DEC(n, 10) END;
-  IF n = 9 THEN r := CatS(r, "IX"); n := 0 END;
-  IF n >= 5 THEN r := CatC(r, "V"); DEC(n, 5) END;
-  IF n = 4 THEN r := CatS(r, "IV"); n := 0 END;
-  WHILE n >= 1 DO r := CatC(r, "I"); DEC(n) END;
-  RETURN r
-END Roman;
-
 (* The k-th (from 0) marker of the ordered list l (orderedListMarkers) *)
 PROCEDURE Marker(l: A.OrderedBlk; k: LONGINT): Rope;
   VAR m: Rope; s: LONGINT;
@@ -909,8 +492,8 @@ BEGIN
     IF l.style = A.LowerAlpha THEN m := Ropes.FromChar(CHR(ORD("a") + s))
     ELSE m := Ropes.FromChar(CHR(ORD("A") + s))
     END
-  | A.UpperRoman: m := Roman(l.start + k)
-  | A.LowerRoman: m := MapCase(Roman(l.start + k), FALSE)
+  | A.UpperRoman: m := Ro.Roman(l.start + k)
+  | A.LowerRoman: m := Ro.MapCase(Ro.Roman(l.start + k), FALSE)
   ELSE m := Sh.IntRope(l.start + k)
   END;
   CASE l.delim OF
@@ -982,72 +565,15 @@ END DefList;
 
 (* Tables *)
 
-(* makeRow: the cells T{ ... T}, a tab between each two *)
-PROCEDURE MakeRow(cols: Docs): L.Doc;
-  VAR d: L.Doc;
-BEGIN
-  d := NIL;
-  WHILE cols # NIL DO
-    d := Above(d, cols.d);
-    IF cols.next # NIL THEN d := Above(d, Lit("T}	T{")) END;
-    cols := cols.next
-  END;
-  RETURN Above3(Lit("T{"), d, Lit("T}"))
-END MakeRow;
-
-(* A table, as toLegacyTable makes it (PdShared.LegacyRows): the first
-   row of the head as the header, the other rows as the body, their
-   spans cut into empty pieces *)
+(* A table, as pandoc's ms writer writes it, with the parts
+   PdRoff.TableParts makes *)
 PROCEDURE Table(t: A.TableBlk): L.Doc;
-  VAR il: A.Inlines; simple, allNull: BOOLEAN; caption, colheadings, body, d, desc: L.Doc;
-    cs: A.ColSpec; ncols, k: LONGINT; s: Rope; cols, lastCol: Docs;
-    widths: POINTER TO ARRAY OF LONGREAL; head, rows: Sh.LegacyRow;
+  VAR il: A.Inlines; simple: BOOLEAN; caption, colheadings, body, d, desc: L.Doc;
 BEGIN
   A.InitInlines(il);
   Sh.BlocksToInlines(il, t.caption.blocks);
   caption := InlinesP(il.first, FALSE);
-  ncols := 0; cs := t.colSpecs;
-  WHILE cs # NIL DO INC(ncols); cs := cs.next END;
-  NEW(widths, ncols + 1);
-  simple := TRUE; s := NIL; k := 0; cs := t.colSpecs;
-  WHILE cs # NIL DO
-    widths[k] := 0;
-    IF cs.hasWidth & (cs.width > 0) THEN widths[k] := cs.width; simple := FALSE END;
-    IF k > 0 THEN s := CatC(s, " ") END;
-    CASE cs.align OF
-      A.AlignRight: s := CatC(s, "r")
-    | A.AlignCenter: s := CatC(s, "c")
-    ELSE s := CatC(s, "l")
-    END;
-    IF widths[k] # 0 THEN s := CatS(Cat(CatS(s, "w("), Sh.Fixed(70 * widths[k], 1)), "n)") END;
-    INC(k); cs := cs.next
-  END;
-  desc := L.Literal(CatC(s, "."));
-  Sh.LegacyRows(t, head, rows);
-  (* the header *)
-  colheadings := NIL;
-  IF head # NIL THEN
-    cols := NIL; lastCol := NIL; allNull := TRUE;
-    FOR k := 0 TO head.n - 1 DO
-      IF head.cells[k] # NIL THEN allNull := FALSE END;
-      AddDoc(cols, lastCol, Blocks(head.cells[k]))
-    END;
-    IF ~allNull THEN colheadings := Above(MakeRow(cols), L.Char("_")) END
-  END;
-  (* the rows, each zipped with the widths *)
-  body := NIL;
-  WHILE rows # NIL DO
-    cols := NIL; lastCol := NIL; k := 0;
-    WHILE (k < rows.n) & (k < ncols) DO
-      d := Blocks(rows.cells[k]);
-      IF ~simple THEN
-        d := Above(L.Literal(CatS(Cat(R(".nr LL "), Sh.Fixed(widths[k] * 70, 1)), "n")), d)
-      END;
-      AddDoc(cols, lastCol, d); INC(k)
-    END;
-    body := Above(body, MakeRow(cols));
-    rows := rows.next
-  END;
+  simple := Ro.TableParts(t, Blocks, desc, colheadings, body);
   firstPara := TRUE;
   d := Above3(Lit(".PP"), caption, Lit(".na"));
   IF ~simple THEN d := Above(d, Lit(".nr LLold \n[LL]")) END;
@@ -1056,19 +582,6 @@ BEGIN
   IF ~simple THEN d := Above(d, Lit(".nr LL \n[LLold]")) END;
   RETURN Above(d, Lit(".ad"))
 END Table;
-
-(* height: the number of lines of d as rendered *)
-PROCEDURE Height(d: L.Doc): LONGINT;
-  VAR r: Rope; n, i, len: LONGINT;
-BEGIN
-  r := L.Render(d, 0); len := Len(r);
-  IF len = 0 THEN RETURN 0 END;
-  n := 1;
-  FOR i := 0 TO len - 2 DO
-    IF Ropes.Fetch(r, i) = 0AX THEN INC(n) END
-  END;
-  RETURN n
-END Height;
 
 PROCEDURE Figure(f: A.FigureBlk): L.Doc;
   VAR b: A.Block; i: A.Inline; img: A.LinkInl; capt, d: L.Doc; cmd: ARRAY 16 OF CHAR;
@@ -1081,7 +594,7 @@ BEGIN
     PicCmd(img.url, cmd);
     IF cmd[0] = 0X THEN COPY('\" .IMAGE', cmd) END;
     d := L.NoWrap(L.Cat(L.Hsep(Lit(cmd), DQ(L.Literal(img.url))), SizeAttrs(img.attr)));
-    d := Above(d, L.Literal(Cat(R(".ce "), Sh.IntRope(Height(capt)))));
+    d := Above(d, L.Literal(Cat(R(".ce "), Sh.IntRope(Ro.Height(capt)))));
     RETURN Above3(d, capt, Lit(".sp 1"))
   END;
   RETURN DivDoc(f.attr, b)
@@ -1184,7 +697,7 @@ PROCEDURE Write(doc: A.Doc; tmpl: T.Template; stream: BOOLEAN): BOOLEAN;
     s: Rope; b: A.Block; slot: T.Template; guess, ours: BOOLEAN;
 BEGIN
   firstPara := TRUE; smallCaps := FALSE; inHeader := FALSE; hasInlineMath := FALSE;
-  fontI := FALSE; fontB := FALSE; fontC := FALSE; fontV := FALSE; notes := NIL;
+  Ro.ResetFonts(fonts); notes := NIL;
   v := T.Get(C.variables, "pdf-engine");
   hasEngine := v # NIL;
   groff := (v # NIL) & (v.kind = T.SimpleV) & Eq(L.Render(v.doc, 0), "groff");
@@ -1205,12 +718,12 @@ BEGIN
   C.ResetField(ctx, "title", T.NewSimple(title));
   s := NIL; authors := Sh.DocAuthors(meta);
   WHILE authors # NIL DO
-    s := Cat(s, EscapeStr(Sh.Stringify(authors.inlines)));
+    s := Cat(s, Ro.EscapeStr(Sh.Stringify(authors.inlines)));
     IF authors.next # NIL THEN s := CatS(s, "; ") END;
     authors := authors.next
   END;
   C.DefField(ctx, "author-meta", LitV(s));
-  C.DefField(ctx, "title-meta", LitV(EscapeStr(Sh.Stringify(Sh.DocMeta(meta, "title")))));
+  C.DefField(ctx, "title-meta", LitV(Ro.EscapeStr(Sh.Stringify(Sh.DocMeta(meta, "title")))));
   C.DefField(ctx, "toc", T.NewBool(wantToc));
   C.DefField(ctx, "hyphenate", T.NewBool(TRUE));
   IF slot = NIL THEN
