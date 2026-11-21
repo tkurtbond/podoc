@@ -1232,7 +1232,10 @@ ConTeXt.
     `-trap-heap-exhausted` (2026-11-20), which gives "heap exhausted"
     for its own modules' `NEW`s; a `NEW` in an installed library
     (Ropes, pounicode, ArgParser) still gives NIL and a NIL trap, unless
-    the library is built with the option too.
+    the library is built with the option too. Fixed in poc by
+    Peaseblossom's enhancement 15, decided 2026-11-20 (65c753c), once
+    it is released: then drop `-trap-heap-exhausted` from `POCFLAGS`
+    (poc will reject it) and add podoc's hook in the same change.
 
 ## State
 
@@ -2135,7 +2138,8 @@ ConTeXt.
   - Recorded for poc as Peaseblossom's "Ongoing implementation
     enhancements" 15 (2cdad0b): a program-wide form, a flag set in the program's entry
     point before any module body runs, so that `Allocate` itself traps
-    and libraries built without the option are covered too.
+    and libraries built without the option are covered too. Superseded
+    the same day by the decided form (see the entry after decision 24).
 - 2026-11-20: Decision 24, `PODOC_HEAP_LIMIT`, done (podoc.Mod's
   `SetHeapLimit`), and documented in docs/user/podoc.md ("Memory",
   exit statuses).
@@ -2152,3 +2156,20 @@ ConTeXt.
     (Peaseblossom's enhancement 15).
   - `make test` passed under `-O2` and `-OC`: 247 case tests and 23
     round trips under each.
+- 2026-11-20: Peaseblossom's "Ongoing implementation enhancements" 15
+  decided with the user (65c753c, pushed; settled in 245b86e),
+  replacing the flag of 2cdad0b. Not yet implemented in poc; nothing
+  changes in podoc until a poc release has it.
+  - `GarbageCollectedHeap.Allocate` will trap 11 itself in every
+    program when it finds no memory, so a `NEW` in Ropes, pounicode or
+    ArgParser traps too, instead of leaving NIL.
+  - `AddOutOfMemoryHook` and `RemoveOutOfMemoryHook` keep a list of
+    hooks, called newest first before the trap; one answering TRUE has
+    `Allocate` collect and retry. Hooks must not allocate.
+  - The trap message will carry the failing `NEW`'s address, for
+    `addr2line`; under `-g`, a breakpoint on the trap procedure gives
+    the backtrace.
+  - `-trap-heap-exhausted` goes away; poc will reject it. podoc then
+    drops it from the GNUmakefile's `POCFLAGS` (and AGENTS.md's note)
+    and adds a hook that writes "podoc: out of memory; set
+    PODOC_HEAP_LIMIT (megabytes) higher" and exits 11, in one change.
