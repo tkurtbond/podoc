@@ -14,7 +14,9 @@
 # convert); "pdf-eps" makes a PDF with groff from an EPS image
 # (decision 26), and is skipped without groff, gs and pdftotext;
 # "mom-eps" writes mom with an EPS image (decision 27), and is skipped
-# without gs and pdfinfo.
+# without gs and pdfinfo; "mom-pdf" makes a PDF with pdfmom (Phase
+# 23.5), and is skipped without pdfmom of groff 1.23 or later, gs,
+# pdfinfo and pdftotext.
 # Prints an "ok   - " or "FAIL - " line for each, and exits 1 if any
 # failed.
 
@@ -134,6 +136,39 @@ if have gs && have pdfinfo; then
   fi
 else
   echo "skip - images mom-eps: no gs or pdfinfo"
+fi
+
+# PDF through pdfmom (Phase 23.5), with groff 1.23 or later: the
+# contents first, two pages, an outline, the EPS's text, and no files
+# left beside the document
+v=$(groff -v 2>/dev/null | sed -n 's/^GNU groff version \([0-9]*\)\.\([0-9]*\).*/\1 \2/p')
+set -- $v
+if have pdfmom && have gs && have pdfinfo && have pdftotext && [ $# -eq 2 ] &&
+   { [ "$1" -gt 1 ] || [ "$2" -ge 23 ]; }; then
+  total=$((total + 1))
+  name=mom-pdf; w=$outdir/$name; r=
+  mkdir -p "$w" && cp -R test/images/. "$w/" || exit 2
+  (cd "$w/doc" && find . -type f | sort) > "$w/before"
+  (cd "$w/doc" && "$podoc" img/mompdf.md -s --toc --pdf-engine=pdfmom \
+     -o out.pdf > ../out 2> ../err) || r="status $?"
+  f=$w/doc/out.pdf
+  [ -s "$w/err" ] && r="$r, warnings"
+  pdftotext -f 1 -l 1 "$f" - 2>/dev/null | grep -q '^Contents' ||
+    r="$r, no contents first"
+  pdfinfo "$f" 2>/dev/null | grep -q '^Pages: *2$' || r="$r, not two pages"
+  grep -aq '/Outlines' "$f" || r="$r, no outline"
+  [ "$(pdftotext "$f" - 2>/dev/null | grep -c EPSMARK)" = 1 ] ||
+    r="$r, no EPS"
+  (cd "$w/doc" && find . -type f ! -name out.pdf | sort) |
+    cmp -s - "$w/before" || r="$r, files left"
+  if [ -z "$r" ]; then
+    echo "ok   - images mom-pdf"
+  else
+    echo "FAIL - images mom-pdf:$r"; cat "$w/err"
+    failed=$((failed + 1))
+  fi
+else
+  echo "skip - images mom-pdf: no pdfmom of groff 1.23 or later, or no gs, pdfinfo or pdftotext"
 fi
 
 echo "$((total - failed)) of $total image tests passed"

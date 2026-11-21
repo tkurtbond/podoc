@@ -1410,7 +1410,7 @@ the body.
   `--template` for the user's own mom templates.
 - **Tests:** case tests with `-s`.
 
-### Phase 23.5: PDF through pdfmom
+### Phase 23.5: PDF through pdfmom [done]
 
 - **Engine:** `--pdf-engine=pdfmom`, by base name, the default for
   mom (`PdOptions.PdfWriterAndEngine`).
@@ -2847,5 +2847,27 @@ the body.
   (a copy, its `for-format ms` containers given `mom` too), with
   `--lua-filter=general.lua`, `statement.mom`, `--toc` and
   `-V fontfamily=Optima`: 26 pages, contents first, images once, no
-  groff warnings. `make test` passed under `-O2` and `-OC`. Phase 23.5
-  next.
+  groff warnings. `make test` passed under `-O2` and `-OC`.
+- 2026-11-21: Phase 23.5 done. `--pdf-engine=pdfmom` (by base name;
+  `PdOptions.PdfWriterAndEngine` pairs it with mom, and it is mom's
+  default); `PdPdf.Mom` runs `pdfmom -t -k -KUTF-8` (`-e` when the
+  source has `.EQ`) with `--pdf-engine-opt` on `input.mom` in the
+  temporary directory, by its path, as pdfmom reads its input more
+  than once. Images are converted as for groff, so the image path
+  problem of 23.3 does not arise for PDF. Checked: 47 for a missing
+  pdfmom, 43 when pdfmom fails (groff 1.25.0); pdfmom 1.23.0 exits 0
+  when mom aborts, so podoc writes the PDF it made (recorded in
+  differences.md). Tests: `PdOptionsTest` (five pairings),
+  `pdf-engine-missing-mom`, `opt-engine-bad` with pdfmom, and
+  `tools/runimages`' `mom-pdf` (contents first, two pages, an outline,
+  the EPS's text, no files left beside the document; skipped without
+  pdfmom of groff 1.23 or later, gs, pdfinfo or pdftotext).
+  Acceptance: the merchant scenario (a copy, with `for-format ms mom`
+  figures and a `raw:: mom` `.NEWPAGE` before the map), `-s -t mom
+  --lua-filter=general.lua --template=statement.mom --toc -V
+  fontfamily=Optima --pdf-engine-opt=-F<1.23.0's site-font>`: groff
+  1.23.0, 26 pages, 1.25.0, 28 pages; statement pages, the contents
+  first, both figures, the map on its own page, no groff warnings
+  (1.25.0's site-font directory is empty here, so 1.23.0's was used).
+  `mom-standalone` made into PDF under both. `make test` passed under
+  `-O2` and `-OC` (303 case tests, 10 image tests). Phase 23.6 next.

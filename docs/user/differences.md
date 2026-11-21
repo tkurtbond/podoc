@@ -348,6 +348,14 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
   as they are.
 - The engine's log is not shown with `--verbose`, which podoc does not
   have.
+- `--pdf-engine=pdfmom`, the default for `-t mom`, is podoc's own
+  (groff 1.23 and later). podoc runs `pdfmom -t -k -KUTF-8`, with `-e`
+  when the source has `.EQ`, and the `--pdf-engine-opt` options, on
+  the source's path in the temporary directory; `-V papersize` gives
+  no `-dpaper`, as the template's `.PAPER` sets the page. Images are
+  converted to PDF as for `groff`. pdfmom of groff 1.23 exits 0 when
+  mom aborts (a missing font, say), so podoc then writes the PDF
+  pdfmom made; from 1.24, pdfmom fails and podoc exits 43.
 
 ## Images
 

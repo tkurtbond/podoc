@@ -2,3 +2,4 @@ podoc: Argument of --pdf-engine must be one of
 podoc: 	groff
 podoc: 	pdfroff
 podoc: 	context
+podoc: 	pdfmom

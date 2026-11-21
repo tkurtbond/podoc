@@ -1,17 +1,20 @@
 MODULE PdPdf;
 (* PdPdf: PDF output, as pandoc 3.10's makePDF (Text.Pandoc.PDF) makes
-   it with pdfroff, groff or context.
+   it with pdfroff, groff or context, and with pdfmom, which pandoc
+   does not have, for podoc's mom writer (decision 27).
 
    Prepare makes a temporary directory, copies the document's local
    images into it and points the images at the copies (fillMediaBag and
    extractMedia); for ConTeXt it also converts SVG images to PDF with
    rsvg-convert (convertImages), and for groff and pdfroff every image
    they cannot show (PdImages.Convert, decision 23), and for groff, whose
-   gropdf ignores .PSPIC, EPS and PostScript images too (decision 26).
+   gropdf ignores .PSPIC, EPS and PostScript images too (decision 26),
+   as for pdfmom.
    The writer then writes its source into
    the directory, at the path Source gives, and Make runs the engine on
    it: pdfroff and groff in the working directory, the source on their
-   standard input and the PDF from their standard output; context in
+   standard input and the PDF from their standard output; pdfmom, which
+   reads its input more than once, on the source's path; context in
    the temporary directory, on input.tex, which makes input.pdf. The
    PDF is copied to the output, and the directory is removed. *)
 
@@ -37,7 +40,9 @@ TYPE
 VAR
   tmp: Path; (* the temporary directory, "" if there is none *)
   tex: BOOLEAN; (* whether the engine is context *)
-  gropdf: BOOLEAN; (* whether the engine is groff, which runs groff -Tpdf *)
+  gropdf: BOOLEAN; (* whether the engine is groff or pdfmom, which run
+    groff -Tpdf *)
+  mom: BOOLEAN; (* whether the engine is pdfmom *)
   seen: Seen;
   images: LONGINT; (* the number of the next image copied *)
 
@@ -152,13 +157,15 @@ END Inline;
 (* Making the PDF *)
 
 (* Makes the temporary directory and handles the images of d for the
-   engine: context when context is TRUE, else pdfroff or groff. *)
+   engine: context when context is TRUE, else pdfroff, groff or
+   pdfmom. *)
 PROCEDURE Prepare*(d: A.Doc; context: BOOLEAN);
   VAR ok: BOOLEAN; w: Walker; prog, base: Path;
 BEGIN
   tex := context; seen := NIL; images := 0;
   COPY(O.pdfEngine, prog); BaseName(prog, base);
   gropdf := ~tex & (base # "pdfroff");
+  mom := ~tex & (base = "pdfmom");
   R.MakeTempDir(tmp, ok);
   IF ~ok THEN tmp := ""; PdIO.Fail("", "cannot make a temporary directory", PdIO.IOError) END;
   NEW(w);
@@ -170,7 +177,10 @@ END Prepare;
 PROCEDURE Source*(VAR name: ARRAY OF CHAR);
 BEGIN
   COPY(tmp, name);
-  IF tex THEN R.Append(name, "/input.tex") ELSE R.Append(name, "/input.ms") END
+  IF tex THEN R.Append(name, "/input.tex")
+  ELSIF mom THEN R.Append(name, "/input.mom")
+  ELSE R.Append(name, "/input.ms")
+  END
 END Source;
 
 (* Whether the text t[0 .. len-1] contains s *)
@@ -247,6 +257,27 @@ BEGIN
   Deliver(pdf)
 END Roff;
 
+(* Runs pdfmom on the mom source, given by its path: pdfmom runs groff
+   more than once when the contents are relocated. No -dpaper: the
+   template's .PAPER sets the page. *)
+PROCEDURE Mom(VAR prog: ARRAY OF CHAR);
+  VAR c: R.Command; src, pdf: Path; t: PdIO.Text; len: LONGINT;
+BEGIN
+  Source(src);
+  COPY(tmp, pdf); R.Append(pdf, "/output.pdf");
+  PdIO.ReadFile(src, t, len);
+  c := R.New(); R.Add(c, prog);
+  R.Add(c, "-t"); R.Add(c, "-k"); R.Add(c, "-KUTF-8");
+  IF Contains(t, len, ".EQ") THEN R.Add(c, "-e") END;
+  AddOpts(c); R.Add(c, src);
+  R.AddText(c, " </dev/null >"); R.Add(c, pdf);
+  IF R.Run(c) # 0 THEN
+    PdIO.ReadFile(pdf, t, len);
+    Failed(t, len)
+  END;
+  Deliver(pdf)
+END Mom;
+
 (* Runs context on input.tex in the temporary directory *)
 PROCEDURE ConTeXt(VAR prog: ARRAY OF CHAR);
   VAR c: R.Command; log, pdf: Path; t, m: PdIO.Text; len, i, j, k: LONGINT;
@@ -287,7 +318,10 @@ PROCEDURE Make*;
 BEGIN
   COPY(O.pdfEngine, prog); BaseName(prog, base);
   IF ~R.Found(prog) THEN NotFound(prog) END;
-  IF tex THEN ConTeXt(prog) ELSE Roff(prog, base) END
+  IF tex THEN ConTeXt(prog)
+  ELSIF mom THEN Mom(prog)
+  ELSE Roff(prog, base)
+  END
 END Make;
 
 (* Ends the program, as pandoc does, if PDF would be written to a
@@ -302,5 +336,5 @@ BEGIN
 END CheckTerminal;
 
 BEGIN
-  tmp := ""; tex := FALSE; gropdf := FALSE; seen := NIL; images := 0
+  tmp := ""; tex := FALSE; gropdf := FALSE; mom := FALSE; seen := NIL; images := 0
 END PdPdf.

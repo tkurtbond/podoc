@@ -89,5 +89,10 @@ BEGIN
   Pdf("html", "context", "!", "pdf-engine context is not compatible with output format html");
   Pdf("ms", "context", "!", "pdf-engine context is not compatible with output format ms");
   Pdf("", "xyz", "!", "pdf-engine xyz not known");
+  Pdf("mom", "", "mom", "pdfmom");
+  Pdf("", "/usr/bin/pdfmom", "mom", "/usr/bin/pdfmom");
+  Pdf("mom", "pdfmom", "mom", "pdfmom");
+  Pdf("mom", "groff", "!", "pdf-engine groff is not compatible with output format mom");
+  Pdf("ms", "pdfmom", "!", "pdf-engine pdfmom is not compatible with output format ms");
   IF failures > 0 THEN Out.Int(failures, 0); Out.String(" failed"); Out.Ln END
 END PdOptionsTest.

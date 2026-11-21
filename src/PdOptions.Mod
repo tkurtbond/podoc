@@ -234,11 +234,12 @@ END FormatFromPath;
 
 (* Whether pandoc pairs the writer w with the PDF engine e (pandoc's
    engines list, in its order; podoc makes PDF only with groff,
-   pdfroff and context) *)
+   pdfroff and context, and with pdfmom from its own mom writer) *)
 PROCEDURE Pairs(w, e: ARRAY OF CHAR): BOOLEAN;
 BEGIN
   RETURN (w = "ms") & ((e = "groff") OR (e = "pdfroff"))
     OR (w = "context") & (e = "context")
+    OR (w = "mom") & (e = "pdfmom")
 END Pairs;
 
 (* Works out the writer and engine for PDF output from writer, -t ("" if
@@ -257,6 +258,7 @@ BEGIN
   ELSIF engine = "" THEN
     COPY(writer, w);
     IF writer = "ms" THEN COPY("groff", e)
+    ELSIF writer = "mom" THEN COPY("pdfmom", e)
     ELSIF writer = "context" THEN COPY("context", e)
     ELSIF (writer = "html") OR (writer = "html5") THEN COPY("weasyprint", e)
     ELSIF (writer = "latex") OR (writer = "beamer") THEN COPY("pdflatex", e)
@@ -270,6 +272,7 @@ BEGIN
     COPY(engine, e);
     IF (base = "groff") OR (base = "pdfroff") THEN COPY("ms", w)
     ELSIF base = "context" THEN COPY("context", w)
+    ELSIF base = "pdfmom" THEN COPY("mom", w)
     ELSE
       ok := FALSE;
       COPY("pdf-engine ", err); Append(base, err);
@@ -522,15 +525,16 @@ BEGIN
   RETURN TRUE
 END AddCss;
 
-(* --pdf-engine: groff, pdfroff or context, by base name; pandoc's
-   other engines make PDF from writers podoc does not have *)
+(* --pdf-engine: groff, pdfroff, context or pdfmom, by base name;
+   pandoc's other engines make PDF from writers podoc does not have *)
 PROCEDURE SetPdfEngine(VAR arg: ARRAY OF CHAR): BOOLEAN;
   VAR b: String;
 BEGIN
   BaseName(arg, b);
-  IF (b # "groff") & (b # "pdfroff") & (b # "context") THEN
+  IF (b # "groff") & (b # "pdfroff") & (b # "context") & (b # "pdfmom") THEN
     PdIO.Message("Argument of --pdf-engine must be one of");
     PdIO.Message("	groff"); PdIO.Message("	pdfroff"); PdIO.Message("	context");
+    PdIO.Message("	pdfmom");
     PdIO.Exit(PdIO.OptionError)
   END;
   COPY(arg, pdfEngine);
@@ -621,7 +625,7 @@ BEGIN
   parser.AddOption(ArgParser.MakeStringOption(0X, "extract-media",
     "Copy local images into DIR and refer to the copies.", SetExtractMedia));
   parser.AddOption(ArgParser.MakeStringOption(0X, "pdf-engine",
-    "Make PDF with PROGRAM: pdfroff or groff (ms), or context.", SetPdfEngine));
+    "Make PDF with PROGRAM: pdfroff or groff (ms), context, or pdfmom (mom).", SetPdfEngine));
   parser.AddOption(ArgParser.MakeStringOption(0X, "pdf-engine-opt",
     "Pass STRING to the PDF engine.", AddPdfEngineOpt));
   parser.AddOption(ArgParser.MakeStringOption("L", "lua-filter",
@@ -881,8 +885,8 @@ BEGIN
       PdIO.Message(err); PdIO.Exit(PdIO.AppError)
     END;
     BaseName(e, fmt);
-    IF (fmt # "groff") & (fmt # "pdfroff") & (fmt # "context") THEN
-      COPY("podoc makes PDF only with -t ms (groff, pdfroff) or -t context (context), not with ", err);
+    IF (fmt # "groff") & (fmt # "pdfroff") & (fmt # "context") & (fmt # "pdfmom") THEN
+      COPY("podoc makes PDF only with -t ms (groff, pdfroff), -t context (context) or -t mom (pdfmom), not with ", err);
       Append(e, err);
       PdIO.Message(err); PdIO.Exit(PdIO.AppError)
     END;
