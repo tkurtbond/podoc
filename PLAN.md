@@ -194,6 +194,44 @@ Made by the user on 2026-11-20, on the questions of §15.
     output keep `.PSPIC`, which `groff -Tps` shows. Planned and done
     as Phase 22.
 
+27. **mom output and PDF through pdfmom** (2026-11-21), on the
+    questions of docs/research/pdfmom-backend.md §9. Scheduled as
+    Phase 23 (Q1). Its acceptance target is the 005-merchant
+    scenario (`return-005-merchant.rst`), made as close as mom allows
+    to its statement-sized ConTeXt PDF: the contents at the start, a
+    statement page (5.5 by 8.5 in), and the figures. The pages need
+    not break in the same places.
+    - **Names** (Q2): `-t mom`, `.mom` for `-o`, and
+      `--pdf-engine=pdfmom`, the default for mom. `-o x.pdf` with no
+      `-t` stays ms.
+    - **groff** (Q3): 1.23 and later, `-Tpdf` only (no `pdfroff`, no
+      `-Tps`).
+    - **Image sizes** (Q4, option a): from the image's `width` and
+      `height`; a percentage width is of the line length, so
+      `:width: 100%` is the line length. Without them, from `pdfinfo`
+      on the PDF podoc made, scaled down to the line length when
+      wider; without a size, podoc warns and leaves the image out.
+      `PDF_IMAGE` always gets its size, so groff 1.23 (mom 2.5_d)
+      works and pdfmom needs no `-U`.
+    - **The default template** (Q5): mom's own design (`TYPESET`,
+      mom's defaults), with the variables `columns`, `printstyle`,
+      `doctype`, `linkcolor` and covers. podoc also ships an example
+      template like the user's `statement.ms` (statement page,
+      Optima, the contents first), which the user may copy; podoc
+      never writes to `~/.pandoc`.
+    - **Notes** (Q6): footnotes, or endnotes on request.
+    - **Raw formats** (Q7): raw `mom` blocks and inlines are passed to
+      mom unchanged, so they may hold anything mom accepts, roff
+      requests and escapes included. Other raw formats, `ms` and
+      `context` among them, are dropped. The scenario's page break
+      before "Map" is the user's to add, as a `raw:: mom` with
+      `.NEWPAGE`.
+    - **The built-in filters** (Q8): `for-format` gets a `mom` class,
+      kept only by the mom writer; mom does not take the `ms` or
+      `context` blocks. The general filter gives mom a box for `box`
+      (`.BOX`, or a drawn frame if mom 2.5_d has none) and a keep for
+      `keep`, going past the user's `general.lua`.
+
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
 JSON AST compared byte for byte.
@@ -1266,6 +1304,136 @@ or when it fails, podoc warns and the image keeps `.PSPIC`. Tested by
 `tools/runimages`' `pdf-eps`: a PDF made with groff from an EPS that
 draws the text `EPSMARK`, found in it with `pdftotext`; skipped
 without groff, gs and pdftotext.
+
+## Phase 23: mom output and PDF through pdfmom [planned]
+
+Scheduled 2026-11-21 by decision 27, which settles the research's
+questions (docs/research/pdfmom-backend.md §9). The acceptance
+target is the 005-merchant scenario: `-t mom` with `--toc`, the
+example statement template and `for-format mom` figures gives a PDF
+close to its statement-sized ConTeXt one, with the contents first
+and both figures.
+
+pandoc has no mom writer, so there is no oracle. Expected files are
+podoc's own, checked by hand and in groff. The checks are:
+
+- groff accepts the output without warnings: `groff -mom -z -ww`;
+- the PDF holds the text, the pages, the outline and the links;
+- the PDF's text matches the ms PDF made from the same input.
+
+Each subphase passes `make test` under `-O2` and `-OC`.
+
+### Phase 23.1: Shared roff code
+
+- **Change:** move from `PdMs` into a new `PdRoff`:
+  - escaping;
+  - the font state (`\f[...]` with the font to return to);
+  - the tbl table writer;
+  - the line breaks that macros need;
+  - wrapping at `--columns`.
+- **Check:** ms output does not change, and every ms case test
+  passes byte for byte.
+
+### Phase 23.2: The mom writer, blocks and inlines
+
+`PdMom`, with `-t mom`, and `.mom` for `-o`. Without `-s` it writes
+the body.
+
+- **Blocks:**
+  - `.HEADING n NAMED id`;
+  - `.PP`;
+  - `.LIST`/`.ITEM`/`.LIST OFF` for bullet and ordered lists, nested,
+    with their numbering styles and start numbers;
+  - definition lists, indented;
+  - `.BLOCKQUOTE`;
+  - code blocks and line blocks in no-fill;
+  - rules;
+  - `.FOOTNOTE` notes, or endnotes on request (decision 27; the
+    switch to be settled when written, e.g.
+    `--reference-location=document`);
+  - raw `mom`, passed unchanged; other raw formats dropped;
+  - `.PDF_TARGET` for ids on divs and spans.
+- **Inlines:**
+  - emphasis, strong and code through `PdRoff`'s font state;
+  - strikeout, underline and small caps as for ms;
+  - `\*[SUP]`;
+  - quotes;
+  - `.BR`.
+- **Links:** `.PDF_LINK` to `#id` and `.PDF_WWW_LINK` otherwise, with
+  trailing punctuation as `SUFFIX`.
+- **To try in groff first:** the elements marked "to check" in the
+  research's §5.2 (code blocks, line blocks, list start numbers).
+- **Tests:** case tests `test/cases/<name>.mom`. Each expected file
+  is also checked once with `groff -mom -z -ww`.
+
+### Phase 23.3: Tables and figures
+
+- **Tables:** tbl through `PdRoff`, with mom's `.TS` arguments
+  (`CAPTION`; `H` for a header row).
+- **Figures:** `.PDF_IMAGE -C file w h CAPTION "..." TARGET id`, the
+  size from the image's `width` and `height`; a percentage width is
+  of the line length (decision 27).
+- **Filters:** `for-format mom`; `box` and `keep` for mom in the
+  general filter (check mom 2.5_d's `.BOX` first).
+- **Inline images:** as the ms writer writes them.
+- **Tests:** case tests.
+
+### Phase 23.4: The default template and its variables
+
+- **The template:** podoc's own, under podoc's licence (pandoc has
+  none).
+- **Title block:**
+  - `title`, `subtitle`, `author` and `date`;
+  - `abstract` as a block quote.
+- **Contents:** `toc` writes `.AUTO_RELOCATE_TOC TOP` before
+  `.START` and `.TOC` last, and `toc-title`. `--toc-depth` limits
+  the levels.
+- **Page and type:**
+  - `papersize` → `.PAPER`;
+  - the four margins;
+  - `fontfamily`, `pointsize` and `lineheight`.
+- **mom's own:** `columns`, `printstyle`, `doctype`, `linkcolor`
+  and covers (decision 27).
+- **Example:** a statement template like the user's `statement.ms`
+  (`.PAGE 5.5i 8.5i`, its margins, `fontfamily`, the contents first),
+  shipped with podoc and installed beside the docs.
+- **The usual three:** `header-includes`, `include-before` and
+  `include-after`.
+- **Options:** `--number-sections` as `HEADING_STYLE n NUMBER`, and
+  `--template` for the user's own mom templates.
+- **Tests:** case tests with `-s`.
+
+### Phase 23.5: PDF through pdfmom
+
+- **Engine:** `--pdf-engine=pdfmom`, by base name, the default for
+  mom (`PdOptions.PdfWriterAndEngine`).
+- **Command:** `PdPdf` runs `pdfmom -t -k -KUTF-8`, with `-e` when
+  eqn is used, plus the `--pdf-engine-opt` options, on the source in
+  the temporary directory. No `-dpaper`: `.PAPER` sets the size.
+- **Images:** converted to PDF as for groff (decisions 23 and 26).
+  When the document gives no size, it comes from `pdfinfo`; without
+  `pdfinfo`, podoc warns and leaves the image out.
+- **Exit statuses:** 47 for no `pdfmom`, 43 for a failure.
+- **Tests:** a PDF test in `tools/runimages` or a new
+  `tools/runmom`. It checks the text, the page count, the outline and
+  an image in the PDF. It skips without `pdfmom` and `pdftotext`.
+- **Acceptance:** the 005-merchant scenario, in a copy with
+  `for-format mom` figures and a `raw:: mom` `.NEWPAGE`, under groff
+  1.23.0 with the user's Optima and Symbola site-fonts (`-F`): the
+  contents on the first pages, statement pages, both figures.
+- **By hand:** under groff 1.23.0 and 1.25.0, the user's mom
+  experiments' features (columns, links, numbered headings, the
+  contents first) from a markdown and an rST input.
+
+### Phase 23.6: Documentation and other systems
+
+- **Docs:**
+  - docs/user/podoc.md: the writer, the engine, the template's
+    variables, and how to write a mom template;
+  - docs/user/differences.md: an output pandoc does not have;
+  - AGENTS.md and the module list.
+- **Other systems:** `make test` on the six BSD VMs; the PDF tests
+  skip where groff has no pdfmom.
 
 ## Later, not scheduled
 
@@ -2570,3 +2738,14 @@ without groff, gs and pdftotext.
     `-O2` and `-OC` (288 case tests, 23 round trips, 5 image tests;
     `convert` and `pdf-eps` skipped: no converters, and no
     `pdftotext` on any of them).
+- 2026-11-21: Research on a mom writer and PDF through `pdfmom`,
+  recorded in `docs/research/pdfmom-backend.md`; Phase 23 proposed,
+  waiting on the user's answers to its §9. Checked on atla: a small
+  mom document (title, `NAMED` heading, footnote, `PDF_LINK`, list,
+  tbl table, `.TOC`) builds with `pdfmom -t` under groff 1.23.0 and
+  1.25.0, with an outline and links in both; `.AUTO_RELOCATE_TOC TOP`
+  moves the contents to page 1 only when it comes before `.START`.
+- 2026-11-21: The user answered the research's questions: decision
+  27 schedules Phase 23 [planned], with the 005-merchant scenario's
+  statement-sized PDF as its acceptance target. Nothing implemented
+  yet.
