@@ -1,0 +1,3 @@
+Loop.
+
+.. include:: loop.rst

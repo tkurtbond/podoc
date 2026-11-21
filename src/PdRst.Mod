@@ -4,7 +4,7 @@
    substitutions and notes. *)
 MODULE PdRst;
 
-IMPORT Ropes, Platform, PdIO, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
+IMPORT Ropes, Strings, Platform, PdIO, PdJson, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
   RI := PdRstInline, SH := PdShared;
 
 CONST
@@ -31,6 +31,14 @@ TYPE
   SubstDesc = RECORD key: A.Rope; blocks: A.Block; next: Subst END;
   SubstWalker = POINTER TO SubstWalkerDesc;
   SubstWalkerDesc = RECORD (A.WalkerDesc) END;
+  Inc = POINTER TO IncDesc;
+  IncDesc = RECORD
+    name: PdIO.Text; (* as the include directive gave it *)
+    text: B.Text; (* its text, as parsed *)
+    start: LONGINT; (* the line its text starts at *)
+    len: LONGINT; (* the length of its text, as pandoc has it *)
+    next: Inc (* the file that includes it *)
+  END;
   Id = POINTER TO IdDesc;
   IdDesc = RECORD id: A.Rope; next: Id END;
 
@@ -45,6 +53,7 @@ VAR
   notes, notesLast: Note; (* stateNotes, in document order *)
   citations: Note; (* stateCitations, sorted by ref *)
   substs: Subst; (* stateSubstitutions *)
+  incs: Inc; (* the files being included, the innermost first *)
 
 PROCEDURE^ Block(VAR l: A.Blocks): BOOLEAN;
 PROCEDURE^ ParseBlocks(): A.Block;
@@ -1171,6 +1180,15 @@ BEGIN
   RETURN f.raw
 END FieldVal;
 
+(* Whether d has a field name *)
+PROCEDURE HasField(VAR d: Directive; name: ARRAY OF CHAR): BOOLEAN;
+  VAR f: Field;
+BEGIN
+  f := d.fields;
+  WHILE (f # NIL) & ~Is(f.name, name) DO f := f.next END;
+  RETURN f # NIL
+END HasField;
+
 (* The words of r, added to a's classes *)
 PROCEDURE AddWords(a: A.Attr; r: A.Rope);
   VAR b: B.Buf; i, s: LONGINT;
@@ -1418,20 +1436,152 @@ BEGIN
   RETURN BufR(e)
 END EscapeURIRope;
 
+(* Haskell's reads of a Double from r, with spaces around it allowed *)
+PROCEDURE ReadReal(r: A.Rope; VAR x: LONGREAL): BOOLEAN;
+  VAR b: B.Buf; s: ARRAY 64 OF CHAR; i, j, n: LONGINT;
+
+  PROCEDURE Digits(): BOOLEAN;
+    VAR k: LONGINT;
+  BEGIN
+    k := i;
+    WHILE (i < n) & (b.t[i] >= "0") & (b.t[i] <= "9") DO INC(i) END;
+    RETURN i > k
+  END Digits;
+
+BEGIN
+  IF r = NIL THEN RETURN FALSE END;
+  B.InitBuf(b); MI.PutRope(b, r); RI.TrimBuf(b); n := b.len; i := 0;
+  IF (n = 0) OR (n >= LEN(s)) THEN RETURN FALSE END;
+  IF b.t[0] = "-" THEN INC(i) END;
+  IF ~Digits() THEN RETURN FALSE END;
+  IF (i < n) & (b.t[i] = ".") THEN
+    INC(i); IF ~Digits() THEN RETURN FALSE END
+  END;
+  IF (i < n) & ((b.t[i] = "e") OR (b.t[i] = "E")) THEN
+    INC(i);
+    IF (i < n) & ((b.t[i] = "+") OR (b.t[i] = "-")) THEN INC(i) END;
+    IF ~Digits() THEN RETURN FALSE END
+  END;
+  IF i # n THEN RETURN FALSE END;
+  FOR j := 0 TO n - 1 DO s[j] := b.t[j] END;
+  s[n] := 0X;
+  Strings.StrToLongReal(s, x);
+  RETURN TRUE
+END ReadReal;
+
+(* x as Haskell's show writes a Double, added to out *)
+PROCEDURE ShowReal(x: LONGREAL; VAR out: B.Buf);
+  VAR digits: ARRAY 24 OF CHAR; n, e, i: INTEGER; k: LONGINT; s: ARRAY 24 OF CHAR;
+BEGIN
+  IF x < 0 THEN B.PutChar(out, "-"); x := -x END;
+  IF x = 0 THEN B.PutChar(out, "0"); B.PutChar(out, "."); B.PutChar(out, "0"); RETURN END;
+  PdJson.ShortestDigits(x, digits, n, e);
+  IF (e >= 0) & (e <= 7) THEN
+    IF e = 0 THEN
+      B.PutChar(out, "0"); B.PutChar(out, ".");
+      FOR i := 0 TO n - 1 DO B.PutChar(out, digits[i]) END
+    ELSE
+      FOR i := 0 TO e - 1 DO
+        IF i < n THEN B.PutChar(out, digits[i]) ELSE B.PutChar(out, "0") END
+      END;
+      B.PutChar(out, ".");
+      IF n <= e THEN B.PutChar(out, "0")
+      ELSE FOR i := e TO n - 1 DO B.PutChar(out, digits[i]) END
+      END
+    END
+  ELSE
+    B.PutChar(out, digits[0]); B.PutChar(out, ".");
+    IF n = 1 THEN B.PutChar(out, "0")
+    ELSE FOR i := 1 TO n - 1 DO B.PutChar(out, digits[i]) END
+    END;
+    B.PutChar(out, "e");
+    k := e - 1; IF k < 0 THEN B.PutChar(out, "-"); k := -k END;
+    i := 0;
+    REPEAT s[i] := CHR(ORD("0") + k MOD 10); k := k DIV 10; INC(i) UNTIL k = 0;
+    WHILE i > 0 DO DEC(i); B.PutChar(out, s[i]) END
+  END
+END ShowReal;
+
+(* The scale of an image directive, from its field scale *)
+PROCEDURE ImageScale(VAR d: Directive): LONGREAL;
+  VAR r: A.Rope; n: LONGINT; x: LONGREAL;
+BEGIN
+  r := FieldVal(d, "scale");
+  IF r = NIL THEN RETURN 1.0 END;
+  r := Trim(r); n := Ropes.Length(r);
+  IF (n > 0) & (Ropes.Fetch(r, n - 1) = "%") THEN
+    IF ReadReal(Ropes.Substring(r, 0, n - 1), x) THEN RETURN x / 100.0 END
+  ELSIF ReadReal(r, x) THEN RETURN x
+  END;
+  RETURN 1.0
+END ImageScale;
+
+(* Adds to a the dimension name (width or height) of d, scaled by
+   scale, as pandoc's imgAttr *)
+PROCEDURE AddDim(VAR d: Directive; a: A.Attr; name: ARRAY OF CHAR; scale: LONGREAL);
+  VAR r: A.Rope; b, o: B.Buf; i, s: LONGINT; x, y: LONGREAL; f: LONGINT; num: ARRAY 64 OF CHAR;
+    unit: ARRAY 8 OF CHAR; ok: BOOLEAN; fx: A.Rope;
+BEGIN
+  r := FieldVal(d, name);
+  IF r = NIL THEN RETURN END;
+  B.InitBuf(b); B.InitBuf(o); MI.PutRope(b, r);
+  s := 0;
+  FOR i := 0 TO b.len - 1 DO
+    IF ~B.IsWhite(b.t[i]) THEN b.t[s] := b.t[i]; INC(s) END
+  END;
+  b.len := s; i := 0;
+  WHILE (i < b.len) & (i < LEN(num) - 1)
+      & ((b.t[i] = ".") OR (b.t[i] >= "0") & (b.t[i] <= "9")) DO
+    num[i] := b.t[i]; INC(i)
+  END;
+  num[i] := 0X;
+  IF (b.len - i >= LEN(unit)) OR ~ReadReal(Ropes.FromString(num), x) THEN RETURN END;
+  s := 0;
+  WHILE i < b.len DO unit[s] := b.t[i]; INC(s); INC(i) END;
+  unit[s] := 0X;
+  IF (unit = "") OR (unit = "px") THEN
+    y := scale * ENTIER(x); f := ENTIER(y);
+    IF (y - f > 0.5) OR (y - f = 0.5) & ODD(f) THEN INC(f) END;
+    MI.PutRope(o, SH.IntRope(f)); unit := "px"
+  ELSIF unit = "%" THEN ShowReal(scale * x, o)
+  ELSIF (unit = "cm") OR (unit = "mm") OR (unit = "in") OR (unit = "inch")
+      OR (unit = "pt") OR (unit = "pc") OR (unit = "em") THEN
+    IF unit = "inch" THEN unit := "in" END;
+    y := scale * x;
+    IF y < 0 THEN y := 0 END;
+    fx := SH.Fixed(y, 5); MI.PutRope(o, fx);
+    WHILE o.t[o.len - 1] = "0" DO DEC(o.len) END;
+    IF o.t[o.len - 1] = "." THEN DEC(o.len) END
+  ELSE RETURN
+  END;
+  i := 0; WHILE unit[i] # 0X DO B.PutChar(o, unit[i]); INC(i) END;
+  A.AddKeyVal(a, A.S(name), BufR(o))
+END AddDim;
+
+(* The words of the class field of d with "align-" and its align
+   field after them, added to a *)
+PROCEDURE AddAlign(VAR d: Directive; a: A.Attr);
+  VAR cls, al: A.Rope;
+BEGIN
+  cls := FieldVal(d, "class");
+  IF cls # NIL THEN cls := Trim(cls) ELSE cls := A.S("") END;
+  al := FieldVal(d, "align");
+  IF al # NIL THEN cls := Ropes.Cat(cls, Ropes.Cat(A.S("align-"), Trim(al))) END;
+  AddWords(a, cls)
+END AddAlign;
+
 (* The image directive *)
 PROCEDURE ImageDirective(VAR d: Directive): A.Block;
-  VAR a: A.Attr; src, t, cls, al: A.Rope; img: A.Inline;
+  VAR a: A.Attr; src, t: A.Rope; img: A.Inline; scale: LONGREAL;
 BEGIN
   src := EscapeURIRope(Trim(BufR(d.top)));
   a := A.NewAttr(Trim(FieldVal(d, "name")));
-  cls := FieldVal(d, "class");
-  IF cls # NIL THEN cls := Trim(cls) ELSE cls := A.S("") END;
-  AddWords(a, cls);
-  al := FieldVal(d, "align");
-  IF al # NIL THEN cls := Ropes.Cat(cls, Ropes.Cat(A.S("align-"), Trim(al))) END;
-  AddWords(a, cls);
+  AddWords(a, Trim(FieldVal(d, "class")));
+  AddAlign(d, a);
+  scale := ImageScale(d);
+  AddDim(d, a, "width", scale); AddDim(d, a, "height", scale);
   t := FieldVal(d, "alt");
-  IF t = NIL THEN t := A.S("image") ELSE t := Trim(t) END;
+  IF ~HasField(d, "alt") THEN t := A.S("image") ELSE t := Trim(t) END;
   img := A.NewLink(A.Image, a, A.NewStr(t), src, A.S(""));
   t := FieldVal(d, "target");
   IF t # NIL THEN
@@ -1440,11 +1590,397 @@ BEGIN
   RETURN A.NewInlinesBlock(A.Para, img)
 END ImageDirective;
 
-(* Runs the directive d, adding its blocks to l; FALSE if it fails *)
+(* extractCaption, on body': the caption and the legend *)
+PROCEDURE ExtractCaption(VAR d: Directive; VAR capt: A.Inline; VAR legend: A.Block);
+  VAR b: B.Buf; f: B.Frame; l: A.Inlines; sp, st: LONGINT;
+BEGIN
+  B.InitBuf(b); PutBuf(b, d.body); B.PutChar(b, 0AX); B.PutChar(b, 0AX);
+  sp := B.lastStrPos; st := B.lastStrText; B.lastStrPos := -1;
+  B.Enter(f, b.t, b.len);
+  A.InitInlines(l); RI.Inlines(l); capt := MI.Trim(l);
+  B.pos := B.SkipBlankLines(B.pos);
+  legend := ParseBlocks();
+  B.Leave(f);
+  B.lastStrPos := sp; B.lastStrText := st
+END ExtractCaption;
+
+(* The figure directive *)
+PROCEDURE FigureDirective(VAR d: Directive): A.Block;
+  VAR ia, fa: A.Attr; src, t: A.Rope; capt, alt: A.Inline; legend, cb: A.Block;
+    fl: Field; scale: LONGREAL;
+BEGIN
+  ExtractCaption(d, capt, legend);
+  src := EscapeURIRope(Trim(BufR(d.top)));
+  ia := A.NewAttr(Trim(FieldVal(d, "name")));
+  AddWords(ia, Trim(FieldVal(d, "class")));
+  scale := ImageScale(d);
+  AddDim(d, ia, "width", scale); AddDim(d, ia, "height", scale);
+  fa := A.NewAttr(NIL);
+  fl := d.fields;
+  WHILE fl # NIL DO
+    IF Is(fl.name, "figclass") THEN AddWords(fa, Trim(fl.raw)) END;
+    fl := fl.next
+  END;
+  AddAlign(d, fa);
+  t := FieldVal(d, "alt");
+  IF HasField(d, "alt") THEN alt := RI.TextOf(Trim(t)) ELSE alt := A.CopyInlines(capt) END;
+  cb := NIL;
+  IF capt # NIL THEN cb := A.NewInlinesBlock(A.Plain, capt) END;
+  IF cb = NIL THEN cb := legend ELSE cb.next := legend END;
+  RETURN A.NewFigure(fa, cb,
+    A.NewInlinesBlock(A.Plain, A.NewLink(A.Image, ia, alt, src, A.S(""))))
+END FigureDirective;
+
+(* The blocks of body' *)
+PROCEDURE BodyBlocks(VAR d: Directive): A.Block;
+  VAR b: B.Buf;
+BEGIN
+  B.InitBuf(b); PutBuf(b, d.body); B.PutChar(b, 0AX); B.PutChar(b, 0AX);
+  RETURN BlocksOf(b)
+END BodyBlocks;
+
+(* The fields of d, with their values trimmed on the right, but for
+   those named in skip (" name ...") *)
+PROCEDURE AddFields(VAR d: Directive; a: A.Attr; skip: ARRAY OF CHAR);
+  VAR f: Field; s: ARRAY 72 OF CHAR; i, j: INTEGER; n: A.Rope;
+BEGIN
+  f := d.fields;
+  WHILE f # NIL DO
+    s := " "; i := 1; j := 0; n := f.name;
+    WHILE (j < Ropes.Length(n)) & (i < LEN(s) - 2) DO s[i] := Ropes.Fetch(n, j); INC(i); INC(j) END;
+    s[i] := " "; s[i + 1] := 0X;
+    IF (j < Ropes.Length(n)) OR (Strings.Pos(s, skip, 0) < 0) THEN
+      A.AddKeyVal(a, f.name, TrimR(f.raw))
+    END;
+    f := f.next
+  END
+END AddFields;
+
+(* codeblock, for code, code-block and sourcecode *)
+PROCEDURE CodeDirective(VAR d: Directive): A.Block;
+  VAR a: A.Attr; nl: A.Rope;
+BEGIN
+  a := A.NewAttr(Trim(FieldVal(d, "name")));
+  A.AddClass(a, Trim(BufR(d.top)));
+  nl := FieldVal(d, "number-lines");
+  IF HasField(d, "number-lines") THEN A.AddClass(a, A.S("numberLines")) END;
+  AddWords(a, Trim(FieldVal(d, "class")));
+  AddFields(d, a, " number-lines class id name ");
+  IF nl # NIL THEN
+    nl := TrimR(nl);
+    IF Ropes.Length(nl) > 0 THEN A.AddKeyVal(a, A.S("startFrom"), nl) END
+  END;
+  StripNewlines(d.body);
+  RETURN A.NewCodeBlock(a, BufR(d.body))
+END CodeDirective;
+
+(* The math directive: toChunks of top <> "\n\n" <> body *)
+PROCEDURE MathDirective(VAR d: Directive): A.Block;
+  VAR b, c: B.Buf; i, e: LONGINT; l: A.Inlines; first: BOOLEAN; a: A.Attr; m: A.Inline;
+
+  PROCEDURE Blank(s, e: LONGINT): BOOLEAN;
+  BEGIN
+    WHILE (s < e) & ((b.t[s] = " ") OR (b.t[s] = 09X)) DO INC(s) END;
+    RETURN s = e
+  END Blank;
+
+  PROCEDURE Chunk;
+    VAR k: LONGINT; aligned: BOOLEAN; o: B.Buf;
+  BEGIN
+    RI.TrimBuf(c);
+    IF first & (c.len = 0) THEN RETURN END;
+    first := FALSE;
+    aligned := FALSE;
+    FOR k := 0 TO c.len - 2 DO
+      IF (c.t[k] = "\") & (c.t[k + 1] = "\") THEN
+        aligned := TRUE
+      END
+    END;
+    B.InitBuf(o);
+    IF aligned THEN MI.PutRope(o, A.S("\begin{aligned}")); B.PutChar(o, 0AX) END;
+    PutBuf(o, c);
+    IF aligned THEN B.PutChar(o, 0AX); MI.PutRope(o, A.S("\end{aligned}")) END;
+    A.AddInline(l, A.NewMath(A.DisplayMath, BufR(o)))
+  END Chunk;
+
+BEGIN
+  B.InitBuf(b); PutBuf(b, d.top); B.PutChar(b, 0AX); B.PutChar(b, 0AX); PutBuf(b, d.body);
+  A.InitInlines(l); first := TRUE; i := 0;
+  WHILE i < b.len DO
+    (* a chunk: lines up to a blank one *)
+    B.InitBuf(c);
+    LOOP
+      IF i >= b.len THEN EXIT END;
+      e := i; WHILE (e < b.len) & (b.t[e] # 0AX) DO INC(e) END;
+      IF Blank(i, e) THEN EXIT END;
+      WHILE i < e DO B.PutChar(c, b.t[i]); INC(i) END;
+      B.PutChar(c, 0AX);
+      IF i < b.len THEN INC(i) END
+    END;
+    Chunk;
+    (* the blank lines *)
+    LOOP
+      IF i >= b.len THEN EXIT END;
+      e := i; WHILE (e < b.len) & (b.t[e] # 0AX) DO INC(e) END;
+      IF ~Blank(i, e) THEN EXIT END;
+      i := e; IF i < b.len THEN INC(i) END
+    END
+  END;
+  m := l.first;
+  a := A.NewAttr(Trim(FieldVal(d, "name")));
+  AddWords(a, Trim(FieldVal(d, "class")));
+  AddFields(d, a, " name id class ");
+  IF ~A.IsEmptyAttr(a) THEN m := A.NewSpan(a, m) END;
+  RETURN A.NewInlinesBlock(A.Para, m)
+END MathDirective;
+
+(* The class directive *)
+PROCEDURE ClassDirective(VAR d: Directive): A.Block;
+  VAR a, ha: A.Attr; ch: A.Blocks; c: A.StrList; k: A.KeyVal; h: A.Block;
+BEGIN
+  a := A.NewAttr(Trim(FieldVal(d, "name")));
+  AddWords(a, Trim(BufR(d.top)));
+  AddFields(d, a, "");
+  A.InitBlocks(ch);
+  IF d.body.len = 0 THEN
+    IF (B.pos < B.len) & Block(ch) THEN END;
+    h := ch.first;
+    IF (h # NIL) & (h.next = NIL) & (h.kind = A.Header) THEN
+      ha := h(A.HeaderBlk).attr;
+      IF ha = NIL THEN ha := A.NewAttr(NIL); h(A.HeaderBlk).attr := ha END;
+      IF a.id # NIL THEN
+        IF ha.id = NIL THEN ha.id := a.id ELSE ha.id := Ropes.Cat(ha.id, a.id) END
+      END;
+      c := a.classes; WHILE c # NIL DO A.AddClass(ha, c.s); c := c.next END;
+      k := a.attrs; WHILE k # NIL DO A.AddKeyVal(ha, k.key, k.value); k := k.next END;
+      RETURN h
+    END
+  ELSE A.AddBlock(ch, BodyBlocks(d))
+  END;
+  RETURN A.NewDiv(a, ch.first)
+END ClassDirective;
+
+(* The line-block directive *)
+PROCEDURE LineBlockDirective(VAR d: Directive): A.Block;
+  VAR i, e: LONGINT; first, last, line: A.InlineList;
+BEGIN
+  StripNewlines(d.body);
+  first := NIL; last := NIL; i := 0;
+  WHILE i < d.body.len DO
+    e := i; WHILE (e < d.body.len) & (d.body.t[e] # 0AX) DO INC(e) END;
+    NEW(line); line.inlines := RI.ParseInlines(d.body.t^, i, e - i); line.next := NIL;
+    IF first = NIL THEN first := line ELSE last.next := line END;
+    last := line;
+    i := e + 1
+  END;
+  RETURN A.NewLineBlock(first)
+END LineBlockDirective;
+
+(* A Para of the Strong of the inlines of r *)
+PROCEDURE StrongPara(r: A.Rope): A.Block;
+BEGIN
+  RETURN A.NewInlinesBlock(A.Para, A.NewCont(A.Strong, RI.ParseRope(r)))
+END StrongPara;
+
+(* Whether s is a named admonition *)
+PROCEDURE IsAdmonition(s: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  RETURN (s = "attention") OR (s = "caution") OR (s = "danger") OR (s = "error")
+    OR (s = "hint") OR (s = "important") OR (s = "note") OR (s = "tip")
+    OR (s = "warning")
+END IsAdmonition;
+
+(* Includes *)
+
+(* The name of the source and the line of the place p in the current
+   text, as pandoc's positions give them *)
+PROCEDURE SourcePos(p: LONGINT; VAR name: ARRAY OF CHAR; VAR line: LONGINT);
+  VAR i: LONGINT;
+BEGIN
+  name[0] := 0X; line := 1;
+  IF incs # NIL THEN
+    COPY(incs.name^, name); line := incs.start;
+    IF B.t = incs.text THEN
+      IF p > incs.len THEN p := incs.len END;
+      FOR i := 0 TO p - 1 DO IF B.t[i] = 0AX THEN INC(line) END END
+    END
+  ELSIF main # NIL THEN
+    IF B.depth > 0 THEN p := B.outerPos END;
+    IF p >= mainLen THEN p := mainLen - 1 END;
+    PdSource.Locate(main^, p, name, line)
+  END
+END SourcePos;
+
+(* safeRead of an Int from r *)
+PROCEDURE ReadInt(r: A.Rope; VAR n: LONGINT): BOOLEAN;
+  VAR x: LONGREAL; b: B.Buf; i: LONGINT;
+BEGIN
+  IF r = NIL THEN RETURN FALSE END;
+  B.InitBuf(b); MI.PutRope(b, r);
+  FOR i := 0 TO b.len - 1 DO
+    IF (b.t[i] = ".") OR (b.t[i] = "e") OR (b.t[i] = "E") THEN RETURN FALSE END
+  END;
+  IF ~ReadReal(r, x) OR (x > 1.0E9) OR (x < -1.0E9) THEN RETURN FALSE END;
+  n := ENTIER(x);
+  RETURN TRUE
+END ReadInt;
+
+(* Whether the line t[s .. e-1] contains the pattern r *)
+PROCEDURE LineHas(VAR t: ARRAY OF CHAR; s, e: LONGINT; r: A.Rope): BOOLEAN;
+  VAR i, j, n: LONGINT;
+BEGIN
+  n := Ropes.Length(r);
+  FOR i := s TO e - n DO
+    j := 0;
+    WHILE (j < n) & (t[i + j] = Ropes.Fetch(r, j)) DO INC(j) END;
+    IF j = n THEN RETURN TRUE END
+  END;
+  RETURN FALSE
+END LineHas;
+
+(* includeDirective *)
+PROCEDURE Include(VAR d: Directive; VAR l: A.Blocks): BOOLEAN;
+  VAR f, dir, path, nm: ARRAY 1024 OF CHAR; name: A.Rope; i, j, n, len, line,
+      start, end, nlines, s, e, k: LONGINT; t: PdIO.Text; c, o: B.Buf;
+    in, inc: Inc; hasStart, hasEnd, literal, started: BOOLEAN; lang, pa, pb: A.Rope;
+    m: Message; fr: B.Frame; a: A.Attr; fl: Field; num: ARRAY 24 OF CHAR;
+BEGIN
+  name := Trim(BufR(d.top));
+  n := Ropes.Length(name);
+  IF (n = 0) OR (n >= LEN(f)) THEN RETURN FALSE END;
+  B.InitBuf(c); PutBuf(c, d.body); RI.TrimBuf(c);
+  IF c.len > 0 THEN RETURN FALSE END;
+  Ropes.Blit(name, 0, f, 0, n); f[n] := 0X;
+  SourcePos(B.pos, nm, line);
+  in := incs;
+  WHILE in # NIL DO
+    IF in.name^ = f THEN
+      m := 'Include file loop at "'; Cat(m, nm); Cat(m, '" (line ');
+      CatNum(m, line); Cat(m, ", column 1)");
+      PdIO.Fail("", m, PdIO.ParseError)
+    END;
+    in := in.next
+  END;
+  (* takeDirectory of the source *)
+  COPY(nm, dir); i := -1; j := 0;
+  WHILE dir[j] # 0X DO IF dir[j] = "/" THEN i := j END; INC(j) END;
+  IF i < 0 THEN dir := "." ELSIF i = 0 THEN dir := "/" ELSE dir[i] := 0X END;
+  IF f[0] = "/" THEN COPY(f, path)
+  ELSE COPY(dir, path); IF dir # "/" THEN Strings.Append("/", path) END; Strings.Append(f, path)
+  END;
+  hasStart := ReadInt(FieldVal(d, "start-line"), start);
+  hasEnd := ReadInt(FieldVal(d, "end-line"), end);
+  B.InitBuf(c);
+  IF PdIO.Exists(path) THEN
+    PdIO.ReadFile(path, t, len);
+    i := 0;
+    IF (len >= 3) & (t[0] = 0EFX) & (t[1] = 0BBX) & (t[2] = 0BFX) THEN i := 3 END;
+    WHILE i < len DO IF t[i] # 0DX THEN B.PutChar(c, t[i]) END; INC(i) END;
+    IF hasStart OR hasEnd THEN (* exciseLines *)
+      nlines := 0; i := 0;
+      WHILE i < c.len DO
+        WHILE (i < c.len) & (c.t[i] # 0AX) DO INC(i) END;
+        INC(nlines); INC(i)
+      END;
+      IF ~hasStart THEN s := 1 ELSIF start >= 0 THEN s := start ELSE s := nlines + start END;
+      IF ~hasEnd THEN e := nlines ELSIF end >= 0 THEN e := end ELSE e := nlines + end END;
+      B.InitBuf(o); k := 1; i := 0;
+      WHILE i < c.len DO
+        j := i; WHILE (j < c.len) & (c.t[j] # 0AX) DO INC(j) END;
+        IF (k >= s) & (k - s < e - (s - 1)) & (k <= e) THEN
+          WHILE i < j DO B.PutChar(o, c.t[i]); INC(i) END;
+          B.PutChar(o, 0AX)
+        END;
+        INC(k); i := j + 1
+      END;
+      c := o
+    END
+  ELSE
+    m := "Could not load include file "; Cat(m, f); Cat(m, " at ");
+    IF (nm # "") & (nm # "-") THEN Cat(m, nm); Cat(m, " ") END;
+    Cat(m, "line "); CatNum(m, line); Cat(m, " column 1");
+    PdIO.Warn(m)
+  END;
+  lang := FieldVal(d, "code");
+  IF ~HasField(d, "code") THEN lang := FieldVal(d, "literal") END;
+  literal := HasField(d, "code") OR HasField(d, "literal");
+  (* selectLines and T.unlines . T.lines *)
+  pa := FieldVal(d, "start-after"); IF HasField(d, "start-after") THEN pa := Trim(pa) END;
+  pb := FieldVal(d, "end-before"); IF HasField(d, "end-before") THEN pb := Trim(pb) END;
+  B.InitBuf(o); i := 0; started := ~HasField(d, "start-after");
+  WHILE i < c.len DO
+    j := i; WHILE (j < c.len) & (c.t[j] # 0AX) DO INC(j) END;
+    IF ~started THEN
+      IF LineHas(c.t^, i, j, pa) THEN started := TRUE END
+    ELSIF HasField(d, "end-before") & LineHas(c.t^, i, j, pb) THEN i := c.len
+    ELSE
+      WHILE i < j DO B.PutChar(o, c.t[i]); INC(i) END;
+      B.PutChar(o, 0AX)
+    END;
+    i := j + 1
+  END;
+  IF literal THEN
+    a := A.NewAttr(TrimR(FieldVal(d, "name")));
+    A.AddClass(a, TrimR(lang));
+    IF HasField(d, "number-lines") THEN A.AddClass(a, A.S("numberLines")) END;
+    AddWords(a, FieldVal(d, "class"));
+    fl := d.fields;
+    WHILE fl # NIL DO
+      IF ~Is(fl.name, "number-lines") & ~Is(fl.name, "class") & ~Is(fl.name, "id")
+          & ~Is(fl.name, "name") THEN
+        A.AddKeyVal(a, fl.name, fl.raw)
+      END;
+      fl := fl.next
+    END;
+    lang := FieldVal(d, "number-lines");
+    IF lang # NIL THEN A.AddKeyVal(a, A.S("startFrom"), lang) END;
+    A.AddBlock(l, A.NewCodeBlock(a, BufR(o)))
+  ELSE
+    B.PutChar(o, 0AX); NEW(inc); inc.len := o.len;
+    (* a further new line, which the parser needs at the end *)
+    B.PutChar(o, 0AX); NEW(inc.name, n + 1); COPY(f, inc.name^);
+    IF hasStart THEN inc.start := start ELSE inc.start := 1 END;
+    inc.text := o.t; inc.next := incs; incs := inc;
+    B.Enter(fr, o.t, o.len);
+    B.pos := B.SkipBlankLines(0);
+    A.AddBlock(l, ParseBlocks());
+    B.Leave(fr);
+    incs := inc.next
+  END;
+  RETURN TRUE
+END Include;
+
+(* The body of raw with the field file: the file, or nothing *)
+PROCEDURE RawFile(VAR d: Directive);
+  VAR f, dir, path, nm: ARRAY 1024 OF CHAR; r: A.Rope; i, j, n, len, line: LONGINT;
+    t: PdIO.Text;
+BEGIN
+  B.InitBuf(d.body);
+  r := Trim(FieldVal(d, "file")); n := Ropes.Length(r);
+  IF (n > 0) & (n < LEN(f)) THEN
+    Ropes.Blit(r, 0, f, 0, n); f[n] := 0X;
+    SourcePos(B.pos, nm, line);
+    COPY(nm, dir); i := -1; j := 0;
+    WHILE dir[j] # 0X DO IF dir[j] = "/" THEN i := j END; INC(j) END;
+    IF i < 0 THEN dir := "." ELSIF i = 0 THEN dir := "/" ELSE dir[i] := 0X END;
+    IF f[0] = "/" THEN COPY(f, path)
+    ELSE COPY(dir, path); IF dir # "/" THEN Strings.Append("/", path) END; Strings.Append(f, path)
+    END;
+    IF PdIO.Exists(path) THEN
+      PdIO.ReadFile(path, t, len); i := 0;
+      IF (len >= 3) & (t[0] = 0EFX) & (t[1] = 0BBX) & (t[2] = 0BFX) THEN i := 3 END;
+      WHILE i < len DO B.PutChar(d.body, t[i]); INC(i) END
+    END
+  END
+END RawFile;
+
+(* Runs the directive d, adding its blocks to l; FALSE if it fails.
+   B.pos is after the directive. *)
 PROCEDURE RunDirective(VAR d: Directive; VAR l: A.Blocks): BOOLEAN;
-  VAR b: B.Buf; r: A.Rope;
+  VAR b: B.Buf; r, sub: A.Rope; a: A.Attr; t, bl: A.Block; s: ARRAY 64 OF CHAR;
 BEGIN
   IF d.label = "role" THEN RETURN NewRole(d)
+  ELSIF d.label = "include" THEN RETURN Include(d, l)
   ELSIF d.label = "default-role" THEN
     r := Trim(BufR(d.top));
     IF Ropes.Length(r) = 0 THEN RI.defaultRole := A.S("title-reference")
@@ -1464,9 +2000,55 @@ BEGIN
     FormatDate(d.top, b);
     A.AddBlock(l, A.NewInlinesBlock(A.Para, RI.TextOf(BufR(b))))
   ELSIF d.label = "image" THEN A.AddBlock(l, ImageDirective(d))
+  ELSIF d.label = "figure" THEN A.AddBlock(l, FigureDirective(d))
   ELSIF d.label = "raw" THEN
+    IF HasField(d, "file") THEN RawFile(d) END;
     StripNewlines(d.body);
     A.AddBlock(l, A.NewRawBlock(Trim(BufR(d.top)), BufR(d.body)))
+  ELSIF d.label = "container" THEN
+    a := A.NewAttr(Trim(FieldVal(d, "name")));
+    A.AddClass(a, A.S("container"));
+    AddWords(a, BufR(d.top));
+    AddWords(a, Trim(FieldVal(d, "class")));
+    A.AddBlock(l, A.NewDiv(a, BodyBlocks(d)))
+  ELSIF d.label = "compound" THEN A.AddBlock(l, BodyBlocks(d))
+  ELSIF (d.label = "pull-quote") OR (d.label = "epigraph") OR (d.label = "highlights") THEN
+    A.AddBlock(l, A.NewBlockQuote(BodyBlocks(d)))
+  ELSIF d.label = "rubric" THEN A.AddBlock(l, StrongPara(BufR(d.top)))
+  ELSIF IsAdmonition(d.label) OR (d.label = "admonition") THEN
+    bl := TopBodyBlocks(d);
+    IF d.label # "admonition" THEN
+      COPY(d.label, s); s[0] := CAP(s[0]);
+      t := A.NewDiv(DirAttr(d, "title"), A.NewInlinesBlock(A.Para, A.NewStr(A.S(s))));
+      t(A.DivBlk).attr.id := A.S(""); t(A.DivBlk).attr.attrs := NIL;
+      t(A.DivBlk).attr.classes := NIL; A.AddClass(t(A.DivBlk).attr, A.S("title"));
+      t.next := bl; bl := t
+    END;
+    A.AddBlock(l, A.NewDiv(DirAttr(d, d.label), bl))
+  ELSIF d.label = "sidebar" THEN
+    sub := FieldVal(d, "subtitle");
+    IF sub # NIL THEN sub := Trim(sub) END;
+    r := Trim(BufR(d.top));
+    IF (sub # NIL) & (Ropes.Length(sub) > 0) THEN
+      r := Ropes.Cat(r, Ropes.Cat(A.S(":  "), sub))
+    END;
+    t := StrongPara(r); t.next := BodyBlocks(d);
+    A.AddBlock(l, A.NewDiv(DirAttr(d, "sidebar"), t))
+  ELSIF d.label = "topic" THEN
+    t := StrongPara(BufR(d.top)); t.next := BodyBlocks(d);
+    A.AddBlock(l, A.NewDiv(DirAttr(d, "topic"), t))
+  ELSIF (d.label = "code") OR (d.label = "code-block") OR (d.label = "sourcecode") THEN
+    A.AddBlock(l, CodeDirective(d))
+  ELSIF d.label = "aafig" THEN
+    a := A.NewAttr(Trim(FieldVal(d, "name")));
+    A.AddClass(a, A.S("aafig"));
+    AddFields(d, a, "");
+    StripNewlines(d.body);
+    A.AddBlock(l, A.NewCodeBlock(a, BufR(d.body)))
+  ELSIF d.label = "math" THEN A.AddBlock(l, MathDirective(d))
+  ELSIF d.label = "bibliography" THEN A.AddBlock(l, A.NewDiv(A.NewAttr(A.S("refs")), NIL))
+  ELSIF d.label = "class" THEN A.AddBlock(l, ClassDirective(d))
+  ELSIF d.label = "line-block" THEN A.AddBlock(l, LineBlockDirective(d))
   ELSE
     (* pandoc logs SkippedContent, an INFO message *)
     A.AddBlock(l, A.NewDiv(DirAttr(d, d.label), TopBodyBlocks(d)))
@@ -1476,13 +2058,14 @@ END RunDirective;
 
 (* directive *)
 PROCEDURE DirectiveBlock(VAR l: A.Blocks): BOOLEAN;
-  VAR d: Directive; q: LONGINT;
+  VAR d: Directive; p, q: LONGINT;
 BEGIN
-  IF ~B.Looking(B.pos, "..") THEN RETURN FALSE END;
-  q := DirectiveAt(B.pos + 2, d);
+  p := B.pos;
+  IF ~B.Looking(p, "..") THEN RETURN FALSE END;
+  q := DirectiveAt(p + 2, d);
   IF q < 0 THEN RETURN FALSE END;
-  IF ~RunDirective(d, l) THEN RETURN FALSE END;
   B.pos := q;
+  IF ~RunDirective(d, l) THEN B.pos := p; RETURN FALSE END;
   RETURN TRUE
 END DirectiveBlock;
 
@@ -1520,8 +2103,8 @@ BEGIN
   q := DirectiveAt(B.pos, d);
   IF q < 0 THEN B.pos := p; RETURN FALSE END;
   A.InitBlocks(res);
-  IF ~RunDirective(d, res) THEN B.pos := p; RETURN FALSE END;
   B.pos := q;
+  IF ~RunDirective(d, res) THEN B.pos := p; RETURN FALSE END;
   IF (res.first # NIL) & (res.first.next = NIL) & (res.first.kind = A.Para) THEN
     i := res.first(A.InlinesBlk).inlines;
     IF DefaultAlt(i) THEN i(A.LinkInl).content := alt
@@ -1788,7 +2371,7 @@ BEGIN
   B.Start(t, n + 2 - k, tabStop);
   main := B.t; mainLen := n + 2 - k;
   notes := NIL; notesLast := NIL; citations := NIL; substs := NIL;
-  nStyles := 0; ids := NIL; highlight := NIL;
+  nStyles := 0; ids := NIL; highlight := NIL; incs := NIL;
   RI.Reset;
   d := A.NewDoc();
   B.pos := B.SkipBlankLines(0);

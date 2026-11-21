@@ -1044,7 +1044,7 @@ All of this runs under `-O2` and `-OC`, as every phase does.
   after their use. pandoc's messages for a missing or circular
   reference are given too.
 
-### Phase 19.3: Directives
+### Phase 19.3: Directives [done]
 
 - Every directive pandoc handles:
   - `raw`, `container`, `class`, `compound`, `line-block`;
@@ -2299,3 +2299,31 @@ ConTeXt.
     round trips and the image tests under each.
   - Not yet: image `:width:`, `:height:` and `:scale:` and the other
     directives (19.3).
+- 2026-11-21: Phase 19.3 done: every directive pandoc's rST reader
+  handles.
+  - `PdRst`: `image` with `:width:`, `:height:` and `:scale:` (pixels
+    rounded as Haskell's `round`, other units with pandoc's
+    `showFl`); `figure` (caption and legend); `container`, `compound`,
+    `pull-quote`, `epigraph`, `highlights`, `rubric`, the admonitions
+    and `admonition`, `sidebar`, `topic`, `code`/`code-block`/
+    `sourcecode` (`:number-lines:`), `aafig`, `math` (an `aligned`
+    environment for several lines), `bibliography`, `class` (on its
+    body, or on the next block, merged into a lone header's
+    attribute), `line-block`; any other directive is a `Div` with its
+    name as a class and its fields as attributes.
+  - `include`: relative to the including file's directory, as pandoc
+    names nested files; `start-line`, `end-line` (negative from the
+    end), `start-after`, `end-before`, `literal` and `code` (a
+    `CodeBlock`, with pandoc's untrimmed attributes); parsed in the
+    includer's state; a missing file warns "Could not load include
+    file" and gives nothing; a loop ends podoc with "Include file loop
+    at ..." and status 64, at pandoc's position. `raw` with `:file:`
+    reads the file, or gives nothing if it is missing.
+  - New cases `rst-directives2`, `rst-images`, `rst-figures`,
+    `rst-include` (its files in `test/cases/rst-include`),
+    `rst-include-loop` and `rst-raw-file`, with JSON from pandoc 3.10;
+    each matched pandoc, with its warnings and status.
+  - `make test` passed under `-O2` and `-OC`: 265 case tests, 23
+    round trips and the 6 image tests under each.
+  - Not yet: tables and the table directives (19.4). Not checked:
+    `raw` with both `:file:` and an indented body.
