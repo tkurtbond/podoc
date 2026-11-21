@@ -20,7 +20,10 @@ The Lost-Worlds builds that use `pandoc-include` are about 65× faster,
 mostly because pandoc runs that Python filter.
 
 The layout writers' memory use on large inputs, the exception before,
-is fixed: see `docs/developer/memory-use-problem.md`.
+is fixed: see `docs/developer/memory-use-problem.md`. Above about
+35 MB, podoc needs a larger heap than poc's default 1 GB
+(`PODOC_HEAP_LIMIT`); with it, podoc is still 3.2–3.5× faster at 45 MB,
+in about half pandoc's memory (see "Very large inputs").
 
 ## How it was measured
 
@@ -134,6 +137,35 @@ the template change (see `docs/developer/memory-use-problem.md`), the
 body was built whole before it was laid out, and ms and ConTeXt took
 5–7 MiB more with `-s` on MANUAL: ms 25.7 MiB, ConTeXt 24.1 MiB.
 pandoc's memory is within a few MiB either way.
+
+## Very large inputs
+
+MANUAL ×150 (45 MB), measured 2026-11-20 with `/usr/bin/time`, one run
+each, not `tools/bench`. podoc's heap may grow to poc's default
+limit, 1 GB, which this input passes. At that limit podoc ran for
+6 min 15 s before it stopped with "heap exhausted" (status 11): near
+the limit, poc's collector runs a full collection for nearly every
+allocation (Peaseblossom's "Ongoing implementation enhancements", 16).
+With the limit raised by `PODOC_HEAP_LIMIT` (decision 24), every writer
+finishes:
+
+| MANUAL ×150, `--wrap=none` | pandoc | podoc `-OC` | Time ratio | Memory ratio |
+|---|---:|---:|---:|---:|
+| json | 34.1 s, 2.89 GiB | 9.6 s, 1.56 GiB | 3.5× | 1.9× |
+| ms | 45.8 s, 4.60 GiB | 14.4 s, 1.94 GiB | 3.2× | 2.4× |
+| html | | 14.8 s, 1.92 GiB | | |
+| context | | 14.2 s, 1.96 GiB | | |
+| markdown | | 17.6 s, 1.96 GiB | | |
+
+- **Limits used:** 3 GB for json and ms, 4 GB for the others. 2 GB was
+  enough for json; the larger limit made no difference to it.
+- **`-O2`:** json 9.6 s, 1.51 GiB; ms 14.7 s, 1.78 GiB.
+- **podoc's time grows faster than its input.** From ×10 to ×150, 15
+  times the input, podoc's times grow 24–27 times for the layout
+  writers and HTML and 33 times for JSON, against about 15 times for
+  pandoc's. Its memory grows 16 times (json, 99 MiB to 1.56 GiB),
+  pandoc's about 10 times. Most likely each collection marks a larger
+  live heap, but this was not measured.
 
 ## The Lost-Worlds builds
 
