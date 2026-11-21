@@ -3,8 +3,9 @@
 podoc is a small subset of [pandoc](https://pandoc.org) 3.10, written
 in Oberon-2 and built with the Peaseblossom Oberon Compiler (`poc`).
 It reads pandoc markdown with YAML metadata. It writes HTML, groff
-`ms`, ConTeXt, markdown, plain text and pandoc's JSON, and it makes PDF with
-`pdfroff`, `groff` or ConTeXt. It is for systems where pandoc is too
+`ms`, ConTeXt, markdown, plain text and pandoc's JSON, and groff `mom`,
+which pandoc does not, and it makes PDF with `pdfroff`, `groff`,
+ConTeXt or `pdfmom`. It is for systems where pandoc is too
 big to install or will not build, and it runs only the parts of pandoc
 that a set of writing builds use. Where it does those things, its
 output is pandoc's, or equivalent to it. Where it knowingly differs,
@@ -33,14 +34,16 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
     the separate groff-pdfmark package. An older `pdfroff` left on the
     PATH may then make an empty PDF without reporting an error;
   - for `context`: ConTeXt LMTX;
+  - for `mom`: groff 1.23 or later, with `pdfmom`, and `pdfinfo`
+    (poppler) for the sizes of images that give none (see "mom");
   - for SVG images in ConTeXt: `rsvg-convert` (optional).
 - For images in ms output (see "Images in ms"), optionally:
   `rsvg-convert` for SVG, and `img2pdf` or ImageMagick (`magick`, or
   version 6's `convert` and `identify`) for PNG, JPEG, GIF and other
   bitmaps. groff before 1.25 reads only PDF 1.4, which podoc asks
   `rsvg-convert` for.
-- For EPS and PostScript images in PDF made with `groff`: Ghostscript
-  (`gs`), optionally.
+- For EPS and PostScript images in PDF made with `groff`, and in mom
+  output: Ghostscript (`gs`), optionally.
 
 podoc is built and tested on Linux (Fedora), FreeBSD, NetBSD and
 OpenBSD.
@@ -68,7 +71,7 @@ when no files are named. `podoc --help` lists the options:
 | Option | Meaning |
 |---|---|
 | `-f`, `-r`, `--from`, `--read` | the input format: `markdown` or `rst` |
-| `-t`, `-w`, `--to`, `--write` | `html` (`html5`), `ms`, `context`, `markdown`, `plain`, `json` or `pdf`; `plain+gutenberg` for Project Gutenberg's conventions |
+| `-t`, `-w`, `--to`, `--write` | `html` (`html5`), `ms`, `mom`, `context`, `markdown`, `plain`, `json` or `pdf`; `plain+gutenberg` for Project Gutenberg's conventions |
 | `-o FILE` | the output file; with no `-t`, its extension names the format |
 | `-s`, `--standalone` | a whole document, through a template |
 | `--template FILE` | the template (implies `-s`) |
@@ -89,8 +92,9 @@ when no files are named. `podoc --help` lists the options:
 The formats are inferred from the file names as pandoc infers them:
 `-o book.html` writes HTML, and `-o book.pdf` makes PDF. For PDF,
 `--pdf-engine` chooses the engine (`pdfroff` or `groff`, which take
-ms, or `context`), and the engine implies the writer; `-t ms` alone
-uses `groff`, as pandoc does, and `-t context` alone uses `context`.
+ms, `context`, or `pdfmom`, which takes mom), and the engine implies
+the writer; `-t ms` alone uses `groff`, as pandoc does, `-t context`
+alone uses `context`, and `-t mom` alone uses `pdfmom`.
 PDF needs one of these. pandoc's default, LaTeX, is not available.
 
 ### Memory
@@ -110,6 +114,7 @@ can run for minutes before it stops.
     podoc -s --toc -o book.html book.md
     podoc -t ms --pdf-engine=pdfroff -V papersize=letter -o book.pdf book.md
     podoc -t context --pdf-engine=context -o book.pdf book.md
+    podoc -t mom --toc -V papersize=a4 -o book.pdf book.md
     podoc -F pandoc-include -L subs.lua \
       --metadata-file=substitutions.yaml -o whole.md -t markdown book.md
 
@@ -155,7 +160,7 @@ can be checked for what neither program will render.
 ## Templates
 
 podoc carries pandoc 3.10's default templates for `html5`, `ms`,
-`context`, `markdown` and `plain`. `--template NAME` looks for the name as
+`context`, `markdown` and `plain`, and its own for `mom` (see "mom"). `--template NAME` looks for the name as
 given, then with the format's extension added, then in pandoc's user
 data directory (`$XDG_DATA_HOME/pandoc/templates`, or
 `~/.pandoc/templates`). Templates use pandoc's template language, with
@@ -173,7 +178,7 @@ given with the option pandoc uses for that filter:
 | `-F pandoc-include` | `!include` lines, with globs, `incrementSection`, and image paths rewritten |
 | `-L subs.lua` | replaces text using the `substitutions` map in the metadata |
 | `-L strip-comments.lua` | removes every paragraph that starts with `%` |
-| `-L general.lua` | the Div and Span classes, for each output format |
+| `-L general.lua` | the Div and Span classes, for each output format; for mom, as for ms, with `for-format mom` |
 | `-L toc-columns.lua` | a two-column table of contents, for ConTeXt |
 | `-L combine-docs.lua` | the files listed in `combine` metadata, combined as one digest |
 | `-F pandoc-mermaid-selenium-filter` | ignored, with a warning |
@@ -200,14 +205,78 @@ file:
 
     subs2yaml substitutions.lua > substitutions.yaml
 
+## mom
+
+`-t mom`, or `-o book.mom`, writes groff's mom macros, for groff 1.23
+and later; pandoc has no mom writer. `pdfmom` makes the PDF:
+
+    podoc -t mom -s --toc -o book.mom book.md
+    pdfmom -t -KUTF-8 book.mom > book.pdf
+    podoc -t mom --toc -o book.pdf book.md
+
+Run `pdfmom` in the output's directory, as converted images' paths
+are relative to it (see "Images in ms").
+
+- Notes are footnotes, or endnotes after the body with
+  `--reference-location=document`.
+- `--toc` puts the contents at the start; `--toc-depth` limits them,
+  and `-N` numbers the headings, leaving out those with the class
+  `unnumbered`.
+- Raw blocks and inlines for `mom` are passed through as they are, so
+  they may hold any mom macro or groff request or escape (`.NEWPAGE`,
+  say); other raw formats are dropped.
+- mom shows only PDF images. EPS and PostScript are converted to PDF
+  with Ghostscript, and for PDF output other images are too, as for
+  ms. An image's size is its `width` and `height` (a percentage width
+  is of the line length), or else its PDF's page size from `pdfinfo`,
+  scaled down to the line length when wider; an image with neither is
+  left out, with a warning. A figure's caption goes below it.
+
+The default template uses mom's own defaults (TYPESET, letter paper),
+with these variables:
+
+| Variable | Gives |
+|---|---|
+| `title`, `subtitle`, `author`, `date` | `TITLE`, `SUBTITLE`, `AUTHOR` (one or more), `MISC`; mom shows the date only on covers |
+| `abstract` | a block quote after the title |
+| `toc-title` | the contents' heading |
+| `papersize` | `PAPER`: `letter`, `a4`, `statement`, ... |
+| `margin-left`, `margin-right`, `margin-top`, `margin-bottom` | the margins (`1i`, `2c`, ...) |
+| `fontfamily`, `pointsize`, `lineheight` | `FAMILY`, `PT_SIZE`, `LS` |
+| `columns`, `column-gutter` | `COLUMNS`, the gutter 1.5P by default |
+| `printstyle` | `TYPESET` (the default) or `TYPEWRITE` |
+| `doctype` | `DOCTYPE`: `DEFAULT`, `CHAPTER`, `NAMED "..."`, `LETTER` |
+| `linkcolor` | `PDF_LINK_COLOR`: a colour name, `#rrggbb` or three numbers |
+| `covers` | a cover page with the title, subtitle, authors and date |
+| `header-includes`, `include-before`, `include-after` | as in pandoc's templates |
+
+To write your own, start from the default, `data/templates/default.mom`
+in podoc's source, and pass it with `--template`. The setup macros
+must stay in mom's order:
+the reference macros (`TITLE` ...), `DOCTYPE`, `PAPER` before
+`PRINTSTYLE`, then the margins, fonts and `COLUMNS`, then `START`. The
+body is `$body$`; with `--toc`, keep `AUTO_RELOCATE_TOC` before
+`START` (with `TOP` when there are no covers) and `.TOC` at the end.
+The template defines the colour `strikecolor`, which strikeout uses.
+
+`statement.mom`, installed in `$(DOCDIR)/examples`, is an example: a
+statement-sized (5.5 by 8.5 inch) document with narrow margins,
+Palatino, no running headers, unindented paragraphs and the contents
+first. It marks Symbola as a special font, for symbols the text fonts
+lack; tell groff where Symbola is with `--pdf-engine-opt`:
+
+    podoc -t mom --template=statement.mom --toc \
+      --pdf-engine-opt=-F/usr/local/share/groff/site-font -o book.pdf book.rst
+
 ## PDF output
 
-podoc writes the ms or ConTeXt source into a temporary directory under
+podoc writes the ms, mom or ConTeXt source into a temporary directory under
 `TMPDIR` (or `/tmp`) and runs the engine there, with pandoc's
 arguments.
 
 - `-V papersize=a4` (or `letter`, and so on) sets the paper size for
-  ms; add an `l` (`a4l`) for landscape.
+  ms; add an `l` (`a4l`) for landscape. For mom the template sets it.
+- For mom, podoc runs `pdfmom -t -k -KUTF-8` on the source's path.
 - `--pdf-engine-opt` passes an option to the engine.
 - An image that cannot be found is replaced by its description, with a
   warning. Images are copied into the temporary directory. For

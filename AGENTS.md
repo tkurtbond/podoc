@@ -7,8 +7,9 @@ Notes for agents (and people) working in this repository.
 podoc is a proof of concept: an Oberon-2 program, built with the
 Peaseblossom Oberon Compiler (`poc`), that replaces the parts of pandoc
 the user's writing builds need. It reads pandoc markdown with YAML
-metadata blocks and writes HTML, groff `ms`, ConTeXt and markdown, and it runs
-`pdfroff`, `groff -Tpdf` or `context` to make PDFs. The user's Lua
+metadata blocks and writes HTML, groff `ms`, ConTeXt, markdown and groff
+`mom` (podoc's own), and it runs `pdfroff`, `groff -Tpdf`, `context`
+or `pdfmom` to make PDFs. The user's Lua
 filters and `pandoc-include` are built in as Oberon code. pandoc is
 too big to install on small and less common systems; podoc is meant
 to build wherever poc does.
@@ -28,7 +29,7 @@ As of 2026-11-20, Phases 1 to 15 are done and the proof of concept
 is finished:
 
 - the reader, `PdMarkdown`, and YAML metadata, `PdYaml`;
-- the writers: JSON, HTML (`PdHtml`), ms (`PdMs`), ConTeXt
+- the writers: JSON, HTML (`PdHtml`), ms (`PdMs`), mom (`PdMom`), ConTeXt
   (`PdConTeXt`), markdown and plain text (`PdMdWriter`), with templates
   (`PdTemplate`);
 - the command line, `PdOptions`;
@@ -62,6 +63,12 @@ first.
 Phase 20 (the `%` title block, `pandoc_title_block`) is done too, and
 Phase 22 (EPS images converted with Ghostscript for `groff -Tpdf`,
 decision 26).
+Phase 23, a mom writer and pdfmom (decision 27), is podoc's own, as
+pandoc has none: 23.1 (`PdRoff`, the roff writers' shared code, from
+`PdMs`), 23.2 and 23.3 (`PdMom`: blocks, inlines, tables, figures and
+images), 23.4 (`data/templates/default.mom`, podoc's own, and the
+example `data/examples/statement.mom`) and 23.5 (`--pdf-engine=pdfmom`
+in `PdPdf`). Read `docs/research/pdfmom-backend.md` first.
 See PLAN.md's State.
 
 ## Reference material

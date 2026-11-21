@@ -3,9 +3,10 @@
 A proof of concept: the parts of [pandoc](https://pandoc.org) that a
 set of writing builds need, as one Oberon-2 program built with the
 Peaseblossom Oberon Compiler (`poc`). It reads pandoc markdown
-with YAML metadata, writes HTML, groff `ms`, ConTeXt and markdown,
-and makes PDFs with `pdfroff`, `groff` or `context`, on systems too
-small or too unusual for pandoc.
+with YAML metadata (and reStructuredText), writes HTML, groff `ms`,
+ConTeXt and markdown, and groff `mom`, which pandoc does not, and
+makes PDFs with `pdfroff`, `groff`, `context` or `pdfmom`, on systems
+too small or too unusual for pandoc.
 
 How to build, install and use it is in
 [docs/user/podoc.md](docs/user/podoc.md); known differences from

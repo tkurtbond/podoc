@@ -1432,7 +1432,7 @@ the body.
   experiments' features (columns, links, numbered headings, the
   contents first) from a markdown and an rST input.
 
-### Phase 23.6: Documentation and other systems
+### Phase 23.6: Documentation and other systems [done]
 
 - **Docs:**
   - docs/user/podoc.md: the writer, the engine, the template's
@@ -2870,4 +2870,15 @@ the body.
   first, both figures, the map on its own page, no groff warnings
   (1.25.0's site-font directory is empty here, so 1.23.0's was used).
   `mom-standalone` made into PDF under both. `make test` passed under
-  `-O2` and `-OC` (303 case tests, 10 image tests). Phase 23.6 next.
+  `-O2` and `-OC` (303 case tests, 10 image tests).
+- 2026-11-21: Phase 23.6 done, and with it Phase 23. docs/user/podoc.md
+  has a "mom" section (the writer, `pdfmom`, the template's variables,
+  how to write a mom template, `statement.mom`), and mom in its
+  needs, options, templates, filters and PDF output; README.md and
+  AGENTS.md name the mom writer and pdfmom. `make test` passed under
+  `-O2` and `-OC` on alerik and rackhir (FreeBSD 15.1, amd64 and
+  arm64), artos and yishana (NetBSD 11.0, amd64 and i386), jherek and
+  cymoril (OpenBSD 7.9, amd64 and i386): 303 case tests, 23 round
+  trips, 5 image tests; `mom-eps` and `mom-pdf` skipped on all (only
+  yishana has groff 1.23 or later, 1.24.1 with pdfmom and gs, but no
+  pdfinfo or pdftotext).
