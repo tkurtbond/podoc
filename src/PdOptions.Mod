@@ -70,6 +70,7 @@ VAR
   template*: String; (* --template; "" for the default *)
   before*, after*, header*: File; (* -B, -A, -H *)
   wrap*: String; (* --wrap: auto, none or preserve *)
+  unknown*: String; (* --unknown: "", warn or error *)
   columns*: LONGINT; (* --columns: the line length, 72 by default *)
   idPrefix*: String; (* --id-prefix *)
   numberSections*: BOOLEAN; (* -N *)
@@ -432,6 +433,24 @@ BEGIN
   RETURN TRUE
 END AddMeta;
 
+(* --verbose *)
+PROCEDURE SetVerbose(): BOOLEAN;
+BEGIN
+  PdIO.verbose := TRUE;
+  RETURN TRUE
+END SetVerbose;
+
+(* --unknown: warn or error *)
+PROCEDURE SetUnknown(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  IF (arg # "warn") & (arg # "error") THEN
+    PdIO.Message("--unknown must be warn or error");
+    PdIO.Exit(PdIO.OptionError)
+  END;
+  COPY(arg, unknown);
+  RETURN TRUE
+END SetUnknown;
+
 (* --wrap: auto, none or preserve *)
 PROCEDURE SetWrap(VAR arg: ARRAY OF CHAR): BOOLEAN;
 BEGIN
@@ -601,6 +620,10 @@ BEGIN
     "Expand tabs to every N columns (4).", SetTabStop, 1, 1000));
   parser.AddOption(ArgParser.MakeOption("p", "preserve-tabs",
     "Keep tabs as they are.", PreserveTabs));
+  parser.AddOption(ArgParser.MakeOption(0X, "verbose",
+    "Write informative messages, as pandoc does.", SetVerbose));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "unknown",
+    "Report what the rST reader does not know or skips: warn or error.", SetUnknown));
   parser.AddOption(ArgParser.MakeOption("v", "version",
     "Show podoc's version.", ShowVersion));
   parser.AddOption(ArgParser.MakeOption("h", "help",
@@ -854,7 +877,7 @@ BEGIN
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;
   standalone := FALSE; template := "";
-  wrap := "auto"; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
+  wrap := "auto"; unknown := ""; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
   before := NIL; lastBefore := NIL; after := NIL; lastAfter := NIL;
   header := NIL; lastHeader := NIL
 END PdOptions.

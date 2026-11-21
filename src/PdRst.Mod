@@ -4,11 +4,12 @@
    substitutions and notes. *)
 MODULE PdRst;
 
-IMPORT Ropes, Strings, Platform, PdIO, PdJson, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
+IMPORT Ropes, Strings, Platform, Utf8, Unicode, PdIO, PdJson, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
   RI := PdRstInline, SH := PdShared, G := PdGridTable;
 
 CONST
   MaxStyles = 64;
+  Quiet* = 0; WarnUnknown* = 1; FailUnknown* = 2; (* unknown *)
 
 TYPE
   Style = RECORD c: CHAR; double: BOOLEAN END;
@@ -25,7 +26,9 @@ TYPE
     label: ARRAY 64 OF CHAR; (* lower case *)
     top: B.Buf; (* the text after the label *)
     fields, last: Field;
-    body: B.Buf (* the indented body *)
+    body: B.Buf; (* the indented body *)
+    bodyPos: LONGINT; (* where the body starts in B.t, or -1 *)
+    start, end: LONGINT (* where the directive starts and ends in B.t *)
   END;
   Subst = POINTER TO SubstDesc;
   SubstDesc = RECORD key: A.Rope; blocks: A.Block; next: Subst END;
@@ -54,6 +57,11 @@ VAR
   autoIds*: BOOLEAN; (* auto_identifiers, on by default *)
   lhs*: BOOLEAN; (* the extension literate_haskell *)
   columns*: LONGINT; (* pandoc's readerColumns, from --columns *)
+  standalone*: BOOLEAN; (* -s: the title transform and the docinfo *)
+  unknown*: INTEGER; (* --unknown: Quiet, WarnUnknown or FailUnknown *)
+  nextKind: INTEGER; nextA, nextB: LONGINT; nextName: RI.Name;
+    (* the origin BlocksOf gives its text, then forgets *)
+  lastUnknown: LONGINT; (* where the last --unknown report was *)
   styles: ARRAY MaxStyles OF Style;
   nStyles: INTEGER;
   ids: Id; (* the header identifiers used *)
@@ -304,6 +312,8 @@ PROCEDURE BlocksOf(VAR b: B.Buf): A.Block;
   VAR f: B.Frame; r: A.Block;
 BEGIN
   B.Enter(f, b.t, b.len);
+  RI.SetOrigin(nextKind, nextA, nextB, nextName);
+  nextKind := RI.OrgUnknown; nextName := NIL;
   r := ParseBlocks();
   B.Leave(f);
   RETURN r
@@ -846,7 +856,7 @@ BEGIN
   END;
   IF b.len > 0 THEN B.PutChar(b, 0AX) END;
   NEW(item); item.next := NIL;
-  item.term := RI.ParseInlines(B.t^, ns, e - ns);
+  item.term := RI.ParseSpan(ns, e - ns);
   B.pos := B.SkipBlankLines(f);
   bl := BlocksOf(b);
   PlainIfPara(bl);
@@ -1179,11 +1189,11 @@ BEGIN
       d.last := f; p := q
     END
   END;
-  B.InitBuf(d.body);
+  B.InitBuf(d.body); d.bodyPos := -1;
   q := B.BlankLines(p);
   IF q >= 0 THEN
     r := IndentedBlock(q, d.body);
-    IF r >= 0 THEN p := r ELSE B.InitBuf(d.body) END
+    IF r >= 0 THEN p := r; d.bodyPos := q ELSE B.InitBuf(d.body) END
   END;
   q := B.BlankLines(p);
   IF q >= 0 THEN p := q END;
@@ -1250,13 +1260,140 @@ BEGIN
   RETURN BlocksOf(b)
 END TopBodyBlocks;
 
+(* Reporting *)
+
+(* The input's name, and the line and column, counted from 1, of p in
+   B.t, following the texts B.Enter entered back to the document *)
+PROCEDURE Loc(p: LONGINT; VAR name: ARRAY OF CHAR; VAR line, col: LONGINT);
+  VAR d, i, ls: LONGINT; t: B.Text;
+BEGIN
+  d := B.depth; t := B.t;
+  IF d >= RI.MaxDepth THEN
+    d := RI.MaxDepth - 1; t := RI.orgText[d]; p := RI.blockStart[d]
+  END;
+  LOOP
+    IF d <= 0 THEN
+      PdSource.Locate(main^, p, name, line);
+      ls := p; WHILE (ls > 0) & (main[ls - 1] # 0AX) DO DEC(ls) END;
+      col := p - ls + 1; EXIT
+    ELSIF RI.orgKind[d] = RI.OrgLines THEN
+      line := 1; ls := 0; i := 0;
+      WHILE (i < p) & (i < LEN(t^)) DO
+        IF t[i] = 0AX THEN INC(line); ls := i + 1 END;
+        INC(i)
+      END;
+      line := RI.orgA[d] + line - 1; col := p - ls + 1 + RI.orgB[d];
+      IF RI.orgName[d] # NIL THEN COPY(RI.orgName[d]^, name) ELSE name[0] := 0X END;
+      EXIT
+    ELSE
+      IF RI.orgKind[d] = RI.OrgOffset THEN p := RI.orgA[d] + p
+      ELSE p := RI.blockStart[d - 1]
+      END;
+      DEC(d);
+      IF d > 0 THEN t := RI.orgText[d] END
+    END
+  END
+END Loc;
+
+(* Appends " at NAME line L column C" for p in B.t to m, as pandoc's
+   messages give a place *)
+PROCEDURE Where(VAR m: ARRAY OF CHAR; p: LONGINT);
+  VAR name: ARRAY 512 OF CHAR; line, col: LONGINT;
+BEGIN
+  Loc(p, name, line, col);
+  Cat(m, " at ");
+  IF (name # "") & (name # "-") THEN Cat(m, name); Cat(m, " ") END;
+  Cat(m, "line "); CatNum(m, line); Cat(m, " column "); CatNum(m, col)
+END Where;
+
+(* pandoc's INFO message msg, at p in B.t, under --verbose *)
+PROCEDURE Info(msg: ARRAY OF CHAR; p: LONGINT);
+  VAR m: Message;
+BEGIN
+  IF PdIO.verbose THEN COPY(msg, m); Where(m, p); PdIO.Info(m) END
+END Info;
+
+(* Reports msg, something unknown or skipped at p in B.t, as --unknown
+   asks *)
+PROCEDURE Unknown(msg: ARRAY OF CHAR; p: LONGINT);
+  VAR m: Message; name: ARRAY 512 OF CHAR; line, col: LONGINT;
+BEGIN
+  IF unknown = Quiet THEN RETURN END;
+  Loc(p, name, line, col);
+  (* once for each place, though the parser looks at it again *)
+  IF line * 4096 + col = lastUnknown THEN RETURN END;
+  lastUnknown := line * 4096 + col;
+  COPY(msg, m); Where(m, p);
+  IF unknown = FailUnknown THEN PdIO.Fail("", m, PdIO.ParseError)
+  ELSE PdIO.Warn(m)
+  END
+END Unknown;
+
+(* RI.unknownRole *)
+PROCEDURE UnknownRole(role: A.Rope; pos: LONGINT);
+  VAR m: Message;
+BEGIN
+  m := "Unknown role '"; CatRope(m, role); Cat(m, "'"); Unknown(m, pos)
+END UnknownRole;
+
+(* Appends b's text to m *)
+PROCEDURE PutMsg(VAR m: ARRAY OF CHAR; VAR b: B.Buf);
+  VAR i, j: LONGINT;
+BEGIN
+  i := 0; WHILE m[i] # 0X DO INC(i) END;
+  j := 0;
+  WHILE (j < b.len) & (i < LEN(m) - 1) DO m[i] := b.t[j]; INC(i); INC(j) END;
+  m[i] := 0X
+END PutMsg;
+
+(* Makes the next BlocksOf locate its text as d's body *)
+PROCEDURE BodyOrigin(VAR d: Directive);
+  VAR name: ARRAY 512 OF CHAR; line, col, p, n: LONGINT;
+BEGIN
+  IF d.bodyPos < 0 THEN RETURN END;
+  p := d.bodyPos; WHILE B.C(p) = " " DO INC(p) END;
+  Loc(p, name, line, col);
+  n := 0; WHILE name[n] # 0X DO INC(n) END;
+  NEW(nextName, n + 1); COPY(name, nextName^);
+  nextKind := RI.OrgLines; nextA := line; nextB := col - 1
+END BodyOrigin;
+
+(* The fields of the role directive d that pandoc skips, with the base
+   role base and the parent role parent *)
+PROCEDURE RoleSkips(VAR d: Directive; base, parent: A.Rope);
+  VAR f: Field; m: Message; nf, nl: INTEGER;
+
+  PROCEDURE Skip(s: ARRAY OF CHAR);
+    VAR m: Message;
+  BEGIN
+    m := "Skipped '"; Cat(m, s); Cat(m, "'");
+    Info(m, d.end); Unknown(m, d.start)
+  END Skip;
+
+BEGIN
+  f := d.fields; nf := 0; nl := 0;
+  WHILE f # NIL DO
+    IF Is(f.name, "language") THEN
+      INC(nl);
+      IF ~Is(base, "code") THEN Skip(":language: [because parent of role is not :code:]") END
+    ELSIF Is(f.name, "format") THEN
+      INC(nf);
+      IF ~Is(base, "raw") THEN Skip(":format: [because parent of role is not :raw:]") END
+    ELSE m := ":"; CatRope(m, f.name); Cat(m, ":"); Skip(m)
+    END;
+    f := f.next
+  END;
+  IF Is(parent, "raw") & (nf > 1) THEN Skip(":format: [after first in definition of role]") END;
+  IF Is(parent, "code") & (nl > 1) THEN Skip(":language: [after first in definition of role]") END
+END RoleSkips;
+
 (* addNewRole top fields; FALSE if top is not a role name *)
 PROCEDURE NewRole(VAR d: Directive): BOOLEAN;
   VAR f: B.Frame; b: B.Buf; q, r: LONGINT; role, parent: A.Rope; ok: BOOLEAN;
     fmt, lang, cls: A.Rope;
 BEGIN
   B.InitBuf(b); PutBuf(b, d.top); B.PutChar(b, 0AX);
-  B.Enter(f, b.t, b.len - 1);
+  B.Enter(f, b.t, b.len - 1); RI.SetOrigin(RI.OrgUnknown, 0, 0, NIL);
   ok := FALSE; parent := NIL; role := NIL;
   q := RI.RoleName(0);
   IF q > 0 THEN
@@ -1268,6 +1405,7 @@ BEGIN
   END;
   B.Leave(f);
   IF ~ok THEN RETURN FALSE END;
+  RoleSkips(d, RI.BaseRole(parent), parent);
   fmt := FieldVal(d, "format"); lang := FieldVal(d, "language");
   cls := FieldVal(d, "class");
   IF fmt # NIL THEN fmt := Trim(fmt) END;
@@ -1616,7 +1754,10 @@ PROCEDURE ExtractCaption(VAR d: Directive; VAR capt: A.Inline; VAR legend: A.Blo
 BEGIN
   B.InitBuf(b); PutBuf(b, d.body); B.PutChar(b, 0AX); B.PutChar(b, 0AX);
   sp := B.lastStrPos; st := B.lastStrText; B.lastStrPos := -1;
+  BodyOrigin(d);
   B.Enter(f, b.t, b.len);
+  RI.SetOrigin(nextKind, nextA, nextB, nextName);
+  nextKind := RI.OrgUnknown; nextName := NIL;
   A.InitInlines(l); RI.Inlines(l); capt := MI.Trim(l);
   B.pos := B.SkipBlankLines(B.pos);
   legend := ParseBlocks();
@@ -1656,6 +1797,7 @@ PROCEDURE BodyBlocks(VAR d: Directive): A.Block;
   VAR b: B.Buf;
 BEGIN
   B.InitBuf(b); PutBuf(b, d.body); B.PutChar(b, 0AX); B.PutChar(b, 0AX);
+  BodyOrigin(d);
   RETURN BlocksOf(b)
 END BodyBlocks;
 
@@ -1962,6 +2104,7 @@ BEGIN
     IF hasStart THEN inc.start := start ELSE inc.start := 1 END;
     inc.text := o.t; inc.next := incs; incs := inc;
     B.Enter(fr, o.t, o.len);
+    RI.SetOrigin(RI.OrgLines, inc.start, 0, inc.name);
     B.pos := B.SkipBlankLines(0);
     A.AddBlock(l, ParseBlocks());
     B.Leave(fr);
@@ -2002,6 +2145,7 @@ PROCEDURE^ CsvTableDirective(VAR d: Directive; VAR l: A.Blocks);
    B.pos is after the directive. *)
 PROCEDURE RunDirective(VAR d: Directive; VAR l: A.Blocks): BOOLEAN;
   VAR b: B.Buf; r, sub: A.Rope; a: A.Attr; t, bl: A.Block; s: ARRAY 64 OF CHAR;
+    m: Message;
 BEGIN
   IF d.label = "role" THEN RETURN NewRole(d)
   ELSIF d.label = "include" THEN RETURN Include(d, l)
@@ -2077,7 +2221,8 @@ BEGIN
   ELSIF d.label = "list-table" THEN ListTableDirective(d, l)
   ELSIF d.label = "csv-table" THEN CsvTableDirective(d, l)
   ELSE
-    (* pandoc logs SkippedContent, an INFO message *)
+    m := "Skipped '.. "; Cat(m, d.label); Cat(m, "'"); Info(m, d.end);
+    m := "Unknown directive '"; Cat(m, d.label); Cat(m, "'"); Unknown(m, d.start);
     A.AddBlock(l, A.NewDiv(DirAttr(d, d.label), TopBodyBlocks(d)))
   END;
   RETURN TRUE
@@ -2091,6 +2236,7 @@ BEGIN
   IF ~B.Looking(p, "..") THEN RETURN FALSE END;
   q := DirectiveAt(p + 2, d);
   IF q < 0 THEN RETURN FALSE END;
+  d.start := p; d.end := q;
   B.pos := q;
   IF ~RunDirective(d, l) THEN B.pos := p; RETURN FALSE END;
   RETURN TRUE
@@ -2129,6 +2275,7 @@ BEGIN
   alt := MI.Trim(c);
   q := DirectiveAt(B.pos, d);
   IF q < 0 THEN B.pos := p; RETURN FALSE END;
+  d.start := p; d.end := q;
   A.InitBlocks(res);
   B.pos := q;
   IF ~RunDirective(d, res) THEN B.pos := p; RETURN FALSE END;
@@ -2346,7 +2493,7 @@ PROCEDURE HeadCell(s, e: LONGINT): A.Block;
 BEGIN
   WHILE (s < e) & ((B.t[s] = " ") OR (B.t[s] = 09X)) DO INC(s) END;
   IF s = e THEN RETURN NIL END;
-  inl := RI.ParseInlines(B.t^, s, e - s);
+  inl := RI.ParseSpan(s, e - s);
   RETURN A.NewInlinesBlock(A.Plain, inl)
 END HeadCell;
 
@@ -2510,11 +2657,14 @@ END SetCaption;
 (* tableDirective *)
 PROCEDURE TableDirective(VAR d: Directive; VAR l: A.Blocks);
   VAR bl: A.Block; t: A.TableBlk; cols, n: LONGINT; c: A.Cell; r: A.Rope; ws: Reals;
-    div: LONGREAL;
+    div: LONGREAL; m: Message;
 BEGIN
   bl := BodyBlocks(d);
-  (* otherwise pandoc logs SkippedContent, an INFO message *)
-  IF (bl = NIL) OR (bl.next # NIL) OR ~(bl IS A.TableBlk) THEN RETURN END;
+  IF (bl = NIL) OR (bl.next # NIL) OR ~(bl IS A.TableBlk) THEN
+    m := "Skipped '"; PutMsg(m, d.body); Cat(m, "'"); Info(m, d.end);
+    Unknown("Skipped a table directive with no table", d.start);
+    RETURN
+  END;
   t := bl(A.TableBlk);
   SetCaption(d, t);
   cols := 0;
@@ -2802,6 +2952,7 @@ END CsvTableDirective;
 PROCEDURE Block(VAR l: A.Blocks): BOOLEAN;
   VAR q: LONGINT;
 BEGIN
+  IF B.depth < RI.MaxDepth THEN RI.blockStart[B.depth] := B.pos END;
   q := B.BlankLines(B.pos);
   IF q >= 0 THEN B.pos := q; RETURN TRUE END;
   RETURN CodeBlock(l) OR BlockQuote(l) OR FieldList(l) OR OptionList(l)
@@ -2820,7 +2971,7 @@ BEGIN
       (* pandoc would stop with a parse error; a line as plain text *)
       e := B.LineEnd(B.pos);
       A.AddBlock(l, A.NewInlinesBlock(A.Plain,
-        RI.ParseInlines(B.t^, B.pos, e - B.pos)));
+        RI.ParseSpan(B.pos, e - B.pos)));
       B.pos := e;
       IF B.pos < B.len THEN INC(B.pos) END
     END
@@ -3037,6 +3188,169 @@ BEGIN
   d.blocks := A.WalkBlocks(w, d.blocks)
 END Resolve;
 
+(* Standalone: the title transform and the docinfo *)
+
+(* r with each rune in lower case, as T.toLower *)
+PROCEDURE LowerRope(r: A.Rope): A.Rope;
+  VAR b, o: B.Buf; i, q: LONGINT; ru: Utf8.Rune;
+BEGIN
+  B.InitBuf(b); MI.PutRope(b, r); B.InitBuf(o); i := 0;
+  WHILE i < b.len DO
+    q := i;
+    IF Utf8.Decode(b.t^, q, ru) & (q > i) THEN
+      B.PutUtf8(o, Unicode.ToLower(ru))
+    ELSE B.PutChar(o, b.t[i]); q := i + 1
+    END;
+    i := q
+  END;
+  RETURN B.BufRope(o)
+END LowerRope;
+
+(* Whether a top-level block of bl is a header of level n *)
+PROCEDURE HasHeader(bl: A.Block; n: INTEGER): BOOLEAN;
+BEGIN
+  WHILE (bl # NIL) & ~((bl.kind = A.Header) & (bl(A.HeaderBlk).level = n)) DO
+    bl := bl.next
+  END;
+  RETURN bl # NIL
+END HasHeader;
+
+(* Raises bl's top-level headers by n levels *)
+PROCEDURE PromoteHeaders(bl: A.Block; n: INTEGER);
+BEGIN
+  WHILE bl # NIL DO
+    IF bl.kind = A.Header THEN DEC(bl(A.HeaderBlk).level, n) END;
+    bl := bl.next
+  END
+END PromoteHeaders;
+
+(* The author's inlines split at semicolons, as pandoc's splitAuthors *)
+PROCEDURE SplitAuthors(i: A.Inline): A.MetaValue;
+  VAR f, cur: A.Inlines; l: A.MetaListV; n, x: A.Inline; s: A.Rope;
+    k: LONGINT;
+
+  PROCEDURE IsSp(k: INTEGER): BOOLEAN;
+  BEGIN RETURN (k = A.Space) OR (k = A.SoftBreak) OR (k = A.LineBreak)
+  END IsSp;
+
+  PROCEDURE IsSemi(x: A.Inline): BOOLEAN;
+  BEGIN
+    RETURN (x.kind = A.Str) & Ropes.EqualString(x(A.StrInl).text, ";")
+  END IsSemi;
+
+  PROCEDURE Add(x: A.Inline);
+  BEGIN x.next := NIL; A.AddInline(f, x)
+  END Add;
+
+  PROCEDURE Item;
+    VAR p, q, e: A.Inline;
+  BEGIN
+    (* normalizeSpaces *)
+    p := cur.first;
+    WHILE (p # NIL) & IsSp(p.kind) DO p := p.next END;
+    e := NIL; q := p;
+    WHILE q # NIL DO
+      IF ~IsSp(q.kind) THEN e := q END;
+      q := q.next
+    END;
+    IF e = NIL THEN p := NIL ELSE e.next := NIL END;
+    A.AddMetaItem(l, A.NewMetaInlines(p));
+    A.InitInlines(cur)
+  END Item;
+
+BEGIN
+  (* concatMap factorSemi *)
+  A.InitInlines(f); n := i;
+  WHILE n # NIL DO
+    x := n; n := n.next;
+    IF x.kind = A.Str THEN
+      s := x(A.StrInl).text;
+      IF Ropes.Length(s) > 0 THEN
+        k := Ropes.Find(s, ";", 0);
+        WHILE k >= 0 DO
+          Add(A.NewStr(Ropes.Substring(s, 0, k))); Add(A.NewStr(A.S(";")));
+          s := Ropes.Substring(s, k + 1, Ropes.Length(s) - k - 1);
+          k := Ropes.Find(s, ";", 0)
+        END;
+        IF Ropes.Length(s) > 0 THEN Add(A.NewStr(s)) END
+      END
+    ELSE Add(x)
+    END
+  END;
+  (* splitOnSemi *)
+  l := A.NewMetaList(); A.InitInlines(cur); n := f.first;
+  WHILE n # NIL DO
+    WHILE (n # NIL) & ~IsSemi(n) DO
+      x := n; n := n.next; x.next := NIL; A.AddInline(cur, x)
+    END;
+    Item;
+    WHILE (n # NIL) & IsSemi(n) DO n := n.next END
+  END;
+  RETURN l
+END SplitAuthors;
+
+(* The metadata in the definition list items, as pandoc's
+   metaFromDefList *)
+PROCEDURE MetaFromDefList(m: A.MetaMapV; items: A.DefItem);
+  VAR its: POINTER TO ARRAY OF A.DefItem; d: A.DefItem; n, j: LONGINT;
+    v, a: A.MetaValue; bl: A.Blocks; dl: A.BlockList; key: A.Rope;
+BEGIN
+  n := 0; d := items; WHILE d # NIL DO INC(n); d := d.next END;
+  IF n = 0 THEN RETURN END;
+  NEW(its, n); n := 0; d := items;
+  WHILE d # NIL DO its[n] := d; INC(n); d := d.next END;
+  (* foldr: the first of a key wins *)
+  FOR j := n - 1 TO 0 BY -1 DO
+    d := its[j]; dl := d.defs;
+    IF (dl # NIL) & (dl.next = NIL) & (dl.blocks # NIL) & (dl.blocks.next = NIL)
+        & (dl.blocks.kind = A.Plain) THEN
+      v := A.NewMetaInlines(dl.blocks(A.InlinesBlk).inlines)
+    ELSE
+      A.InitBlocks(bl);
+      WHILE dl # NIL DO A.AddBlock(bl, dl.blocks); dl := dl.next END;
+      v := A.NewMetaBlocks(bl.first)
+    END;
+    key := LowerRope(SH.Stringify(d.term));
+    IF Ropes.EqualString(key, "authors") THEN
+      (* mapKeys: authors wins over author *)
+      key := A.S("author")
+    ELSIF Ropes.EqualString(key, "author") & (A.GetMeta(m, "authors") # NIL) THEN
+      key := NIL
+    END;
+    IF key # NIL THEN A.SetMeta(m, key, v) END
+  END;
+  IF A.GetMeta(m, "authors") # NIL THEN A.DeleteMeta(m, "authors") END;
+  a := A.GetMeta(m, "author");
+  IF (a # NIL) & (a.kind = A.MetaInlines) THEN
+    A.SetMeta(m, A.S("author"), SplitAuthors(a(A.MetaInlinesV).inlines))
+  END
+END MetaFromDefList;
+
+(* pandoc's titleTransform, under -s *)
+PROCEDURE TitleTransform(d: A.Doc);
+  VAR h1, h2, rest: A.Block;
+BEGIN
+  h1 := d.blocks;
+  IF (h1 # NIL) & (h1.kind = A.Header) & (h1(A.HeaderBlk).level = 1) THEN
+    h2 := h1.next;
+    IF (h2 # NIL) & (h2.kind = A.Header) & (h2(A.HeaderBlk).level = 2)
+        & ~HasHeader(h2.next, 1) & ~HasHeader(h2.next, 2) THEN
+      rest := h2.next; PromoteHeaders(rest, 2);
+      A.SetMeta(d.meta, A.S("title"), A.NewMetaInlines(h1(A.InlinesBlk).inlines));
+      A.SetMeta(d.meta, A.S("subtitle"), A.NewMetaInlines(h2(A.InlinesBlk).inlines));
+      d.blocks := rest
+    ELSIF ~HasHeader(h1.next, 1) THEN
+      rest := h1.next; PromoteHeaders(rest, 1);
+      A.SetMeta(d.meta, A.S("title"), A.NewMetaInlines(h1(A.InlinesBlk).inlines));
+      d.blocks := rest
+    END
+  END;
+  IF (d.blocks # NIL) & (d.blocks.kind = A.DefinitionList) THEN
+    MetaFromDefList(d.meta, d.blocks(A.DefListBlk).items);
+    d.blocks := d.blocks.next
+  END
+END TitleTransform;
+
 (* Reads text[0 .. n-1] as reStructuredText with tab stop tabStop *)
 PROCEDURE Read*(text: PdIO.Text; n: LONGINT; tabStop: INTEGER): A.Doc;
   VAR t: B.Text; i, k: LONGINT; d: A.Doc;
@@ -3049,12 +3363,15 @@ BEGIN
   FOR i := n TO n + 1 - k DO t[i] := 0AX END;
   B.Start(t, n + 2 - k, tabStop);
   main := B.t; mainLen := n + 2 - k;
+  nextKind := RI.OrgUnknown; nextName := NIL; lastUnknown := -1;
+  RI.unknownRole := UnknownRole;
   notes := NIL; notesLast := NIL; citations := NIL; substs := NIL;
   nStyles := 0; ids := NIL; highlight := NIL; incs := NIL;
   RI.Reset;
   d := A.NewDoc();
   B.pos := B.SkipBlankLines(0);
   d.blocks := ParseBlocks();
+  IF standalone THEN TitleTransform(d) END;
   Resolve(d);
   ids := NIL; main := NIL; notes := NIL; notesLast := NIL; citations := NIL; substs := NIL;
   RETURN d

@@ -35,6 +35,7 @@ TYPE
   Text* = POINTER TO ARRAY OF CHAR;
 
 VAR
+  verbose*: BOOLEAN; (* --verbose: write pandoc's INFO messages *)
   out: Platform.FileHandle;
   outIsFile: BOOLEAN;
   outName: ARRAY 4096 OF CHAR;
@@ -76,6 +77,15 @@ PROCEDURE Warn*(msg: ARRAY OF CHAR);
 BEGIN
   Start; Err.String("[WARNING] "); Err.String(msg); Err.Ln; Err.Flush
 END Warn;
+
+(* Writes "podoc: [INFO] msg" and a new line to standard error, under
+   --verbose. *)
+PROCEDURE Info*(msg: ARRAY OF CHAR);
+BEGIN
+  IF verbose THEN
+    Start; Err.String("[INFO] "); Err.String(msg); Err.Ln; Err.Flush
+  END
+END Info;
 
 (* Ends the program with the exit status code, after writing what is
    buffered for standard output. *)

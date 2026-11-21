@@ -1,0 +1,9 @@
+podoc: [INFO] Skipped '.. frobnicate' at rst-verbose.rst line 8 column 1
+podoc: [INFO] Skipped ':format: [because parent of role is not :raw:]' at rst-verbose.rst line 13 column 1
+podoc: [INFO] Skipped ':bogus:' at rst-verbose.rst line 13 column 1
+podoc: [INFO] Skipped ':language: [because parent of role is not :code:]' at rst-verbose.rst line 16 column 1
+podoc: [INFO] Skipped '.. unknownsub' at rst-verbose.rst line 24 column 1
+podoc: [WARNING] Reference not found for 'foo' at rst-verbose.rst line 24 column 1
+podoc: [WARNING] Reference not found for '"nosub"' at rst-verbose.rst line 24 column 1
+podoc: [WARNING] Reference not found for '#' at rst-verbose.rst line 24 column 1
+podoc: [WARNING] Circular reference 'a' at rst-verbose.rst line 24 column 1

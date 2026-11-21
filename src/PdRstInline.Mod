@@ -19,8 +19,11 @@ IMPORT Ropes, Utf8, Unicode, A := PdAst, B := PdMdBase, MI := PdMdInline,
 
 CONST
   TableSize = 1024; (* buckets in the key table *)
+  MaxDepth* = 64; (* the texts deeper than this are not located *)
+  OrgUnknown* = 0; OrgOffset* = 1; OrgLines* = 2;
 
 TYPE
+  Name* = B.Text;
   (* A reference key: the target src (and title) and attributes of the
      links that name it *)
   Key* = POINTER TO KeyDesc;
@@ -44,6 +47,18 @@ TYPE
   END;
 
 VAR
+  (* Where each text B.Enter entered, by B.depth, for reporting:
+     OrgUnknown, at the start of the block holding it (blockStart of
+     the depth above); OrgOffset, at orgA in the text above; OrgLines,
+     line orgA, after column orgB, of the file orgName *)
+  orgKind*: ARRAY MaxDepth OF INTEGER;
+  orgA*, orgB*, blockStart*: ARRAY MaxDepth OF LONGINT;
+  orgText*: ARRAY MaxDepth OF B.Text;
+  orgName*: ARRAY MaxDepth OF Name;
+  (* called for an interpreted text role that is not known, with where
+     it starts in B.t *)
+  unknownRole*: PROCEDURE (role: A.Rope; pos: LONGINT);
+  rolePos: LONGINT;
   keys: ARRAY TableSize OF Key;
   keyCount*: LONGINT; (* M.size stateKeys *)
   roles: Role;
@@ -140,6 +155,18 @@ BEGIN
   IF b.len = 0 THEN B.PutChar(b, 0X) END;
   RETURN MI.Key(b.t^, 0, b.len, TRUE)
 END RopeKey;
+
+(* Records where the text B.Enter has just entered came from; see
+   orgKind *)
+PROCEDURE SetOrigin*(kind: INTEGER; a, b: LONGINT; name: Name);
+  VAR d: INTEGER;
+BEGIN
+  d := B.depth;
+  IF (d >= 0) & (d < MaxDepth) THEN
+    orgKind[d] := kind; orgA[d] := a; orgB[d] := b; orgName[d] := name;
+    orgText[d] := B.t; blockStart[d] := 0
+  END
+END SetOrigin;
 
 (* Readies the reader for a new document. *)
 PROCEDURE Reset*;
@@ -398,9 +425,7 @@ END Prefixed;
 
 (* Parsing a text on its own *)
 
-(* parseInlineFromText: the inlines of s[from .. from+n-1], trimmed,
-   parsed on their own (parseFromString') *)
-PROCEDURE ParseInlines*(VAR s: ARRAY OF CHAR; from, n: LONGINT): A.Inline;
+PROCEDURE Parse(VAR s: ARRAY OF CHAR; from, n: LONGINT; here: BOOLEAN): A.Inline;
   VAR f: B.Frame; text: B.Text; i, sp, st: LONGINT; l: A.Inlines;
 BEGIN
   IF n < 0 THEN n := 0 END;
@@ -408,12 +433,28 @@ BEGIN
   FOR i := 0 TO n - 1 DO text[i] := s[from + i] END;
   sp := B.lastStrPos; st := B.lastStrText; B.lastStrPos := -1;
   B.Enter(f, text, n);
+  IF here THEN SetOrigin(OrgOffset, from, 0, NIL)
+  ELSE SetOrigin(OrgUnknown, 0, 0, NIL)
+  END;
   A.InitInlines(l);
   WHILE Inline(l) DO END;
   B.Leave(f);
   B.lastStrPos := sp; B.lastStrText := st;
   RETURN MI.Trim(l)
+END Parse;
+
+(* parseInlineFromText: the inlines of s[from .. from+n-1], trimmed,
+   parsed on their own (parseFromString') *)
+PROCEDURE ParseInlines*(VAR s: ARRAY OF CHAR; from, n: LONGINT): A.Inline;
+BEGIN
+  RETURN Parse(s, from, n, FALSE)
 END ParseInlines;
+
+(* ParseInlines of B.t[from .. from+n-1], the current text *)
+PROCEDURE ParseSpan*(from, n: LONGINT): A.Inline;
+BEGIN
+  RETURN Parse(B.t^, from, n, TRUE)
+END ParseSpan;
 
 (* parseInlineFromText of a rope *)
 PROCEDURE ParseRope*(r: A.Rope): A.Inline;
@@ -805,6 +846,16 @@ BEGIN
   RETURN r
 END FindRole;
 
+(* The base role (getBaseRole) of a role defined with parent *)
+PROCEDURE BaseRole*(parent: A.Rope): A.Rope;
+  VAR p: Role;
+BEGIN
+  IF parent = NIL THEN RETURN A.S("span") END;
+  p := FindRole(parent);
+  IF p # NIL THEN RETURN p.base END;
+  RETURN parent
+END BaseRole;
+
 (* renderRole: the interpreted text b in role, appended to l *)
 PROCEDURE RenderRole(VAR b: B.Buf; fmt, role: A.Rope; attr: A.Attr;
     VAR l: A.Inlines);
@@ -852,6 +903,7 @@ BEGIN
     IF r # NIL THEN
       RenderRole(b, r.fmt, r.base, r.attr, l)
     ELSE
+      IF unknownRole # NIL THEN unknownRole(role, rolePos) END;
       a := A.NewAttr(NIL); A.AddClass(a, A.S("interpreted-text"));
       A.AddKeyVal(a, A.S("role"), role);
       A.Append(l, A.NewCode(a, B.BufRope(b)))
@@ -906,7 +958,7 @@ END AddRole;
 PROCEDURE InterpretedRole(VAR l: A.Inlines): BOOLEAN;
   VAR q: LONGINT; role: A.Rope; b: B.Buf; m: Mark;
 BEGIN
-  Save(m);
+  Save(m); rolePos := B.pos;
   q := RoleMarker(B.pos);
   IF q >= 0 THEN
     role := B.Rope(B.pos + 1, q - 1); B.pos := q;

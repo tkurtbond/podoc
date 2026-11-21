@@ -10,10 +10,10 @@ in PLAN.md) is listed by the writer.
   with exit status 2 (ArgParser's), where pandoc's is 6. Every other
   error uses pandoc's exit status: 1 for a file that cannot be read or
   written, 4 for PDF output podoc cannot make or PDF to a terminal,
-  6 for a bad `--wrap` or
-  `--pdf-engine`, 21 for an input format other than markdown, 22 for
+  6 for a bad `--wrap`, `--unknown` or
+  `--pdf-engine`, 21 for an input format other than markdown or rst, 22 for
   an unknown output format, 23 for a markdown extension, 43 and 47
-  for a PDF engine that fails or is not there, 83 for a filter.
+  for a PDF engine that fails or is not there, 64 for a parse error or `--unknown=error`, 83 for a filter.
 - `--help` lists podoc's options in ArgParser's form, and error
   messages are podoc's own wording, starting with "podoc: ".
 - `-t source` writes the input as the reader would see it (joined,
@@ -50,6 +50,11 @@ in PLAN.md) is listed by the writer.
   (decision 4). Any other filter ends podoc with status 83.
 - A `--wrap` value other than `auto`, `none` or `preserve` gives
   pandoc's message and status, 6.
+- `--unknown=warn|error` is podoc's own (see The reStructuredText
+  reader). A value other than `warn` or `error` ends podoc with status 6.
+- `--quiet` and `--log` are not taken. `--verbose` gives only the
+  reStructuredText reader's `[INFO]` lines, not pandoc's others
+  (the files it reads, the template it uses, ...).
 
 ## Input
 
@@ -140,6 +145,25 @@ read:
 - A CSV parse error gives pandoc's message for an unclosed quote, for
   text after a closing quote and for text after blank lines; other
   messages may differ from pandoc's in what they say was expected.
+- An anonymous reference (`` `x`__ ``) with no anonymous target left
+  gives a warning, "Anonymous reference with no target", and the
+  reference is left unresolved; pandoc ends with a parse error,
+  status 64.
+- `--verbose` reports what the reader skips inside list items,
+  substitution definitions and notes too. pandoc parses these more
+  than once and loses the messages logged there, so it reports only
+  those at the top level and in directives' bodies.
+- Positions in messages are pandoc's at the top level. Inside nested
+  text, pandoc gives "<file>_chunk line N" counted from the nested
+  text; podoc gives the position in the file, exactly inside directive
+  bodies and included files, and elsewhere the start of the enclosing
+  block.
+- `--unknown=warn` and `--unknown=error` are podoc's own: they report
+  unknown directives, unknown roles (which pandoc does not report),
+  substitution definitions with an unknown directive, table
+  directives with no table, and role options pandoc skips. Each is
+  reported at its start, where `--verbose`'s `[INFO]` lines, as in
+  pandoc, give the position after it.
 
 ## YAML metadata
 

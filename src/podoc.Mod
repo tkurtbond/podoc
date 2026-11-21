@@ -103,7 +103,11 @@ BEGIN
     f := f.next
   END;
   IF O.rst THEN
-    PdRst.autoIds := O.autoIds; PdRst.lhs := O.lhs;
+    PdRst.autoIds := O.autoIds; PdRst.lhs := O.lhs; PdRst.standalone := O.standalone;
+    IF O.unknown = "warn" THEN PdRst.unknown := PdRst.WarnUnknown
+    ELSIF O.unknown = "error" THEN PdRst.unknown := PdRst.FailUnknown
+    ELSE PdRst.unknown := PdRst.Quiet
+    END;
     d := PdRst.Read(text, len, O.tabStop)
   ELSE
     d := PdMarkdown.Read(text, len, O.tabStop)

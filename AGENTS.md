@@ -52,10 +52,12 @@ are `tools/runimages`. Further work is in PLAN.md's "Later".
 
 A reStructuredText reader, all of pandoc's `-f rst`, came into scope
 on 2026-11-20 (PLAN.md's decisions 18 to 22), planned as Phase 19.
-Phase 19.1 (blocks, with references and footnotes), 19.2 (roles,
-substitutions and the directive framework), 19.3 (every directive,
-with `include`) and 19.4 (grid and simple tables and the table
-directives) are done: `PdRst` and `PdRstInline`. Read `docs/research/rst-implementation.md`
+Phase 19 is done: 19.1 (blocks, with references and footnotes), 19.2
+(roles, substitutions and the directive framework), 19.3 (every
+directive, with `include`), 19.4 (grid and simple tables and the table
+directives) and 19.5 (`-s`'s title and docinfo, `--verbose` and
+podoc's `--unknown=warn|error`; the user's 73 rST files match pandoc):
+`PdRst` and `PdRstInline`. Read `docs/research/rst-implementation.md`
 first.
 See PLAN.md's State.
 

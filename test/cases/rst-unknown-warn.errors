@@ -1,0 +1,9 @@
+podoc: [WARNING] Unknown role 'unk' at rst-unknown-warn.rst line 1 column 17
+podoc: [WARNING] Unknown directive 'frobnicate' at rst-unknown-warn.rst line 3 column 1
+podoc: [WARNING] Skipped ':format: [because parent of role is not :raw:]' at rst-unknown-warn.rst line 8 column 1
+podoc: [WARNING] Skipped ':language: [because parent of role is not :code:]' at rst-unknown-warn.rst line 13 column 1
+podoc: [WARNING] Unknown directive 'unknownsub' at rst-unknown-warn.rst line 22 column 1
+podoc: [WARNING] Reference not found for 'foo' at rst-unknown-warn.rst line 24 column 1
+podoc: [WARNING] Reference not found for '"nosub"' at rst-unknown-warn.rst line 24 column 1
+podoc: [WARNING] Reference not found for '#' at rst-unknown-warn.rst line 24 column 1
+podoc: [WARNING] Circular reference 'a' at rst-unknown-warn.rst line 24 column 1

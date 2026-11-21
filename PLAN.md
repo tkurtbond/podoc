@@ -953,7 +953,7 @@ pandoc's at 40 columns.
 - Checked against pandoc 3.10, a unit test (`PdWidthTest`) and a case
   (`emoji-widths`).
 
-## Phase 19: The reStructuredText reader
+## Phase 19: The reStructuredText reader [done]
 
 podoc reads rST as pandoc 3.10's `-f rst` does, all of
 `Readers/RST.hs` (decisions 18, 20 and 21;
@@ -1081,7 +1081,7 @@ All of this runs under `-O2` and `-OC`, as every phase does.
   `csv-table` (inline, `:file:`, `:delim:`, `:quote:`, `:escape:`,
   `:header:`, `:header-rows:`).
 
-### Phase 19.5: Standalone, reporting, the corpus
+### Phase 19.5: Standalone, reporting, the corpus [done]
 
 - Under `-s`:
   - `titleTransform`: a lone top section, and a subtitle under it,
@@ -2359,3 +2359,50 @@ ConTeXt.
   - Differences: `csv-table`'s single-character options are ASCII
     only, `:url:` is a local file, and some CSV error messages differ
     (docs/user/differences.md).
+- 2026-11-21: Phase 19.5 done: standalone rST, reporting, the corpus.
+  Phase 19 is finished.
+  - `PdRst`, under `-s` (`PdRst.standalone`): pandoc's
+    `titleTransform` (a lone top section to `title`, a lone
+    subsection under it to `subtitle`, the rest promoted) and the
+    first field list as metadata (`author` and `authors` split on
+    `;` or `,` as pandoc does, `authors` winning; the first of a
+    repeated key wins; one paragraph is `MetaInlines`, anything else
+    `MetaBlocks`). Checked against pandoc on five small files.
+  - Reporting (decision 22): `--verbose` (`PdIO.verbose`,
+    `PdIO.Info`) prints pandoc's `[INFO] Skipped ...` lines for
+    unknown directives, substitution definitions with an unknown
+    directive, table directives with no table, and the role options
+    pandoc skips (`:format:`/`:language:` with the wrong parent,
+    unknown options, options after the first). The name
+    `--unknown=warn|error` was kept: it reports these, and unknown
+    roles, at their start, as warnings or as a parse error (status
+    64) at the first; a bad value gives status 6. Positions are
+    found through origins recorded for each nested parse
+    (`PdRstInline.SetOrigin`): exact in directive bodies and
+    included files, the enclosing block's start elsewhere.
+  - New cases `rst-standalone`, `rst-standalone-authors`,
+    `rst-verbose`, `rst-unknown-warn` and `rst-unknown-error`; JSON
+    and `[INFO]` lines are pandoc 3.10's.
+  - The corpus: all 73 `.rst` files under Red-Planet-Blue-Helmets,
+    Alusia's 005-merchant `rst-version` and Mini-Six's SRD give
+    pandoc's JSON and messages byte for byte, with and without `-s`,
+    under `-OC`; the six largest also under `-O2`.
+  - Builds, with the projects' own options (`-s`, `general.lua`,
+    `--template=statement` or `tkb`): the ms for
+    `minimal-opend6-srd.rst`, `red-planet-blue-helmets.rst` and
+    `return-005-merchant.rst` is byte-identical to pandoc's, and so is
+    the ConTeXt; their groff PDFs (81, 12 and 26 pages) have the same
+    text but for the names of the temporary image directories, which
+    groff prints for EPS images it cannot place. The HTML is the
+    same with `--wrap=none` (podoc does not wrap HTML).
+  - `make test` passed under `-O2` and `-OC` on atla (275 case
+    tests, 23 round trips, 6 image tests) and on alerik (FreeBSD
+    15.1) and artos (NetBSD 11.0), amd64, where the conversion image
+    test is skipped for want of converters. terhali and erekose
+    were not reachable.
+  - Differences listed in docs/user/differences.md: `--unknown`,
+    `--verbose` reporting what pandoc loses in list items,
+    substitution definitions and notes, the positions in nested text,
+    and an anonymous reference with no target (a warning; pandoc
+    fails with status 64). docs/user/podoc.md documents `-f rst`,
+    `--verbose` and `--unknown`, and the translation advice is gone.

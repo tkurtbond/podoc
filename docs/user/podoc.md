@@ -81,6 +81,8 @@ when no files are named. `podoc --help` lists the options:
 | `--wrap auto\|none\|preserve` | wrapping: for `plain`, `markdown`, `ms` and `context`, `auto` (the default) wraps at `--columns`; HTML is not wrapped |
 | `--columns N` | the line length, 72 by default; it also sets table column widths, as in pandoc |
 | `--tab-stop N`, `-p` | tabs |
+| `--verbose` | informative messages: for `rst`, pandoc's `[INFO]` lines for what the reader skips |
+| `--unknown warn\|error` | for `rst`, report unknown directives and roles, and options the reader skips, as warnings, or stop at the first with status 64 (podoc's own) |
 
 The formats are inferred from the file names as pandoc infers them:
 `-o book.html` writes HTML, and `-o book.pdf` makes PDF. For PDF,
@@ -129,29 +131,21 @@ and off (`-f markdown-grid_tables+grid_tables`, in either order) is
 on. The full list of what is not read is in
 [differences.md](differences.md).
 
-podoc's reStructuredText reader, `-f rst` (and `.rst` inputs), is
-being written: it reads sections, paragraphs, literal blocks, block
-quotes, lists of every kind, line blocks, comments, hyperlink
-targets, footnotes and citations, and `-f rst+lhs`, as pandoc does,
-but not yet substitutions, directives or tables. Until it does, a
-reStructuredText document can be translated once with pandoc, where
-pandoc is installed:
+podoc's reStructuredText reader, `-f rst` (and `.rst` inputs), reads
+what pandoc's does: sections, every kind of block, inline markup and
+roles, substitutions, references, footnotes and citations, every
+directive pandoc knows (with `include`), grid and simple tables and
+the table directives, and `-f rst+lhs`. With `-s` it promotes a lone
+top section to the title, and a lone subsection to the subtitle, and
+takes the document's first field list as metadata, as pandoc does. On
+the user's 73 reStructuredText files its output was pandoc's, byte for
+byte, with and without `-s` (2026-11-21).
 
-    pandoc -s -r rst -w markdown-grid_tables --columns=110 \
-      -o book.md book.rst
-
-podoc reads grid tables too; `-grid_tables` has pandoc write
-multiline tables in their place. A wide
-`--columns` keeps a wide table's column proportions. A multiline
-table's column widths come from its dashes, so widths reST gives
-exactly (`:widths:`) may come out a little different. On the Minimal
-OpenD6 SRD, 5,090 lines of reST, the ms PDF podoc made from the
-translation had the same 83 pages as pandoc's from the reST, the
-same text but for a wrong quotation mark the translation corrected,
-and the same layout but for a few table column widths. With groff
-1.24.2 its layout was the same again but for the page numbers, one
-line higher; with groff 1.25.0, three headings that wrap repeat a
-word (see "What it needs").
+pandoc passes over unknown directives and some role options in
+silence, or reports them only with `--verbose`. podoc's
+`--unknown=warn` reports each as a warning, with its position, and
+`--unknown=error` stops at the first with status 64, so a document
+can be checked for what neither program will render.
 
 ## Templates
 
@@ -270,7 +264,7 @@ podoc ends with pandoc's exit status for each error:
 | 21, 22, 23 | an unknown input format, output format, or extension |
 | 43 | a PDF engine that fails |
 | 47 | a PDF engine that is not there |
-| 64 | a parse error (YAML) |
+| 64 | a parse error (YAML, reStructuredText), or `--unknown=error` |
 | 83 | a filter error |
 | 97, 98, 99 | a data file, metadata file, or resource not found |
 | 11 | the heap is full (see "Memory") |
