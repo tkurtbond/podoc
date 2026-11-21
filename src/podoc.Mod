@@ -170,6 +170,7 @@ BEGIN
     PdHtml.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "ms" THEN
     PdMs.SetOptions(O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth);
+    IF O.wrap = "auto" THEN PdMs.SetWidth(O.columns) ELSE PdMs.SetWidth(0) END;
     PdMs.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "context" THEN
     PdConTeXt.SetOptions(O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth);

@@ -1,5 +1,7 @@
 .LP
-Text \fIt\fP \S'15's\S'0' \S'15'a\S'0' \fBn\fP \fBp\fP \f[BI]bi\fP \m[red]r\m[] \m[green]g\m[] \m[blue]b\m[] \F[C]f\F[] \f[CB]c\fP \f[BI]ap\fP none \fBtwo\fP \fB\fP \fB\f[I]em\f[R]\fP.
+Text \fIt\fP \S'15's\S'0' \S'15'a\S'0' \fBn\fP \fBp\fP \f[BI]bi\fP
+\m[red]r\m[] \m[green]g\m[] \m[blue]b\m[] \F[C]f\F[] \f[CB]c\fP
+\f[BI]ap\fP none \fBtwo\fP \fB\fP \fB\f[I]em\f[R]\fP.
 .sp 0.2v
 .B1
 .LP

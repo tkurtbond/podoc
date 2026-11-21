@@ -43,7 +43,8 @@ done too: 16.1 (`-t plain`), 16.2 (grid tables in the reader,
 `PdGridTable`; character widths from doclayout's table, `PdWidth`),
 16.3 (grid and pipe tables in the markdown and plain writers), 16.4
 (`-t plain+gutenberg`), 17.1 (`--wrap=auto` and `--columns` for
-plain) and 17.2 (wrapping for markdown). Further work is in
+plain) and 17.2 (wrapping for markdown). Phase 18 (wrapping for ms
+and ConTeXt) is under way: 18.1 (ms) is done. Further work is in
 PLAN.md's "Later". See PLAN.md's State.
 
 ## Reference material

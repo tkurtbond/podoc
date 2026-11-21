@@ -80,6 +80,12 @@ Made by the user on 2026-11-20, on the questions of §15.
     (2026-11-20), instead of HTML (Phase 16.3).
 15. **The markdown writer writes pipe tables where pandoc does**
     (2026-11-20), instead of HTML (Phase 16.3).
+16. **Wrapping for ms and ConTeXt** (2026-11-20). `--wrap=auto` and
+    `--columns` apply to `-t ms` and `-t context` as well (Phase 18),
+    so that their default output is pandoc's, byte for byte. HTML
+    stays unwrapped (in "Later"): `PdHtml` writes ropes, not
+    `PdLayout` Docs, and wrapping it as pandoc does would mean
+    restructuring the writer for output a browser shows the same.
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -810,6 +816,34 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   The `markdown` expected files were instead replaced by the wrapped
   output, each checked against pandoc's first, as in 17.1.
 
+## Phase 18: Wrapping for ms and ConTeXt
+
+pandoc wraps `ms` and `context` at `--columns` (72) by default too.
+`PdMs` and `PdConTeXt` already build `PdLayout` Docs with breaking
+spaces, as pandoc's writers do, and write them with no wrapping
+(width 0). Each sub-phase passes the width through, finds what
+pandoc keeps from wrapping (`nowrap`, `afterBreak`, literal spaces),
+and is checked as 17.2 was: every case, pandoc's test files, a file
+of edge cases at several widths, with and without `-s` and with
+`--wrap=preserve`, and the user's 54 documents at 40, 72 and 100
+columns under `-O2` and `-OC`. The cases' expected files become the
+wrapped output, each checked against pandoc first, and `make compare`
+must show no new differences.
+
+### Phase 18.1: ms [done]
+
+- `PdMs` renders at `--columns` under `--wrap=auto`. A line a wrap
+  starts with `.` or `'` must not become a request: pandoc's
+  `afterBreak "\\&"` (`Ms.hs`), which `PdLayout.AfterBreak` provides.
+- PDF output through `pdfroff` and `groff -Tpdf` still works, checked
+  on a wrapped document.
+
+### Phase 18.2: ConTeXt
+
+- `PdConTeXt` renders at `--columns` under `--wrap=auto`.
+- PDF output through `context` still works, checked on a wrapped
+  document.
+
 ## Later, not scheduled
 
 - Full YAML through polibfyaml, as `make YAML=libfyaml` (decision 2).
@@ -817,8 +851,8 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   filter appears that native code does not cover (decision 6).
 - JSON filters: a JSON reader for the AST and `--filter prog` over
   standard input and output (§8.4).
-- Output wrapping at `--columns` for the HTML, ms and ConTeXt
-  writers (Phase 17 covers plain and markdown).
+- Output wrapping at `--columns` for the HTML writer (Phases 17 and
+  18 cover plain, markdown, ms and ConTeXt; decision 16).
 - The markdown reader, not needed by the user's documents so far:
   the `%` title block; raw TeX blocks, environments, macros and the
   commands pandoc's LaTeX reader reads specially; citations and
@@ -1537,3 +1571,33 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   away from its marker and reads back as text, in pandoc too
   (recorded in docs/user/differences.md). `make test` passed
   under `-O2` and `-OC`: 237 case tests and 23 round trips.
+- 2026-11-20: Phase 18.1 done. `-t ms` wraps at `--columns` under
+  `--wrap=auto` (`PdMs.SetWidth`, set by `podoc.Mod`; the writer's
+  `afterBreak "\\&"` and `nowrap`s were already pandoc's). Checked
+  against pandoc 3.10: every case through `tools/compare` changed to
+  wrap, at 72 and 30 columns: 236 of 288 the same, the same
+  differences as unwrapped. A file of ms edge cases (lines that would
+  start with `.` or `'`, title, authors and abstract, a heading,
+  inlines, links, notes, a quote, lists, a definition list, a line
+  block, a table, a figure, a hard break, a rule) at 10, 20, 30, 50, 72 and 100 columns, plain,
+  with `-s`, with `--toc -N -s`, with `--wrap=preserve` and with
+  `--pdf-engine=groff -s`: the same but for the documented `.br`
+  after a heading. `tables.markdown` at 20 and 72, plain, `-s` and
+  `--wrap=preserve`: the same; `testsuite.txt`: the known differences
+  only (the `%` title block, now wrapped too; eqn math; raw TeX). The
+  user's 54 documents at 40, 72 and 100 columns, with and without
+  `-s`, under `-O2` and `-OC`: 648 runs, all the same but the 12 of
+  Galactic-Bounty-Hunters' CLAUDE.md, whose difference is highlighted
+  code, as unwrapped. The six `ms` cases whose expected files changed
+  were checked against pandoc with their arguments first (the
+  differences: highlighting, eqn math, the `.br`, `general.lua`'s
+  messages); `plain-wrap` and `plain-columns` gained `ms` expected
+  files, the same as pandoc's. A wrapped document (`plain-columns`,
+  `--columns=20 -s --toc -N`) makes PDFs through `pdfroff` and
+  `groff -Tpdf`, with the same words as unwrapped. Found on the way,
+  as in pandoc: display math that is not converted to eqn ends with
+  `.RE` and the next text on the same line (`.RE and more`), so groff
+  drops that text; podoc does as pandoc does. `make test` passed under
+  `-O2` and `-OC`: 239 case tests and 23 round trips. `make compare`:
+  1374 of 1584 the same, as before; the `ms` differences are the
+  unwrapped ones.

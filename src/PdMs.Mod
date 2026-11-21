@@ -28,6 +28,7 @@ VAR
   (* options *)
   numberSections, preserve, wantToc: BOOLEAN;
   tocDepth: INTEGER;
+  width: LONGINT; (* the width lines are wrapped at, 0 for none *)
   hasEngine, groff: BOOLEAN; (* the variable pdf-engine is set; to "groff" *)
 
   (* the writer's state *)
@@ -1142,6 +1143,13 @@ BEGIN
   numberSections := number; preserve := preserveBreaks; wantToc := toc; tocDepth := depth
 END SetOptions;
 
+(* Sets the width lines are wrapped at (--columns under --wrap=auto),
+   0 for none *)
+PROCEDURE SetWidth*(w: LONGINT);
+BEGIN
+  width := w
+END SetWidth;
+
 PROCEDURE LitV(r: Rope): T.Value;
 BEGIN
   RETURN T.NewSimple(L.Literal(r))
@@ -1164,7 +1172,7 @@ BEGIN
   IF tmpl # NIL THEN ctx := C.Build(meta, BlockDoc, InlineDoc) END;
   main := Blocks(doc.blocks);
   IF tmpl = NIL THEN
-    L.Write(L.Chomp(main), 0); PdIO.WriteLn;
+    L.Write(L.Chomp(main), width); PdIO.WriteLn;
     RETURN
   END;
   C.ResetField(ctx, "title", T.NewSimple(title));
@@ -1180,10 +1188,10 @@ BEGIN
   C.DefField(ctx, "hyphenate", T.NewBool(TRUE));
   C.DefField(ctx, "has-inline-math", T.NewBool(hasInlineMath));
   C.DefField(ctx, "body", T.NewSimple(main));
-  L.Write(T.Render(tmpl, ctx), 0)
+  L.Write(T.Render(tmpl, ctx), width)
 END WriteDoc;
 
 BEGIN
   numberSections := FALSE; preserve := FALSE; wantToc := FALSE; tocDepth := 3;
-  hasEngine := FALSE; groff := FALSE; notes := NIL
+  width := 0; hasEngine := FALSE; groff := FALSE; notes := NIL
 END PdMs.

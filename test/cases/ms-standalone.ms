@@ -94,7 +94,8 @@ Unnumbered \(lqquoted\(rq heading
 .pdfhref O 2 "Unnumbered “quoted” heading"
 .pdfhref M "unnumbered-quoted-heading"
 .LP
-\&.leading period and `single' \(lqdouble\(rq and \(at \(ti \(ha \(ga and a M\s-2IXED\s0 S\s-2MALLCAPS\s0 3\s-2X\s0.
+\&.leading period and `single' \(lqdouble\(rq and \(at \(ti \(ha \(ga
+and a M\s-2IXED\s0 S\s-2MALLCAPS\s0 3\s-2X\s0.
 .PDFPIC "pic.pdf" "144p" "85p"
 .ce 1
 A caption with \f[I]emph\f[R]
@@ -259,6 +260,7 @@ Line one
 .br
 line two.
 .PP
-\f[CR]code\f[R] and \f[CR].dot\f[R] and \f[B]bold \f[BI]both\f[B]\f[R] and \m[strikecolor]strike\m[].
+\f[CR]code\f[R] and \f[CR].dot\f[R] and \f[B]bold \f[BI]both\f[B]\f[R]
+and \m[strikecolor]strike\m[].
 .TC
 .pdfsync

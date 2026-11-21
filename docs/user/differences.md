@@ -204,7 +204,12 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
   changes nothing with groff 1.23 or 1.24.
 - Small caps use Unicode's simple upper-case mapping, one character
   for one.
-- Output is not wrapped, as for HTML.
+- Output is wrapped at `--columns` (72) as pandoc wraps it;
+  `--wrap=preserve` keeps the input's line breaks. On the user's 54
+  markdown documents, at 40, 72 and 100 columns, with and without
+  `-s`, podoc's output is pandoc's except for highlighted code. A
+  line holding highlighted inline code or math can wrap at a
+  different place, since pandoc's text for them is not podoc's.
 - Raw blocks and inlines are passed through for the format `ms`
   only.
 

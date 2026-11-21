@@ -6,7 +6,8 @@ Same
 Same
 .SH 1
 .LP
-#5 not a heading ####### seven # closing hashes ### ## Trailing # in text #
+#5 not a heading ####### seven # closing hashes ### ## Trailing # in
+text #
 .PP
 Text - not a list after para
 .PP
