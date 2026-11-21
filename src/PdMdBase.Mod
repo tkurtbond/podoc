@@ -1049,7 +1049,7 @@ END Delimited;
 (* orderedListMarker or anyOrderedListMarker at p: with anyStyle, any
    marker, its style and delimiter set; otherwise one of style and
    delim (or #). *)
-PROCEDURE ListMarker(p: LONGINT; anyStyle: BOOLEAN; VAR num: LONGINT;
+PROCEDURE ListMarker*(p: LONGINT; anyStyle: BOOLEAN; VAR num: LONGINT;
                      VAR style, delim: INTEGER): LONGINT;
   VAR q: LONGINT; d, s, st: INTEGER;
 BEGIN

@@ -65,7 +65,7 @@ when no files are named. `podoc --help` lists the options:
 
 | Option | Meaning |
 |---|---|
-| `-f`, `-r`, `--from`, `--read` | the input format: `markdown` only |
+| `-f`, `-r`, `--from`, `--read` | the input format: `markdown` or `rst` |
 | `-t`, `-w`, `--to`, `--write` | `html` (`html5`), `ms`, `context`, `markdown`, `plain`, `json` or `pdf`; `plain+gutenberg` for Project Gutenberg's conventions |
 | `-o FILE` | the output file; with no `-t`, its extension names the format |
 | `-s`, `--standalone` | a whole document, through a template |
@@ -129,8 +129,13 @@ and off (`-f markdown-grid_tables+grid_tables`, in either order) is
 on. The full list of what is not read is in
 [differences.md](differences.md).
 
-podoc reads only markdown. A reStructuredText document can be
-translated once with pandoc, where pandoc is installed:
+podoc's reStructuredText reader, `-f rst` (and `.rst` inputs), is
+being written: it reads sections, paragraphs, literal blocks, block
+quotes, lists of every kind, line blocks, comments, hyperlink
+targets, footnotes and citations, and `-f rst+lhs`, as pandoc does,
+but not yet substitutions, directives or tables. Until it does, a
+reStructuredText document can be translated once with pandoc, where
+pandoc is installed:
 
     pandoc -s -r rst -w markdown-grid_tables --columns=110 \
       -o book.md book.rst

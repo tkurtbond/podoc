@@ -1,0 +1,1 @@
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"Para."}]},{"t":"CodeBlock","c":[["",["haskell","literate"],[]],"main = 1\n  + 2"]},{"t":"CodeBlock","c":[["",["haskell","literate"],[]],"f x = x"]},{"t":"Para","c":[{"t":"Str","c":"End."}]}]}

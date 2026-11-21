@@ -90,7 +90,7 @@ BEGIN
 END Again;
 
 (* notAfterString *)
-PROCEDURE NotAfterString(): BOOLEAN;
+PROCEDURE NotAfterString*(): BOOLEAN;
 BEGIN
   RETURN ~((B.lastStrText = B.textId) & (B.lastStrPos = B.pos))
 END NotAfterString;
@@ -106,7 +106,7 @@ END UpdateLastStrPos;
 (* The character at s[p], of the n bytes of s, in r; returns where the
    next starts. A byte that does not start a UTF-8 sequence is
    U+FFFD. *)
-PROCEDURE RuneOf(VAR s: ARRAY OF CHAR; p, n: LONGINT; VAR r: Utf8.Rune): LONGINT;
+PROCEDURE RuneOf*(VAR s: ARRAY OF CHAR; p, n: LONGINT; VAR r: Utf8.Rune): LONGINT;
   VAR q: LONGINT;
 BEGIN
   IF p >= n THEN r := 0; RETURN p END;
@@ -126,7 +126,7 @@ BEGIN
 END RuneAt;
 
 (* Where the character after the one at p starts *)
-PROCEDURE RuneEnd(p: LONGINT): LONGINT;
+PROCEDURE RuneEnd*(p: LONGINT): LONGINT;
   VAR r: Utf8.Rune;
 BEGIN
   RETURN RuneAt(p, r)
@@ -154,7 +154,7 @@ BEGIN
 END RealLength;
 
 (* isAlphaNum: whether the character at p is a letter or a number *)
-PROCEDURE AlnumAt(p: LONGINT): BOOLEAN;
+PROCEDURE AlnumAt*(p: LONGINT): BOOLEAN;
   VAR r: Utf8.Rune; q: LONGINT;
 BEGIN
   IF p >= B.len THEN RETURN FALSE END;
@@ -164,7 +164,7 @@ BEGIN
 END AlnumAt;
 
 (* Unicode's isSpace for the character at p *)
-PROCEDURE SpaceAt(p: LONGINT): BOOLEAN;
+PROCEDURE SpaceAt*(p: LONGINT): BOOLEAN;
   VAR r: Utf8.Rune; q: LONGINT;
 BEGIN
   IF p >= B.len THEN RETURN FALSE END;
@@ -187,20 +187,20 @@ BEGIN
   RETURN (ch = " ") OR (ch = 09X) OR (ch = 0AX) OR (ch = 0DX)
 END IsSpaceChar;
 
-PROCEDURE IsHex(ch: CHAR): BOOLEAN;
+PROCEDURE IsHex*(ch: CHAR): BOOLEAN;
 BEGIN
   RETURN B.IsDigit(ch) OR (ch >= "a") & (ch <= "f") OR (ch >= "A") & (ch <= "F")
 END IsHex;
 
 (* Buffers *)
 
-PROCEDURE PutBuf(VAR b: B.Buf; VAR c: B.Buf);
+PROCEDURE PutBuf*(VAR b: B.Buf; VAR c: B.Buf);
   VAR i: LONGINT;
 BEGIN
   FOR i := 0 TO c.len - 1 DO B.PutChar(b, c.t[i]) END
 END PutBuf;
 
-PROCEDURE PutRope(VAR b: B.Buf; r: A.Rope);
+PROCEDURE PutRope*(VAR b: B.Buf; r: A.Rope);
   VAR i, n: LONGINT;
 BEGIN
   n := Ropes.Length(r);
@@ -209,7 +209,7 @@ END PutRope;
 
 (* T.unwords . T.words: the words of s[0 .. n-1], split at white space,
    joined by single spaces, appended to out *)
-PROCEDURE Words(VAR s: ARRAY OF CHAR; n: LONGINT; VAR out: B.Buf);
+PROCEDURE Words*(VAR s: ARRAY OF CHAR; n: LONGINT; VAR out: B.Buf);
   VAR i, j, k: LONGINT; r: Utf8.Rune; first: BOOLEAN;
 BEGIN
   i := 0; first := TRUE;
@@ -235,7 +235,7 @@ END Words;
 
 (* escapeURI: s[0 .. n-1] with white space and <>|"{}[]^` percent
    encoded, appended to out *)
-PROCEDURE EscapeURI(VAR s: ARRAY OF CHAR; n: LONGINT; VAR out: B.Buf);
+PROCEDURE EscapeURI*(VAR s: ARRAY OF CHAR; n: LONGINT; VAR out: B.Buf);
   VAR i, j, k: LONGINT; r: Utf8.Rune; ch: CHAR; hex: ARRAY 17 OF CHAR;
 BEGIN
   hex := "0123456789ABCDEF";
@@ -297,7 +297,7 @@ END LookupEntity;
 
 (* fromEntities: s[from .. to-1] with its character references
    replaced, appended to b *)
-PROCEDURE FromEntities(VAR s: ARRAY OF CHAR; from, to: LONGINT; VAR b: B.Buf);
+PROCEDURE FromEntities*(VAR s: ARRAY OF CHAR; from, to: LONGINT; VAR b: B.Buf);
   VAR i, j, k, c1, c2: LONGINT;
 BEGIN
   i := from;
@@ -323,19 +323,19 @@ END FromEntities;
 (* Building *)
 
 (* Adds a Str of t[from .. to-1] to l. *)
-PROCEDURE AddText(VAR l: A.Inlines; from, to: LONGINT);
+PROCEDURE AddText*(VAR l: A.Inlines; from, to: LONGINT);
 BEGIN
   A.Append(l, A.NewStr(B.Rope(from, to)))
 END AddText;
 
 (* Adds a Str of the string s to l. *)
-PROCEDURE AddString(VAR l: A.Inlines; s: ARRAY OF CHAR);
+PROCEDURE AddString*(VAR l: A.Inlines; s: ARRAY OF CHAR);
 BEGIN
   A.Append(l, A.NewStr(A.S(s)))
 END AddString;
 
 (* Adds a Str of the character c to l. *)
-PROCEDURE AddChar(VAR l: A.Inlines; c: LONGINT);
+PROCEDURE AddChar*(VAR l: A.Inlines; c: LONGINT);
   VAR b: B.Buf;
 BEGIN
   B.InitBuf(b); B.PutUtf8(b, c);
@@ -1409,7 +1409,7 @@ END UriChunk;
 
 (* uri at p: the URI as written in orig, escaped in src; the position
    after it, or -1 *)
-PROCEDURE Uri(p: LONGINT; VAR orig, src: B.Buf): LONGINT;
+PROCEDURE Uri*(p: LONGINT; VAR orig, src: B.Buf): LONGINT;
   VAR n, s, q, r: LONGINT; ch, close: CHAR;
 BEGIN
   n := W.Scheme(B.t, p);
@@ -1478,7 +1478,7 @@ END Subdomain;
 
 (* emailAddress at p: the address in orig, the mailto: URI in src; the
    position after it, or -1 *)
-PROCEDURE Email(p: LONGINT; VAR orig, src: B.Buf): LONGINT;
+PROCEDURE Email*(p: LONGINT; VAR orig, src: B.Buf): LONGINT;
   VAR q, r: LONGINT; b: B.Buf;
 BEGIN
   q := EmailWord(p);

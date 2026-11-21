@@ -1,11 +1,14 @@
 #!/bin/sh
 # runcases PODOC OUTDIR [CASEDIR]
 #
-# Runs the case tests: for each CASEDIR/<name>.md (test/cases by
-# default) and each expected output beside it, <name>.<ext>, where <ext>
-# is a format (json, html, ms, context, markdown, plain, source), runs
+# Runs the case tests: for each CASEDIR/<name>.md or <name>.rst
+# (test/cases by default) and each expected output beside it,
+# <name>.<ext>, where <ext> is a format (json, html, ms, context,
+# markdown, plain, source), runs
 #
 #     PODOC -t <ext> <name>.md [the words of <name>.args]
+#
+# (podoc reads a .rst input as reStructuredText, from its extension)
 #
 # in CASEDIR, and compares its standard output with <name>.<ext> and its
 # standard error with <name>.errors, or with nothing if there is no such
@@ -28,9 +31,9 @@ cd "$casedir" || exit 2
 
 failed=0
 total=0
-for md in *.md; do
+for md in *.md *.rst; do
   [ -f "$md" ] || continue
-  name=${md%.md}
+  name=${md%.*}
   args=
   [ -f "$name.args" ] && args=$(cat "$name.args")
   for ext in json html ms context markdown plain source; do

@@ -51,8 +51,10 @@ them to PDF for ms, with `PdSha1` for pandoc's SHA-1 names; its tests
 are `tools/runimages`. Further work is in PLAN.md's "Later".
 
 A reStructuredText reader, all of pandoc's `-f rst`, came into scope
-on 2026-11-20 (PLAN.md's decisions 18 to 22), planned as Phase 19,
-not yet started. Read `docs/research/rst-implementation.md` first.
+on 2026-11-20 (PLAN.md's decisions 18 to 22), planned as Phase 19.
+Phase 19.1 (blocks, with references and footnotes) is done:
+`PdRst` and `PdRstInline`. Read `docs/research/rst-implementation.md`
+first.
 See PLAN.md's State.
 
 ## Reference material

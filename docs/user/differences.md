@@ -18,11 +18,13 @@ in PLAN.md) is listed by the writer.
   messages are podoc's own wording, starting with "podoc: ".
 - `-t source` writes the input as the reader would see it (joined,
   CRs removed, tabs expanded); pandoc has no such format.
-- podoc reads only `markdown`, and turns only `grid_tables` on or
-  off (`gutenberg`, which pandoc's reader ignores, it takes and
-  ignores): any other extension, such as `-f markdown+smart` or
-  `-f markdown-smart`, ends podoc with exit status 23, and `-f rst`, or an input whose extension names another
-  format (`.rst`, `.tex`, ...) when there is no `-f`, with 21. Inputs
+- podoc reads only `markdown` and `rst`. For `markdown` it turns
+  only `grid_tables` on or off (`gutenberg`, which pandoc's reader
+  ignores, it takes and ignores); for `rst`, only `auto_identifiers`
+  and `literate_haskell` (`lhs`). Any other extension, such as
+  `-f markdown+smart`, `-f markdown-smart` or `-f rst+smart`, ends
+  podoc with exit status 23, and another format, or an input whose
+  extension names one (`.tex`, ...) when there is no `-f`, with 21. Inputs
   and `-o` imply formats as in pandoc, with pandoc's warnings when an
   extension names none.
 - podoc writes `html` (`html5`), `ms`, `context`, `markdown`,

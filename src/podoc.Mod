@@ -21,7 +21,7 @@ MODULE podoc;
    The heap may grow to poc's default limit, 1 GB, or to the number of
    megabytes PODOC_HEAP_LIMIT gives. *)
 
-IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
+IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdRst, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt, PdMdWriter,
   PdInclude, PdFilters, PdPdf, PdImages, O := PdOptions;
 
@@ -102,7 +102,12 @@ BEGIN
     MergeMeta(m, PdMarkdown.ReadMetaFile(f.name^, O.tabStop));
     f := f.next
   END;
-  d := PdMarkdown.Read(text, len, O.tabStop);
+  IF O.rst THEN
+    PdRst.autoIds := O.autoIds; PdRst.lhs := O.lhs;
+    d := PdRst.Read(text, len, O.tabStop)
+  ELSE
+    d := PdMarkdown.Read(text, len, O.tabStop)
+  END;
   MergeMeta(m, d.meta); MergeMeta(m, O.cmdMeta);
   d.meta := m;
   RunFilters(d);

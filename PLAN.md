@@ -991,7 +991,7 @@ byte, with and without `-s`:
 
 All of this runs under `-O2` and `-OC`, as every phase does.
 
-### Phase 19.1: Blocks
+### Phase 19.1: Blocks [done]
 
 - `-f rst` and `-r rst`, and `.rst` inputs when there is no `-f`
   (today these exit with status 21; differences.md changes).
@@ -2247,3 +2247,31 @@ ConTeXt.
     `PdSha1Test`, 247 case tests, 23 round trips and 6 image tests
     under each.
   - Still to check: which converters the BSDs' packages provide.
+- 2026-11-21: Phase 19.1 done: the rST reader's blocks.
+  - `PdRst` (new) reads `-f rst` (and `.rst` inputs with no `-f`):
+    sections with their adornment levels and `auto_identifiers`
+    (`-f rst-auto_identifiers` too), paragraphs, transitions,
+    comments, literal blocks (`::` in its three forms, quoted, and
+    indented), block quotes, bullet, enumerated (every style, `#`) and
+    definition lists, field lists, option lists, line blocks, and
+    `rst+lhs` (`literate_haskell`). Doctest blocks, attributions and
+    classifiers stay text, as in pandoc. `PdRstInline` (new) holds the
+    inline parser, which 19.2 completes.
+  - Brought forward from 19.2: reference targets (named, anonymous,
+    chained, multi-line names), internal targets before headers and
+    other blocks, footnotes (`[1]`, `[#]`, `[*]`, `[#name]`), citations
+    and their `citations` Div, and the pass after parsing that
+    resolves them, with pandoc's "Reference not found" and "Circular
+    reference" warnings at its position.
+  - `PdOptions`: `rst` takes `auto_identifiers`, `literate_haskell`
+    and `lhs`; any other extension (`+smart` too) ends podoc with 23.
+    `opt-from-rst` became `opt-from-latex`.
+  - `tools/runcases` reads `test/cases/*.rst`; ten rST cases (JSON
+    from pandoc 3.10, warnings with podoc's prefix) are byte for byte
+    pandoc's under both models.
+  - `make test` passed under `-O2` and `-OC`: 257 case tests, 23
+    round trips and 6 image tests under each.
+  - Not yet: substitutions, roles and the rest of 19.2, directives
+    (19.3), tables (19.4), `-s` (19.5); rST's `smart`,
+    `ascii_identifiers`, `east_asian_line_breaks` and
+    `gfm_auto_identifiers` extensions.

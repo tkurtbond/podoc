@@ -1,0 +1,2 @@
+podoc: [WARNING] Circular reference 'a' at rst-references2.rst line 23 column 1
+podoc: [WARNING] Reference not found for 'multi-line' at rst-references2.rst line 23 column 1

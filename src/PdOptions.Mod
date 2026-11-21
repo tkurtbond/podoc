@@ -50,6 +50,9 @@ VAR
   cmdMeta*: A.MetaMapV; (* -M *)
   output*: String; (* -o; "" for standard output *)
   from*: String; (* -f; "" until Resolve *)
+  rst*: BOOLEAN; (* the reader is rst *)
+  autoIds*: BOOLEAN; (* rst's auto_identifiers *)
+  lhs*: BOOLEAN; (* rst's literate_haskell *)
   gridTables*: BOOLEAN; (* the grid_tables extension: TRUE unless -f
     markdown-grid_tables *)
   to*: String; (* -t; the writer after Resolve, without extensions *)
@@ -543,7 +546,7 @@ PROCEDURE Parse*;
 BEGIN
   parser := ArgParser.NewParser("podoc [OPTIONS] [FILES]", AddInput);
   parser.AddOption(ArgParser.MakeStringOption("f", "from",
-    "The input format: markdown.", SetFrom));
+    "The input format: markdown or rst.", SetFrom));
   parser.AddOption(ArgParser.MakeStringOption("r", "read",
     "The same as --from.", SetFrom));
   parser.AddOption(ArgParser.MakeStringOption("t", "to",
@@ -655,14 +658,49 @@ BEGIN
   RETURN i
 END FormatName;
 
+(* Replaces each extension lhs in spec, from i on, with
+   literate_haskell, as pandoc's parseFlavoredFormat reads +lhs *)
+PROCEDURE ExpandLhs(VAR spec: ARRAY OF CHAR; i: LONGINT);
+  VAR out, ext0: String; j, k, o: LONGINT;
+BEGIN
+  o := 0;
+  WHILE spec[i] # 0X DO
+    out[o] := spec[i]; INC(o); INC(i);
+    j := i;
+    WHILE (spec[j] # 0X) & (spec[j] # "+") & (spec[j] # "-") DO INC(j) END;
+    IF (j - i = 3) & (spec[i] = "l") & (spec[i + 1] = "h") & (spec[i + 2] = "s") THEN
+      COPY("literate_haskell", ext0); k := 0;
+      WHILE ext0[k] # 0X DO out[o] := ext0[k]; INC(o); INC(k) END;
+      i := j
+    ELSE
+      WHILE i < j DO out[o] := spec[i]; INC(o); INC(i) END
+    END
+  END;
+  out[o] := 0X;
+  (* spec keeps its format name; the extensions follow it *)
+  k := 0; WHILE (spec[k] # 0X) & (spec[k] # "+") & (spec[k] # "-") DO INC(k) END;
+  o := 0; WHILE out[o] # 0X DO spec[k] := out[o]; INC(k); INC(o) END;
+  spec[k] := 0X
+END ExpandLhs;
+
 (* Ends podoc if the reader is not markdown: 21 for another format, 23
    for an extension of markdown that podoc does not take. grid_tables
    sets gridTables; gutenberg, which pandoc's reader ignores, is
    taken and ignored. *)
 PROCEDURE CheckReader;
-  VAR i: LONGINT; name, ext: String;
+  VAR i, j: LONGINT; name, ext, spec: String;
 BEGIN
   i := FormatName(from, name);
+  IF name = "rst" THEN
+    rst := TRUE; autoIds := TRUE; lhs := FALSE;
+    j := i; COPY(from, spec); ExpandLhs(spec, j);
+    IF ~Extensions(spec, j, "auto_identifiers", "literate_haskell", autoIds, ext)
+        OR ~Extensions(spec, j, "literate_haskell", "auto_identifiers", lhs, ext) THEN
+      PdIO.Message3("The extension '", ext, "' is not supported by podoc.");
+      PdIO.Exit(PdIO.UnsupportedExtension)
+    END;
+    RETURN
+  END;
   IF name # "markdown" THEN
     PdIO.Message3("Unknown input format '", name, "'");
     PdIO.Exit(PdIO.UnknownReader)
