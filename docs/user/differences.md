@@ -249,6 +249,26 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
 - The engine's log is not shown with `--verbose`, which podoc does not
   have.
 
+## Images
+
+- For ms, and for PDF made with `pdfroff` or `groff`, podoc converts
+  local images groff cannot show (SVG, PNG, JPEG, GIF, ...) to PDF and
+  writes `.PDFPIC` for them, where pandoc writes a groff comment and
+  leaves the image out (decision 23 in PLAN.md; see "Images in ms" in
+  podoc.md). For `-t ms -o out.ms` the PDFs go in `out-media/`; with
+  `--extract-media=DIR`, beside the copies in `DIR`. To standard
+  output, without `--extract-media`, podoc writes pandoc's output and
+  warns. pandoc converts images only for its TeX engines.
+- `--extract-media` copies local images only, where pandoc also
+  fetches URLs and decodes `data:` URIs; podoc leaves those images as
+  they are. As for PDF output, images are found relative to the
+  working directory only, and `%`-escapes are not decoded; an image
+  whose path holds `%` is named by its SHA-1, as in pandoc. For local
+  images, podoc's names and output are pandoc's.
+- An image that cannot be read is replaced by its description after
+  the images found have been copied, so podoc's warning for it comes
+  after any warnings about conversion.
+
 ## The markdown writer
 
 - A run of colons that would start a fenced div is escaped as `\`

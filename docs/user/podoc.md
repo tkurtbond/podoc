@@ -34,6 +34,11 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
     PATH may then make an empty PDF without reporting an error;
   - for `context`: ConTeXt LMTX;
   - for SVG images in ConTeXt: `rsvg-convert` (optional).
+- For images in ms output (see "Images in ms"), optionally:
+  `rsvg-convert` for SVG, and `img2pdf` or ImageMagick (`magick`, or
+  version 6's `convert` and `identify`) for PNG, JPEG, GIF and other
+  bitmaps. groff before 1.25 reads only PDF 1.4, which podoc asks
+  `rsvg-convert` for.
 
 podoc is built and tested on Linux (Fedora), FreeBSD, NetBSD and
 OpenBSD.
@@ -71,6 +76,7 @@ when no files are named. `podoc --help` lists the options:
 | `--toc`, `--toc-depth N`, `-N` | a table of contents; numbered sections |
 | `-c URL`, `--id-prefix STRING` | a style sheet and an identifier prefix, for HTML |
 | `--pdf-engine PROGRAM`, `--pdf-engine-opt STRING` | how PDF is made |
+| `--extract-media DIR` | copy the local images into `DIR` and refer to the copies |
 | `-F PROGRAM`, `-L FILE` | the built-in filters (see below) |
 | `--wrap auto\|none\|preserve` | wrapping: for `plain`, `markdown`, `ms` and `context`, `auto` (the default) wraps at `--columns`; HTML is not wrapped |
 | `--columns N` | the line length, 72 by default; it also sets table column widths, as in pandoc |
@@ -200,10 +206,50 @@ arguments.
   ms; add an `l` (`a4l`) for landscape.
 - `--pdf-engine-opt` passes an option to the engine.
 - An image that cannot be found is replaced by its description, with a
-  warning. For ConTeXt, images are copied into the temporary
-  directory, and SVG images are converted to PDF with `rsvg-convert`.
+  warning. Images are copied into the temporary directory. For
+  ConTeXt, SVG images are converted to PDF with `rsvg-convert`; for
+  ms, every image groff cannot show is converted to PDF (see "Images
+  in ms").
 - When the engine fails, podoc shows its output, or for ConTeXt the
   first `tex error` line of its log, and ends with status 43.
+
+## Images
+
+`--extract-media=DIR` copies each local image into `DIR`, as pandoc
+does, and points the image at the copy: `img/map.png` is copied to
+`DIR/img/map.png`. An image whose path is absolute or holds `..` or
+`%` is named by the SHA-1 of its contents instead, with the extension
+of its media type. An image that cannot be read is replaced by its
+description, with a warning. URLs and `data:` URIs are left as they
+are.
+
+### Images in ms
+
+groff's ms shows only PDF images (`.PDFPIC`), and pandoc writes a
+comment in place of any other image, which is then missing from the
+PDF. podoc converts such images, local files with the extension of
+an image type (`.svg`, `.png`, `.jpg`, `.gif`, ...), to PDF and writes
+`.PDFPIC` for them:
+
+- SVG with `rsvg-convert`; other images with the first of `img2pdf`
+  and ImageMagick that is found and succeeds. An image with no
+  resolution of its own is taken as 96 dpi, pandoc's default.
+- The PDF is named for the image, `map.png` giving `map.pdf`, with a
+  number added when two would clash (`map-2.pdf`).
+- For PDF output, the PDFs go in the temporary directory.
+- With `--extract-media=DIR`, they go in `DIR` beside the copies.
+- With `-o out.ms`, they go in `out-media/` beside `out.ms`, and the
+  paths written are relative to the output's directory: run groff
+  there (`cd` to it first), since groff looks for `.PDFPIC` files from
+  the directory it runs in. A `.pdf` image keeps the path written in
+  the document, relative to podoc's directory, as pandoc writes it.
+- Written to standard output, the images are not converted, and podoc
+  warns.
+- When no converter is found or a conversion fails, podoc warns and
+  writes pandoc's comment.
+- A width given as a percentage (`{width=50%}`) is written as `0p`,
+  as pandoc writes it for a `.pdf` image, and groff then skips the
+  image.
 
 ## Exit statuses
 

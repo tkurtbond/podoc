@@ -1,0 +1,5 @@
+podoc: [WARNING] Could not convert image media/img/dot.png: check that img2pdf or magick is in path.
+podoc: [WARNING] Could not convert image media/img/dot.jpg: check that img2pdf or magick is in path.
+podoc: [WARNING] Could not convert image media/img/box.svg: check that rsvg-convert is in path.
+podoc: [WARNING] Could not convert image media/3a491c70bb9a416c36128060393c7dbd4069c8c8.png: check that img2pdf or magick is in path.
+podoc: [WARNING] Could not fetch resource missing.png: replacing image with description

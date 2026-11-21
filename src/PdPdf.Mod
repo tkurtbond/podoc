@@ -5,7 +5,8 @@ MODULE PdPdf;
    Prepare makes a temporary directory, copies the document's local
    images into it and points the images at the copies (fillMediaBag and
    extractMedia); for ConTeXt it also converts SVG images to PDF with
-   rsvg-convert (convertImages). The writer then writes its source into
+   rsvg-convert (convertImages), and for groff and pdfroff every image
+   they cannot show (PdImages.Convert, decision 23). The writer then writes its source into
    the directory, at the path Source gives, and Make runs the engine on
    it: pdfroff and groff in the working directory, the source on their
    standard input and the PDF from their standard output; context in
@@ -13,7 +14,7 @@ MODULE PdPdf;
    PDF is copied to the output, and the directory is removed. *)
 
 IMPORT Err, Ropes, A := PdAst, T := PdTemplate, L := PdLayout,
-  C := PdContext, O := PdOptions, PdIO, R := PdRun;
+  C := PdContext, O := PdOptions, PdIO, R := PdRun, PdImages;
 
 TYPE
   Rope = Ropes.Rope;
@@ -78,101 +79,38 @@ END Failed;
 
 (* Images *)
 
-(* Whether url has a scheme (http:, data:, file: and the like) *)
-PROCEDURE HasScheme(VAR url: ARRAY OF CHAR): BOOLEAN;
-  VAR i: LONGINT; ch: CHAR;
+(* Sets path to a new name in the temporary directory, with the
+   extension ext *)
+PROCEDURE TempName(VAR path: ARRAY OF CHAR; ext: ARRAY OF CHAR);
 BEGIN
-  ch := CAP(url[0]);
-  IF (ch < "A") OR (ch > "Z") THEN RETURN FALSE END;
-  i := 1;
-  LOOP
-    ch := CAP(url[i]);
-    IF ch = ":" THEN RETURN i > 1 (* not a DOS drive letter *)
-    ELSIF ~(((ch >= "A") & (ch <= "Z")) OR ((ch >= "0") & (ch <= "9"))
-            OR (ch = "+") OR (ch = "-") OR (ch = ".")) THEN
-      RETURN FALSE
-    END;
-    INC(i)
-  END
-END HasScheme;
-
-(* Sets ext to the extension of the last part of the path p, with its
-   ".", or "" *)
-PROCEDURE Extension(VAR p: ARRAY OF CHAR; VAR ext: ARRAY OF CHAR);
-  VAR i, dot, k: LONGINT;
-BEGIN
-  i := 0; dot := -1;
-  WHILE (i < LEN(p)) & (p[i] # 0X) DO
-    IF p[i] = "." THEN dot := i ELSIF p[i] = "/" THEN dot := -1 END;
-    INC(i)
-  END;
-  k := 0;
-  IF dot >= 0 THEN
-    i := dot;
-    WHILE (p[i] # 0X) & (k < LEN(ext) - 1) DO ext[k] := p[i]; INC(i); INC(k) END
-  END;
-  ext[k] := 0X
-END Extension;
-
-(* Whether the extension ext is s, ignoring case; s is lower case *)
-PROCEDURE IsExt(VAR ext: ARRAY OF CHAR; s: ARRAY OF CHAR): BOOLEAN;
-  VAR i: LONGINT; ch: CHAR;
-BEGIN
-  i := 0;
-  LOOP
-    ch := ext[i];
-    IF (ch >= "A") & (ch <= "Z") THEN ch := CHR(ORD(ch) + 32) END;
-    IF ch # s[i] THEN RETURN FALSE END;
-    IF ch = 0X THEN RETURN TRUE END;
-    INC(i)
-  END
-END IsExt;
-
-(* Converts the SVG image at path to PDF, as pandoc's convertImage does
-   with rsvg-convert; sets path to the PDF made, or warns and leaves it
-   alone. *)
-PROCEDURE ConvertSvg(VAR path: ARRAY OF CHAR);
-  VAR out: Path; c: R.Command; m: ARRAY R.PathLen + 100 OF CHAR;
-BEGIN
-  COPY(tmp, out); R.Append(out, "/img"); R.AppendInt(out, images); INC(images);
-  R.Append(out, ".pdf");
-  m := "Could not convert image "; R.Append(m, path);
-  IF ~R.Found("rsvg-convert") THEN
-    R.Append(m, ": check that rsvg-convert is in path.");
-    PdIO.Warn(m)
-  ELSE
-    c := R.New(); R.Add(c, "rsvg-convert");
-    R.Add(c, "-f"); R.Add(c, "pdf"); R.Add(c, "-a");
-    R.Add(c, "--dpi-x"); R.Add(c, "96"); R.Add(c, "--dpi-y"); R.Add(c, "96");
-    R.Add(c, "-o"); R.Add(c, out); R.Add(c, path);
-    R.AddText(c, " </dev/null >/dev/null");
-    IF R.Run(c) = 0 THEN COPY(out, path)
-    ELSE R.Append(m, ": conversion from SVG failed"); PdIO.Warn(m)
-    END
-  END
-END ConvertSvg;
+  COPY(tmp, path); R.Append(path, "/img"); R.AppendInt(path, images); INC(images);
+  R.Append(path, ext)
+END TempName;
 
 (* What the image src becomes: the path of its copy in the temporary
-   directory, converted for ConTeXt if need be, or NIL if it cannot be
-   read. *)
+   directory, or NIL if it cannot be read. For ConTeXt an SVG image is
+   converted to PDF, for groff and pdfroff any image they cannot show
+   (decision 23); one that cannot be converted keeps its copy. *)
 PROCEDURE Fetch(src: Rope): Rope;
-  VAR s: Seen; url, path, ext: Path; r: Rope;
+  VAR s: Seen; url, path, ext, pdf: Path; r: Rope;
 BEGIN
   s := seen;
   WHILE (s # NIL) & ~Ropes.Equal(s.src, src) DO s := s.next END;
   IF s # NIL THEN RETURN s.url END;
   Ropes.ToString(src, url);
-  IF HasScheme(url) THEN
+  IF PdImages.HasScheme(url) THEN
     r := src (* podoc does not fetch URLs; the engine may *)
   ELSIF ~PdIO.Exists(url) THEN
     r := NIL
   ELSE
-    Extension(url, ext);
-    COPY(tmp, path); R.Append(path, "/img"); R.AppendInt(path, images); INC(images);
-    R.Append(path, ext);
+    PdImages.Extension(url, ext);
+    TempName(path, ext);
     IF ~R.Copy(url, path) THEN r := NIL
     ELSE
-      IF tex & IsExt(ext, ".svg") THEN ConvertSvg(path) END;
+      IF tex & PdImages.IsExt(ext, ".svg") OR ~tex & PdImages.Convertible(path) THEN
+        TempName(pdf, ".pdf");
+        IF PdImages.Convert(path, pdf, ~tex) THEN COPY(pdf, path) END
+      END;
       r := Ropes.FromString(path)
     END
   END;
@@ -180,38 +118,15 @@ BEGIN
   RETURN r
 END Fetch;
 
-(* A Span of the image's description in place of the image l, which
-   could not be read, as fillMediaBag's replacementSpan *)
-PROCEDURE Replacement(l: A.LinkInl): A.Inline;
-  VAR a: A.Attr; p: A.StrList; kv: A.KeyVal;
-BEGIN
-  IF l.attr = NIL THEN a := A.NewAttr(NIL) ELSE a := A.NewAttr(l.attr.id) END;
-  A.AddClass(a, A.S("image")); A.AddClass(a, A.S("placeholder"));
-  IF l.attr # NIL THEN
-    p := l.attr.classes;
-    WHILE p # NIL DO A.AddClass(a, p.s); p := p.next END
-  END;
-  A.AddKeyVal(a, A.S("original-image-src"), l.url);
-  A.AddKeyVal(a, A.S("original-image-title"), l.title);
-  IF l.attr # NIL THEN
-    kv := l.attr.attrs;
-    WHILE kv # NIL DO A.AddKeyVal(a, kv.key, kv.value); kv := kv.next END
-  END;
-  RETURN A.NewSpan(a, l.content)
-END Replacement;
-
 PROCEDURE (w: Walker) Inline*(i: A.Inline): A.Inline;
-  VAR l: A.LinkInl; r: Rope; m, src: Path;
+  VAR l: A.LinkInl; r: Rope;
 BEGIN
   IF i.kind = A.Image THEN
     l := i(A.LinkInl);
     r := Fetch(l.url);
     IF r = NIL THEN
-      Ropes.ToString(l.url, src);
-      m := "Could not fetch resource "; R.Append(m, src);
-      R.Append(m, ": replacing image with description");
-      PdIO.Warn(m);
-      RETURN Replacement(l)
+      PdImages.WarnMissing(l.url);
+      RETURN PdImages.Replacement(l)
     END;
     l.url := r
   END;

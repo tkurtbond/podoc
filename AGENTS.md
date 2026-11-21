@@ -45,7 +45,10 @@ are done too: 16.1 (`-t plain`), 16.2 (grid tables in the reader,
 (`-t plain+gutenberg`), 17.1 (`--wrap=auto` and `--columns` for
 plain), 17.2 (wrapping for markdown), 18.1 (wrapping for ms), 18.2
 (wrapping for ConTeXt) and 18.3 (emoji sequences in `PdWidth`, as
-doclayout counts them). Further work is in PLAN.md's "Later".
+doclayout counts them). Phase 21 (images in ms output, decision 23)
+is done: `PdImages` copies images for `--extract-media` and converts
+them to PDF for ms, with `PdSha1` for pandoc's SHA-1 names; its tests
+are `tools/runimages`. Further work is in PLAN.md's "Later".
 
 A reStructuredText reader, all of pandoc's `-f rst`, came into scope
 on 2026-11-20 (PLAN.md's decisions 18 to 22), planned as Phase 19,
@@ -136,7 +139,9 @@ reinstall after upgrading poc.
   `ok   - ` and `FAIL - ` lines, compared with `<Name>Test.expected`)
   and the case tests (`tools/runcases`: `test/cases/<name>.md` with
   optional `<name>.args`, against each expected `<name>.<format>`
-  beside it), under both models. It must not need pandoc. Expected JSON
+  beside it), and the image tests (`tools/runimages`, from
+  `test/images` against `test/images-expected`), under both models.
+  It must not need pandoc. Expected JSON
   is pandoc 3.10's; the writers' expected files start as pandoc's
   `--wrap=none` output and may be replaced by podoc's equivalent
   output, each difference recorded in `docs/user/differences.md`

@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 # mkmime: writes src/PdMime.Mod, the extensions pandoc 3.10 knows a
 # MIME type for, each with the type's category (image, video, audio
-# or another), from data/mime-types.txt.
+# or another), from data/mime-types.txt, and the extension pandoc gives
+# a file named by hash, from data/mime-canonical.txt.
 #   tools/mkmime > src/PdMime.Mod
 import os, sys
 
 here = os.path.dirname(os.path.abspath(sys.argv[0]))
 cats = {'image': 'i', 'video': 'v', 'audio': 'a'}
+canon = {}
+for line in open(os.path.join(here, '..', 'data', 'mime-canonical.txt')):
+    if line.startswith('#') or not line.strip():
+        continue
+    ext, c = line.split()
+    canon[ext] = c
 words = []
 for line in open(os.path.join(here, '..', 'data', 'mime-types.txt')):
     if line.startswith('#') or not line.strip():
@@ -14,11 +21,14 @@ for line in open(os.path.join(here, '..', 'data', 'mime-types.txt')):
     ext, typ = line.split()
     words.append((ext, cats.get(typ.split('/')[0], 'o')))
 words.sort()
-maxlen = max(len(e) for e, c in words) + 3
+maxlen = max([len(e) for e, c in words] + [len(c) for c in canon.values()]) + 3
 
 lines, cur = [], ''
 for e, c in words:
-    w = '%s:%s ' % (e, c)
+    if e in canon:
+        w = '%s:%s:%s ' % (e, c, canon[e])
+    else:
+        w = '%s:%s ' % (e, c)
     if len(cur) + len(w) > 64:
         lines.append(cur); cur = ''
     cur += w
@@ -28,7 +38,8 @@ if cur:
 w = sys.stdout.write
 w('''MODULE PdMime;
 (* PdMime: the extensions pandoc 3.10 knows a MIME type for
-   (Text.Pandoc.MIME.getMimeType), with the category of each type.
+   (Text.Pandoc.MIME.getMimeType), with the category of each type and
+   the extension pandoc gives a file it names by hash.
    Written by tools/mkmime from data/mime-types.txt; do not edit. *)
 
 CONST
@@ -41,10 +52,12 @@ TYPE
 
 VAR
   exts: ARRAY Count OF Word;
+  canons: ARRAY Count OF Word;
   cats: ARRAY Count OF CHAR;
   n: INTEGER;
 
-(* Adds the entries in s, each "ext:c" followed by a space *)
+(* Adds the entries in s, each "ext:c" or "ext:c:canonical" followed by
+   a space *)
 PROCEDURE Add(s: ARRAY OF CHAR);
   VAR i, j: INTEGER;
 BEGIN
@@ -53,19 +66,25 @@ BEGIN
     j := 0;
     WHILE s[i] # ":" DO exts[n][j] := s[i]; INC(i); INC(j) END;
     exts[n][j] := 0X;
-    cats[n] := s[i + 1]; INC(n); INC(i, 3)
+    cats[n] := s[i + 1]; INC(i, 2);
+    IF s[i] = ":" THEN
+      INC(i); j := 0;
+      WHILE s[i] # " " DO canons[n][j] := s[i]; INC(i); INC(j) END;
+      canons[n][j] := 0X
+    ELSE COPY(exts[n], canons[n])
+    END;
+    INC(n); INC(i)
   END
 END Add;
 
-(* The category of the MIME type of the extension ext (without the
-   dot, compared ignoring case): Image, Video, Audio, Other, or Unknown
-   if there is no MIME type for it *)
-PROCEDURE Category*(ext: ARRAY OF CHAR): INTEGER;
+(* The index of the extension ext (without the dot, compared ignoring
+   case), or -1 *)
+PROCEDURE Find(VAR ext: ARRAY OF CHAR): INTEGER;
   VAR lo, hi, mid, i: INTEGER; e: Word;
 BEGIN
   i := 0;
   WHILE (i < LEN(ext)) & (ext[i] # 0X) DO
-    IF i = WordLen - 1 THEN RETURN Unknown END;
+    IF i = WordLen - 1 THEN RETURN -1 END;
     IF (ext[i] >= "A") & (ext[i] <= "Z") THEN e[i] := CHR(ORD(ext[i]) + 32)
     ELSE e[i] := ext[i]
     END;
@@ -75,19 +94,40 @@ BEGIN
   lo := 0; hi := Count - 1;
   WHILE lo <= hi DO
     mid := (lo + hi) DIV 2;
-    IF exts[mid] = e THEN
-      CASE cats[mid] OF
-        "i": RETURN Image
-      | "v": RETURN Video
-      | "a": RETURN Audio
-      ELSE RETURN Other
-      END
+    IF exts[mid] = e THEN RETURN mid
     ELSIF exts[mid] < e THEN lo := mid + 1
     ELSE hi := mid - 1
     END
   END;
-  RETURN Unknown
+  RETURN -1
+END Find;
+
+(* The category of the MIME type of the extension ext (without the
+   dot, compared ignoring case): Image, Video, Audio, Other, or Unknown
+   if there is no MIME type for it *)
+PROCEDURE Category*(ext: ARRAY OF CHAR): INTEGER;
+  VAR k: INTEGER;
+BEGIN
+  k := Find(ext);
+  IF k < 0 THEN RETURN Unknown END;
+  CASE cats[k] OF
+    "i": RETURN Image
+  | "v": RETURN Video
+  | "a": RETURN Audio
+  ELSE RETURN Other
+  END
 END Category;
+
+(* Sets canon to the extension, without the dot, pandoc gives a file
+   with the extension ext that it names by the hash of its contents:
+   that of ext's MIME type (Text.Pandoc.MIME.extensionFromMimeType),
+   or "so", application/octet-stream's, if ext has none *)
+PROCEDURE Canonical*(ext: ARRAY OF CHAR; VAR canon: ARRAY OF CHAR);
+  VAR k: INTEGER;
+BEGIN
+  k := Find(ext);
+  IF k < 0 THEN COPY("so", canon) ELSE COPY(canons[k], canon) END
+END Canonical;
 
 BEGIN
   n := 0;

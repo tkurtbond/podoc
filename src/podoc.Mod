@@ -23,7 +23,7 @@ MODULE podoc;
 
 IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt, PdMdWriter,
-  PdInclude, PdFilters, PdPdf, O := PdOptions;
+  PdInclude, PdFilters, PdPdf, PdImages, O := PdOptions;
 
 CONST
   PandocVersion = "3.10"; (* the pandoc podoc follows *)
@@ -185,6 +185,11 @@ BEGIN
     PdConTeXt.SetLigatures(to # "context");
     PdPdf.Source(src); PdIO.OpenOutput(src)
   ELSE
+    (* local images: copied by --extract-media; for ms, converted to
+       PDF (decision 23) *)
+    IF O.extractMedia # "" THEN PdImages.Extract(Doc(text, len), O.extractMedia, to = "ms")
+    ELSIF to = "ms" THEN PdImages.ForMs(Doc(text, len), O.output)
+    END;
     PdIO.OpenOutput(O.output)
   END;
   IF to = "json" THEN

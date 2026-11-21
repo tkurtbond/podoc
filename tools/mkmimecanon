@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+# mkmimecanon: writes data/mime-canonical.txt, the extension pandoc 3.10
+# gives a file it names by hash (Text.Pandoc.MediaBag.insertMedia),
+# for each extension whose MIME type maps back to another one
+# (Text.Pandoc.MIME.extensionFromMimeType). The reverse map keeps the
+# last extension in pandoc's mimeTypesList with each type, so it needs
+# the list's order, which data/mime-types.txt does not keep.
+#   tools/mkmimecanon MIME.HS NETWORK-MIME.HS > data/mime-canonical.txt
+# MIME.HS is pandoc's src/Text/Pandoc/MIME.hs; NETWORK-MIME.HS is
+# mime-types 0.1.2.2's Network/Mime.hs.
+import re, sys
+
+pair = r'\(\s*"([^"]*)"\s*,\s*"([^"]*)"\s*\)'
+b = open(sys.argv[1]).read()
+b = b[b.index('mimeTypesList ='):]
+a = open(sys.argv[2]).read()
+a = a[a.index('mimeAscList ='):]
+lst = sorted(dict(re.findall(pair, a)).items()) + re.findall(pair, b)
+fwd, rev = {}, {}
+for e, t in lst:
+    fwd[e] = t
+    rev[t] = e
+special = {'text/plain': 'txt', 'video/quicktime': 'mov',
+           'video/mpeg': 'mpeg', 'video/dv': 'dv',
+           'image/vnd.djvu': 'djvu', 'image/tiff': 'tiff',
+           'image/jpeg': 'jpg', 'application/xml': 'xml',
+           'application/ogg': 'ogg', 'image/svg+xml': 'svg'}
+w = sys.stdout.write
+w('# The extension pandoc 3.10 gives a file named by hash, for each\n'
+  '# extension whose MIME type maps back to another; written by\n'
+  '# tools/mkmimecanon. Read by tools/mkmime.\n')
+for e in sorted(fwd):
+    t = fwd[e].split(';')[0]
+    c = special.get(t, rev.get(t))
+    if c != e:
+        w('%s %s\n' % (e, c))

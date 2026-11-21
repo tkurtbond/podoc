@@ -1,0 +1,27 @@
+<h1 id="images">Images</h1>
+<figure>
+<img src="media/img/dot.png" style="width:50.0%" alt="A dot" />
+<figcaption aria-hidden="true">A dot</figcaption>
+</figure>
+<figure>
+<img src="media/img/dot.jpg" alt="A blue dot" />
+<figcaption aria-hidden="true">A blue dot</figcaption>
+</figure>
+<p>A box: <img src="media/img/box.svg" alt="box" /> and again <img src="media/img/box.svg" alt="box" />.</p>
+<figure>
+<img src="media/3a491c70bb9a416c36128060393c7dbd4069c8c8.png" alt="Up a level" />
+<figcaption aria-hidden="true">Up a level</figcaption>
+</figure>
+<figure>
+<span class="image placeholder" data-original-image-src="missing.png" data-original-image-title="">Missing</span>
+<figcaption>Missing</figcaption>
+</figure>
+<figure>
+<img src="https://example.com/x.png" alt="Remote" />
+<figcaption aria-hidden="true">Remote</figcaption>
+</figure>
+<figure>
+<embed src="media/img/page.pdf" />
+<figcaption aria-hidden="true">A PDF</figcaption>
+</figure>
+status 0

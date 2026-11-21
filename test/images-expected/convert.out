@@ -1,0 +1,7 @@
+status 0
+.PDFPIC "doc-media/dot.pdf" "0p"
+.PDFPIC "doc-media/dot-2.pdf"
+.PDFPIC "doc-media/box.pdf"
+.PDFPIC "doc-media/box.pdf"
+.PDFPIC "doc-media/up.pdf"
+.PDFPIC "img/page.pdf"

@@ -1,0 +1,4 @@
+podoc: [WARNING] Could not convert image img/dot.png: check that img2pdf or magick is in path.
+podoc: [WARNING] Could not convert image img/dot.jpg: check that img2pdf or magick is in path.
+podoc: [WARNING] Could not convert image img/box.svg: check that rsvg-convert is in path.
+podoc: [WARNING] Could not convert image ../up.png: check that img2pdf or magick is in path.

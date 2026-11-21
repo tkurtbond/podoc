@@ -57,6 +57,7 @@ VAR
   pdf*: BOOLEAN; (* after Resolve: the output is PDF *)
   pdfEngine*: String; (* --pdf-engine, or after Resolve the engine for PDF *)
   pdfEngineOpts*: File; (* --pdf-engine-opt *)
+  extractMedia*: String; (* --extract-media; "" if not given *)
   filters*: Filter; (* --lua-filter, -F *)
   (* the writer as a Lua filter's FORMAT names it, after Resolve: to,
      but html5 when -t html5 named it so *)
@@ -464,6 +465,12 @@ BEGIN
   RETURN TRUE
 END SetIdPrefix;
 
+PROCEDURE SetExtractMedia(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  COPY(arg, extractMedia);
+  RETURN TRUE
+END SetExtractMedia;
+
 PROCEDURE SetNumberSections(): BOOLEAN;
 BEGIN
   numberSections := TRUE;
@@ -573,6 +580,8 @@ BEGIN
     "Link to the style sheet URL (HTML, with -s).", AddCss));
   parser.AddOption(ArgParser.MakeStringOption(0X, "id-prefix",
     "Put STRING before every identifier (HTML).", SetIdPrefix));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "extract-media",
+    "Copy local images into DIR and refer to the copies.", SetExtractMedia));
   parser.AddOption(ArgParser.MakeStringOption(0X, "pdf-engine",
     "Make PDF with PROGRAM: pdfroff or groff (ms), or context.", SetPdfEngine));
   parser.AddOption(ArgParser.MakeStringOption(0X, "pdf-engine-opt",
@@ -803,7 +812,7 @@ BEGIN
   files := NIL; lastFile := NIL; metaFiles := NIL; lastMetaFile := NIL;
   cmdMeta := A.NewMetaMap();
   output := ""; from := ""; gridTables := TRUE; to := ""; gutenberg := FALSE; pdf := FALSE;
-  pdfEngine := "";
+  pdfEngine := ""; extractMedia := "";
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;
   standalone := FALSE; template := "";

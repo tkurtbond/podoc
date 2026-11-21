@@ -1,0 +1,90 @@
+#!/bin/sh
+# runimages PODOC OUTDIR
+#
+# Tests images: --extract-media, and the PDFs made for ms (Phase 21).
+# Copies test/images to OUTDIR/<test>, runs PODOC in its doc
+# directory, and compares the output, the warnings and the files made
+# with test/images-expected/<test>.{out,err,files}.
+#
+# These tests run with a PATH that holds only the commands podoc's shell
+# commands need besides the converters (mkdir, cp, head, grep), so the
+# results do not depend on what is installed. A last test, "convert",
+# converts with the converters found in the usual PATH, and is skipped
+# without rsvg-convert and one of img2pdf and magick (or convert).
+# Prints an "ok   - " or "FAIL - " line for each, and exits 1 if any
+# failed.
+
+if [ $# -ne 2 ]; then
+  echo "usage: runimages PODOC OUTDIR" >&2
+  exit 2
+fi
+podoc=$1
+outdir=$2
+case $podoc in /*) ;; *) podoc=$(pwd)/$podoc ;; esac
+expected=$(pwd)/test/images-expected
+rm -rf "$outdir"
+mkdir -p "$outdir/bin" || exit 2
+case $outdir in /*) ;; *) outdir=$(pwd)/$outdir ;; esac
+for c in mkdir cp head grep; do
+  p=$(command -v $c) || { echo "runimages: no $c" >&2; exit 2; }
+  ln -s "$p" "$outdir/bin/$c"
+done
+
+failed=0
+total=0
+
+# check NAME: compares OUTDIR/NAME's results with the expected ones
+check() {
+  total=$((total + 1))
+  w=$outdir/$1
+  (cd "$w/doc" && find . -type f ! -name doc.md ! -path './img/*' | sort) \
+    > "$w/files"
+  if diff -u "$expected/$1.out" "$w/out" > "$w/diff" &&
+     diff -u "$expected/$1.err" "$w/err" >> "$w/diff" &&
+     diff -u "$expected/$1.files" "$w/files" >> "$w/diff"; then
+    echo "ok   - images $1"
+  else
+    echo "FAIL - images $1"
+    cat "$w/diff"
+    failed=$((failed + 1))
+  fi
+}
+
+# run NAME PATH ARGS...: runs podoc ARGS in a fresh copy, with PATH
+run() {
+  name=$1; path=$2; shift 2
+  w=$outdir/$name
+  mkdir -p "$w" && cp -R test/images/. "$w/" || exit 2
+  (cd "$w/doc" && PATH=$path "$podoc" doc.md "$@" > ../out 2> ../err)
+  echo "status $?" >> "$w/out"
+}
+
+bin=$outdir/bin
+run extract-json "$bin" -t json --extract-media=media
+check extract-json
+run extract-html "$bin" -t html --extract-media=media
+check extract-html
+run extract-ms "$bin" -t ms --extract-media=media
+check extract-ms
+run ms-stdout "$bin" -t ms
+check ms-stdout
+run ms-file "$bin" -t ms -o out/doc.ms
+cat "$outdir/ms-file/doc/out/doc.ms" >> "$outdir/ms-file/out"
+check ms-file
+
+# Conversion, with the converters installed
+have() { command -v "$1" > /dev/null 2>&1; }
+if have rsvg-convert && { have img2pdf || have magick || have convert; }; then
+  run convert "$PATH" -t ms -o out/doc.ms
+  w=$outdir/convert
+  grep '^\.PDFPIC' "$w/doc/out/doc.ms" >> "$w/out"
+  for f in "$w"/doc/out/doc-media/*.pdf; do
+    [ "$(head -c 5 "$f")" = "%PDF-" ] || echo "not a PDF: ${f##*/}" >> "$w/out"
+  done
+  check convert
+else
+  echo "skip - images convert: no rsvg-convert, or no img2pdf or magick"
+fi
+
+echo "$((total - failed)) of $total image tests passed"
+[ $failed -eq 0 ]

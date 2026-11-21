@@ -37,6 +37,7 @@ MODELS := O2 OC
 SRCS := $(wildcard src/*.Mod)
 TESTS := $(patsubst test/%.Mod,%,$(wildcard test/*Test.Mod))
 CASES := $(wildcard test/cases/*)
+IMAGES := $(shell find test/images test/images-expected -type f)
 
 .PHONY: all test test-o2 test-oc compare install uninstall clean FORCE
 .SECONDEXPANSION:
@@ -65,9 +66,9 @@ compare: $(BUILD)/OC/podoc
 	tools/compare $(BUILD)/OC/podoc $(BUILD)/compare $(COMPARE_FORMATS)
 
 test-o2: $(TESTS:%=$(BUILD)/O2/test/%.passed) $(BUILD)/O2/cases.passed \
-  $(BUILD)/O2/roundtrip.passed
+  $(BUILD)/O2/roundtrip.passed $(BUILD)/O2/images.passed
 test-oc: $(TESTS:%=$(BUILD)/OC/test/%.passed) $(BUILD)/OC/cases.passed \
-  $(BUILD)/OC/roundtrip.passed
+  $(BUILD)/OC/roundtrip.passed $(BUILD)/OC/images.passed
 
 # $* is <model>/test/<Test>. A test is built from the sources, in its own
 # directory.
@@ -85,6 +86,11 @@ $(BUILD)/%.passed: $(SRCS) test/$$(notdir $$*).Mod test/$$(notdir $$*).expected 
 
 $(BUILD)/%/cases.passed: $(BUILD)/%/podoc $(CASES) tools/runcases
 	tools/runcases $(BUILD)/$*/podoc $(BUILD)/$*/cases
+	touch $@
+
+# images: --extract-media and ms's PDFs (tools/runimages)
+$(BUILD)/%/images.passed: $(BUILD)/%/podoc $(IMAGES) tools/runimages
+	tools/runimages $(BUILD)/$*/podoc $(BUILD)/$*/images
 	touch $@
 
 # the markdown writer's round trip (tools/roundtrip)

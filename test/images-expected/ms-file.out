@@ -1,0 +1,33 @@
+status 0
+.SH 1
+Images
+\" .IMAGE "img/dot.png" "0p"
+.ce 1
+A dot
+.sp 1
+\" .IMAGE "img/dot.jpg"
+.ce 1
+A blue dot
+.sp 1
+.LP
+A box:
+[IMAGE: box] \" "img/box.svg"
+and again
+[IMAGE: box] \" "./img/box.svg"
+\&.
+\" .IMAGE "../up.png"
+.ce 1
+Up a level
+.sp 1
+\" .IMAGE "missing.png"
+.ce 1
+Missing
+.sp 1
+\" .IMAGE "https://example.com/x.png"
+.ce 1
+Remote
+.sp 1
+.PDFPIC "img/page.pdf"
+.ce 1
+A PDF
+.sp 1

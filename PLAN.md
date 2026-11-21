@@ -134,6 +134,14 @@ Made by the user on 2026-11-20, on the questions of §15.
       `img2pdf`, `magick` (or ImageMagick 6's `convert`) and `gm
       convert` found (img2pdf keeps JPEGs unchanged and keeps
       transparency; gm loses transparency).
+      **Changed 2026-11-21, during Phase 21, for the user to confirm:**
+      `gm` is not used. GraphicsMagick 1.3.45's PDFs hold a malformed
+      object (`<< >> endstream` with no `stream`), and gropdf fails on
+      them in groff 1.23.0, 1.24.2 and 1.25.0. The chain is `img2pdf`,
+      then `magick` (or `convert`). And for groff, `rsvg-convert` is
+      asked for PDF 1.4 (`-f pdf1.4`): gropdf in groff 1.23.0 and
+      1.24.2 rejects the PDF 1.5 and later cairo writes by default
+      (1.25.0 reads both).
     - **`--extract-media=DIR`**, pandoc's option: podoc copies local
       images into `DIR`, as pandoc does, and converts them there too.
     - **Without it,** `-o out.ms` puts the converted images in
@@ -1153,7 +1161,7 @@ before it.
   `-t markdown-yaml_metadata_block`, a writer extension, already in
   "Later".
 
-## Phase 21: Images in ms output
+## Phase 21: Images in ms output [done]
 
 Decision 23. Today podoc writes what pandoc writes: `.PDFPIC` for
 `.pdf`, `.PSPIC` for `.ps` and `.eps`, and for any other image, in a
@@ -1170,10 +1178,11 @@ ConTeXt.
   keep pandoc's output.
 - **Conversion:**
   - SVG with `rsvg-convert -f pdf`, as ConTeXt PDFs do already
-    (`PdPdf.ConvertSvg`);
+    (`PdPdf.ConvertSvg`); `-f pdf1.4` for groff (done so, 2026-11-21);
   - bitmaps (PNG, JPEG, GIF, TIFF and the like) with the first
     converter found, in this order: `img2pdf`, `magick` (or
-    ImageMagick 6's `convert`), then `gm convert`;
+    ImageMagick 6's `convert`), then `gm convert` (done without `gm`,
+    2026-11-21: see decision 23);
   - 96 dpi, pandoc's default `--dpi`, given to the converter for an
     image with no resolution of its own (img2pdf assumes 96, magick
     and gm 72);
@@ -2202,3 +2211,39 @@ ConTeXt.
     drops it from the GNUmakefile's `POCFLAGS` (and AGENTS.md's note)
     and adds a hook that writes "podoc: out of memory; set
     PODOC_HEAP_LIMIT (megabytes) higher" and exits 11, in one change.
+- 2026-11-21: Phase 21 done (decision 23): images in ms output.
+  - `PdImages` (new): the document's local images collected, copied
+    for `--extract-media=DIR` (a new option, pandoc's), converted to
+    PDF for ms and pointed at the copies and PDFs. `PdSha1` (new) for
+    the names pandoc gives by SHA-1; `PdMime.Canonical`, from
+    `data/mime-canonical.txt` (`tools/mkmimecanon`, from pandoc's
+    MIME table and mime-types 0.1.2.2's), for their extensions.
+    `PdPdf` uses `PdImages` and now converts every image groff cannot
+    show for `pdfroff` and `groff`.
+  - The converter chain is `rsvg-convert` (PDF 1.4 for groff), then
+    `img2pdf`, then `magick` or `convert`; `gm` was dropped (decision
+    23, changed for the user to confirm). magick is given 96 dpi
+    when `identify` reports no resolution: a 100x75 PNG gives a
+    75x56.25 pt page, as with img2pdf.
+  - Checked against pandoc 3.10: `--extract-media=media` with `-t
+    json`, `html` and `markdown` gives pandoc's files and output (on a
+    document with images in a subdirectory, a `../` path named by its
+    SHA-1, a missing image, an SVG used twice and a PDF), apart from
+    URLs, which pandoc fetches and podoc leaves (differences.md); for
+    `-t ms`, only the `.PDFPIC` lines and the PDFs beside the copies
+    differ.
+  - PDFs from test/images's document with `--pdf-engine=groff` and
+    `pdfroff` (groff 1.23.0) hold all four bitmaps (`pdfimages
+    -list`), and the SVG; `-o out/doc.ms` then `groff -ms -Tpdf -U`
+    in `out/` works too, apart from the `.pdf` image, whose path
+    pandoc writes relative to the working directory. A width in
+    percent gives `0p`, as pandoc writes, and groff skips the image
+    (podoc.md).
+  - `tools/runimages` (new, in `make test`): `--extract-media` with
+    json, html and ms, ms to standard output and to a file, with a
+    PATH holding no converters; and a conversion test, skipped
+    without them.
+  - `make test` passed under `-O2` and `-OC`: the unit tests with
+    `PdSha1Test`, 247 case tests, 23 round trips and 6 image tests
+    under each.
+  - Still to check: which converters the BSDs' packages provide.
