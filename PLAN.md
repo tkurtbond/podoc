@@ -2566,3 +2566,7 @@ without groff, gs and pdftotext.
     the PDF is made without the image.
   - `make test` passed under `-O2` and `-OC` (288 case tests, 23
     round trips, 7 image tests with the new `pdf-eps`).
+  - The six BSD VMs then built b2a0751 and passed `make test` under
+    `-O2` and `-OC` (288 case tests, 23 round trips, 5 image tests;
+    `convert` and `pdf-eps` skipped: no converters, and no
+    `pdftotext` on any of them).
