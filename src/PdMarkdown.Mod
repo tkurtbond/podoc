@@ -25,6 +25,8 @@ CONST
   (* what starts a list item *)
   BulletItem = 1; OrderedItem = 2; DefItem = 3;
 
+  TableSize = 4096; (* the number of buckets in a HashTable *)
+
 TYPE
   (* A reference key and its target *)
   Key = POINTER TO KeyDesc;
@@ -33,6 +35,16 @@ TYPE
     attr: A.Attr;
     next: Key
   END;
+
+  (* A hash table of ropes: each slot holds one rope and, for reference
+     keys, its target; a bucket's last added slot comes first *)
+  Slot = POINTER TO SlotDesc;
+  SlotDesc = RECORD
+    key: A.Rope;
+    k: Key;
+    next: Slot
+  END;
+  HashTable = POINTER TO ARRAY TableSize OF Slot;
 
   (* A note's text *)
   Note = POINTER TO NoteDesc;
@@ -95,6 +107,9 @@ VAR
   ids: A.StrList; (* the header identifiers used so far *)
   keys: Key; (* the reference keys; the last defined first *)
   headerKeys: Key; (* the implicit header references *)
+  (* ids, keys and headerKeys hashed, so that they are found without
+     walking the lists, which are kept so that TableAt can go back *)
+  idTable, keyTable, headerTable: HashTable;
   notes: Note; (* the notes; the last defined first *)
   listItems: Item; (* the list items *)
   meta: A.MetaMapV; (* the document's metadata so far *)
@@ -145,18 +160,64 @@ END InlinesOf;
 
 (* Identifiers *)
 
-PROCEDURE Used(id: A.Rope): BOOLEAN;
-  VAR s: A.StrList;
+(* Hash tables *)
+
+PROCEDURE NewTable(): HashTable;
+  VAR t: HashTable; i: LONGINT;
 BEGIN
-  s := ids;
-  WHILE (s # NIL) & ~Ropes.Equal(s.s, id) DO s := s.next END;
-  RETURN s # NIL
+  NEW(t);
+  FOR i := 0 TO TableSize - 1 DO t[i] := NIL END;
+  RETURN t
+END NewTable;
+
+PROCEDURE Bucket(key: A.Rope): LONGINT;
+BEGIN
+  IF key = NIL THEN RETURN 0 END;
+  RETURN SHORT(Ropes.Hash(key) MOD TableSize)
+END Bucket;
+
+(* The last added slot in t whose rope equals key, NIL if none does or
+   t is NIL *)
+PROCEDURE Find(t: HashTable; key: A.Rope): Slot;
+  VAR s: Slot;
+BEGIN
+  IF t = NIL THEN RETURN NIL END;
+  s := t[Bucket(key)];
+  WHILE (s # NIL) & ~Ropes.Equal(s.key, key) DO s := s.next END;
+  RETURN s
+END Find;
+
+PROCEDURE Add(t: HashTable; key: A.Rope; k: Key);
+  VAR s: Slot; b: LONGINT;
+BEGIN
+  b := Bucket(key);
+  NEW(s); s.key := key; s.k := k; s.next := t[b]; t[b] := s
+END Add;
+
+(* The last added slot in t for the rope key itself (not one equal to
+   it) taken out again *)
+PROCEDURE Remove(t: HashTable; key: A.Rope);
+  VAR s, p: Slot; b: LONGINT;
+BEGIN
+  b := Bucket(key); s := t[b]; p := NIL;
+  WHILE (s # NIL) & (s.key # key) DO p := s; s := s.next END;
+  IF s # NIL THEN
+    IF p = NIL THEN t[b] := s.next ELSE p.next := s.next END
+  END
+END Remove;
+
+(* Identifiers *)
+
+PROCEDURE Used(id: A.Rope): BOOLEAN;
+BEGIN
+  RETURN Find(idTable, id) # NIL
 END Used;
 
 PROCEDURE Use(id: A.Rope);
   VAR s: A.StrList;
 BEGIN
-  NEW(s); s.s := id; s.next := ids; ids := s
+  NEW(s); s.s := id; s.next := ids; ids := s;
+  Add(idTable, id, NIL)
 END Use;
 
 (* The decimal digits of n *)
@@ -191,11 +252,13 @@ BEGIN
   Use(attr.id)
 END RegisterHeader;
 
-(* The key of the text key in the list l, NIL if there is none *)
-PROCEDURE FindKey(l: Key; key: A.Rope): Key;
+(* The last added key in t equal to key, NIL if there is none *)
+PROCEDURE FindKey(t: HashTable; key: A.Rope): Key;
+  VAR s: Slot;
 BEGIN
-  WHILE (l # NIL) & ~Ropes.Equal(l.key, key) DO l := l.next END;
-  RETURN l
+  s := Find(t, key);
+  IF s = NIL THEN RETURN NIL END;
+  RETURN s.k
 END FindKey;
 
 (* registerImplicitHeader: the header whose raw text is t[from .. to-1]
@@ -206,9 +269,10 @@ PROCEDURE RegisterImplicitHeader(from, to: LONGINT; id: A.Rope);
 BEGIN
   IF to <= from THEN RETURN END;
   key := I.Key(B.t^, from, to, FALSE);
-  IF FindKey(headerKeys, key) = NIL THEN
+  IF FindKey(headerTable, key) = NIL THEN
     NEW(k); k.key := key; k.url := Ropes.Cat(A.S("#"), id); k.title := NIL;
-    k.attr := NIL; k.next := headerKeys; headerKeys := k
+    k.attr := NIL; k.next := headerKeys; headerKeys := k;
+    Add(headerTable, key, k)
   END
 END RegisterImplicitHeader;
 
@@ -851,8 +915,11 @@ BEGIN
   saveKeys := headerKeys;
   B.pos := p; A.InitBlocks(tmp);
   found := Table(tmp);
-  B.pos := save; B.lastStrPos := sp; B.lastStrText := st; ids := saveIds;
-  headerKeys := saveKeys;
+  B.pos := save; B.lastStrPos := sp; B.lastStrText := st;
+  WHILE ids # saveIds DO Remove(idTable, ids.s); ids := ids.next END;
+  WHILE headerKeys # saveKeys DO
+    Remove(headerTable, headerKeys.key); headerKeys := headerKeys.next
+  END;
   RETURN found
 END TableAt;
 
@@ -1164,6 +1231,7 @@ BEGIN
   NEW(k);
   IF ~I.ReferenceKey(k.key, k.url, k.title, k.attr) THEN RETURN FALSE END;
   k.next := keys; keys := k;
+  Add(keyTable, k.key, k);
   RETURN TRUE
 END ReferenceKey;
 
@@ -2115,11 +2183,11 @@ BEGIN
   ELSIF i.kind = I.RefKind THEN
     ri := i(I.RefInl);
     IF ri.image THEN kind := A.Image ELSE kind := A.Link END;
-    k := FindKey(keys, ri.key);
+    k := FindKey(keyTable, ri.key);
     IF k # NIL THEN
       i := A.NewLink(kind, CombineAttr(ri.attr, k.attr), ri.content, k.url, k.title)
     ELSE
-      k := FindKey(headerKeys, ri.key);
+      k := FindKey(headerTable, ri.key);
       IF k # NIL THEN
         i := A.NewLink(kind, ri.attr, ri.content, k.url, k.title)
       ELSE
@@ -2267,6 +2335,7 @@ END Resolve;
 PROCEDURE Reset;
 BEGIN
   ids := NIL; keys := NIL; headerKeys := NIL; notes := NIL; listItems := NIL;
+  idTable := NewTable(); keyTable := NewTable(); headerTable := NewTable();
   I.Reset
 END Reset;
 
@@ -2289,6 +2358,7 @@ BEGIN
   d.blocks := ParseBlocks();
   Resolve(d);
   keys := NIL; headerKeys := NIL; notes := NIL; meta := NIL; main := NIL;
+  keyTable := NIL; headerTable := NIL;
   RETURN d
 END Read;
 
@@ -2317,9 +2387,10 @@ BEGIN
   d.meta := MetaMapOf(doc);
   Resolve(d);
   keys := NIL; headerKeys := NIL; notes := NIL; meta := NIL;
+  keyTable := NIL; headerTable := NIL;
   RETURN d.meta
 END ReadMetaFile;
 
 BEGIN
-  ids := NIL; gridTables := TRUE; columns := 72
+  ids := NIL; idTable := NewTable(); gridTables := TRUE; columns := 72
 END PdMarkdown.

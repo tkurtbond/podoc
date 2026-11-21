@@ -63,6 +63,36 @@ BEGIN
   PdIO.WriteString("|"); PdIO.WriteLn
 END Chop;
 
+PROCEDURE Same(r: Ropes.Rope): Ropes.Rope;
+BEGIN
+  RETURN r
+END Same;
+
+PROCEDURE Bool(b: BOOLEAN);
+BEGIN
+  IF b THEN PdIO.WriteString("TRUE") ELSE PdIO.WriteString("FALSE") END
+END Bool;
+
+(* Long spines: n texts "x" and a carriage return, concatenated to the
+   right (right) or to the left (~right), which must not overflow the
+   stack: the lengths of the text left by Chomp, RemoveFinalNl and
+   MapText, and HasNewlines before and after Chomp *)
+PROCEDURE Long(name: ARRAY OF CHAR; n: LONGINT; right: BOOLEAN);
+  VAR d: L.Doc; i: LONGINT;
+BEGIN
+  IF right THEN
+    d := L.Cr(); FOR i := 1 TO n DO d := L.Cat(T("x"), d) END
+  ELSE
+    d := NIL; FOR i := 1 TO n DO d := L.Cat(d, T("x")) END; d := L.Cat(d, L.Cr())
+  END;
+  PdIO.WriteString("== "); PdIO.WriteString(name); PdIO.WriteLn;
+  Num(Ropes.Length(L.AllText(L.Chomp(d)))); PdIO.WriteString(" ");
+  Num(Ropes.Length(L.AllText(L.RemoveFinalNl(d)))); PdIO.WriteString(" ");
+  Num(Ropes.Length(L.AllText(L.MapText(d, Same)))); PdIO.WriteString(" ");
+  Bool(L.HasNewlines(d)); PdIO.WriteString(" ");
+  Bool(L.HasNewlines(L.Chomp(d))); PdIO.WriteString("|"); PdIO.WriteLn
+END Long;
+
 PROCEDURE Vcat(a, b, c, d: L.Doc): L.Doc;
 BEGIN
   RETURN L.Above(a, L.Above(b, L.Above(c, d)))
@@ -124,7 +154,9 @@ BEGIN
   Offsets("offsets of lines", L.Above(Words("a b c d e"), Words("ffff g")));
   Offsets("offsets of prefixed", L.Cat(T("ab"), L.Prefixed("> ", Words("ccc d"))));
   Chop("chop", "abcdefg", 3);
-  Chop("chop lines", "ab$cdefgh$i$", 2)
+  Chop("chop lines", "ab$cdefgh$i$", 2);
+  Long("long right spine", 1000000, TRUE);
+  Long("long left spine", 1000000, FALSE)
 END Run;
 
 BEGIN

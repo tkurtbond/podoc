@@ -1879,3 +1879,31 @@ All of this runs under `-O2` and `-OC`, as every phase does.
   and pandoc: two files with form feeds). New case `json-control-chars`
   (expected JSON pandoc's). `make test` passed under `-O2` and `-OC`:
   247 case tests and 23 round trips.
+- 2026-11-20: performance fixes found by comparing podoc with pandoc
+  on pandoc 3.10's `MANUAL.txt` repeated 1 to 40 times (300 KB to
+  12 MB), on atla.
+  - `PdLayout.Chomp` recursed once per part down a document's right
+    spine and overflowed the 8 MB stack: `-t ms`, `context` and
+    `markdown` crashed (SIGSEGV) from ×4 on. `Chomp` and
+    `RemoveFinalNl` are now loops with an explicit stack, and
+    `MapText`, `AllText` and `HasNewlines` work on `Unfold`'s parts.
+    All five writers now run at ×10 under `-O2` and `-OC`.
+  - The reader looked header identifiers and reference keys up in
+    linear lists with `Ropes.Equal`, which allocates on every call:
+    quadratic time, most of it in the collector. Now they go through
+    hash tables (`Ropes.Hash`, 4096 buckets). The lists are kept, so
+    that `TableAt` can still undo a table's identifiers, and the hash
+    tables are undone with them. `-t json` at ×10 went from 2.41 s to
+    0.30 s; ×40 takes 1.53 s; the collector's share is 45-52% from ×1
+    to ×40, no longer growing.
+  - Peaseblossom's PLAN.md item 34 records that what first looked like
+    the collector slowing was this.
+  - Output was the same before and after: JSON at ×1, ×4 and ×10;
+    `ms`, `context` and `markdown` at ×1 and ×2 (the old build crashed
+    at ×4); `plain` and `html` at ×4.
+  - New in `PdLayoutTest`: right and left spines of 1,000,000 parts
+    through `Chomp`, `RemoveFinalNl`, `MapText`, `AllText` and
+    `HasNewlines`; the old `PdLayout` fails it with SIGSEGV.
+  - `make test` passed under `-O2` and `-OC`, 23 round trips.
+    `make compare`: 1396 of 1606 the same; 210 differ, as many as
+    before.

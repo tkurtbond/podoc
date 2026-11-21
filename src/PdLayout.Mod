@@ -196,6 +196,18 @@ BEGIN
   RETURN d
 END Line;
 
+(* x pushed on stack[0 .. sp-1], which grows as needed *)
+PROCEDURE Push(VAR stack: Stack; VAR sp: LONGINT; x: Doc);
+  VAR t: Stack; i: LONGINT;
+BEGIN
+  IF sp = LEN(stack^) THEN
+    NEW(t, 2 * sp);
+    FOR i := 0 TO sp - 1 DO t[i] := stack[i] END;
+    stack := t
+  END;
+  stack[sp] := x; INC(sp)
+END Push;
+
 (* The parts of d that are not concatenations, left to right, in
    parts[0 .. np-1] *)
 PROCEDURE Unfold(d: Doc; VAR parts: Stack; VAR np: LONGINT);
@@ -443,21 +455,35 @@ END AvoidBadWraps;
 (* d without the blank lines, new lines, carriage returns and breaking
    spaces at its end *)
 PROCEDURE Chomp*(d: Doc): Doc;
-  VAR c: Doc;
+  VAR stack: Stack; sp: LONGINT; c: Doc;
+
+  (* x, not a concatenation, chomped *)
+  PROCEDURE One(x: Doc): Doc;
+    VAR y: Doc;
+  BEGIN
+    IF x = NIL THEN RETURN NIL END;
+    CASE x.kind OF
+      blankLines, newLine, carriageReturn, breakingSpace: RETURN NIL
+    | prefixed: y := New(prefixed); y.s := x.s; y.a := Chomp(x.a); RETURN y
+    ELSE RETURN x
+    END
+  END One;
+
 BEGIN
-  IF d = NIL THEN RETURN NIL END;
-  CASE d.kind OF
-    blankLines, newLine, carriageReturn, breakingSpace: RETURN NIL
-  | prefixed: c := New(prefixed); c.s := d.s; c.a := Chomp(d.a); RETURN c
-  | concat:
-      IF (d.a # NIL) & (d.a.kind = concat) THEN
-        RETURN Chomp(Cat(d.a.a, Cat(d.a.b, d.b)))
-      END;
-      c := Chomp(d.b);
-      IF c = NIL THEN RETURN Chomp(d.a) END;
-      RETURN Cat(d.a, c)
-  ELSE RETURN d
-  END
+  (* Iterative, as the right spine of a document can be very long: the
+     left parts down the spine on stack, the last part chomped, then the
+     parts before it chomped while nothing is left *)
+  NEW(stack, 64); sp := 0;
+  WHILE (d # NIL) & (d.kind = concat) DO
+    IF (d.a # NIL) & (d.a.kind = concat) THEN
+      d := Cat(d.a.a, Cat(d.a.b, d.b))
+    ELSE Push(stack, sp, d.a); d := d.b
+    END
+  END;
+  c := One(d);
+  WHILE (c = NIL) & (sp > 0) DO DEC(sp); c := One(stack[sp]) END;
+  WHILE sp > 0 DO DEC(sp); c := Cat(stack[sp], c) END;
+  RETURN c
 END Chomp;
 
 (* d without the blank lines and new lines at its start *)
@@ -483,11 +509,12 @@ END Nestle;
 (* doclayout's removeFinalNl, as doctemplates uses it: d without a new
    line or carriage return at the end of its right spine *)
 PROCEDURE RemoveFinalNl*(d: Doc): Doc;
+  VAR stack: Stack; sp: LONGINT;
 BEGIN
-  IF d = NIL THEN RETURN NIL END;
-  IF (d.kind = newLine) OR (d.kind = carriageReturn) THEN RETURN NIL
-  ELSIF d.kind = concat THEN RETURN Cat(d.a, RemoveFinalNl(d.b))
-  END;
+  NEW(stack, 64); sp := 0;
+  WHILE (d # NIL) & (d.kind = concat) DO Push(stack, sp, d.a); d := d.b END;
+  IF (d # NIL) & ((d.kind = newLine) OR (d.kind = carriageReturn)) THEN d := NIL END;
+  WHILE sp > 0 DO DEC(sp); d := Cat(stack[sp], d) END;
   RETURN d
 END RemoveFinalNl;
 
@@ -495,13 +522,16 @@ END RemoveFinalNl;
    its prefixed, flush and conditional parts (doctemplates' hasNewlines,
    as pandoc's markdown writer uses it) *)
 PROCEDURE HasNewlines*(d: Doc): BOOLEAN;
+  VAR parts: Stack; np, i: LONGINT;
 BEGIN
-  WHILE (d # NIL) & (d.kind = concat) DO
-    IF HasNewlines(d.a) THEN RETURN TRUE END;
-    d := d.b
+  parts := NIL; Unfold(d, parts, np);
+  FOR i := 0 TO np - 1 DO
+    d := parts[i];
+    IF (d.kind = newLine) OR (d.kind = carriageReturn) OR (d.kind = blankLines) THEN
+      RETURN TRUE
+    END
   END;
-  RETURN (d # NIL) & ((d.kind = newLine) OR (d.kind = carriageReturn)
-                      OR (d.kind = blankLines))
+  RETURN FALSE
 END HasNewlines;
 
 (* pandoc's delimited: open, d, close, with the new lines, carriage
@@ -527,17 +557,20 @@ END Delimited;
 (* d with f applied to the text of each of its text parts; their widths
    are kept, as Haskell's fmap keeps them *)
 PROCEDURE MapText*(d: Doc; f: PROCEDURE (r: Ropes.Rope): Ropes.Rope): Doc;
-  VAR c: Doc;
+  VAR parts: Stack; np, i: LONGINT; x, c: Doc;
 BEGIN
-  IF d = NIL THEN RETURN NIL END;
-  c := New(d.kind); c.n := d.n; c.s := d.s;
-  CASE d.kind OF
-    text: c.s := f(d.s)
-  | concat: c.a := MapText(d.a, f); c.b := MapText(d.b, f)
-  | prefixed, beforeNonBlank, flush: c.a := MapText(d.a, f)
-  ELSE
+  parts := NIL; Unfold(d, parts, np);
+  FOR i := 0 TO np - 1 DO
+    x := parts[i];
+    c := New(x.kind); c.n := x.n; c.s := x.s;
+    CASE x.kind OF
+      text: c.s := f(x.s)
+    | prefixed, beforeNonBlank, flush: c.a := MapText(x.a, f)
+    ELSE
+    END;
+    parts[i] := c
   END;
-  RETURN c
+  RETURN Join(parts, 0, np)
 END MapText;
 
 (* Whether d is one text part, s its text *)
@@ -551,15 +584,19 @@ END SingleText;
 (* The text of d's text parts, in order, including those in its
    prefixed, flush and conditional parts (a fold over d's text) *)
 PROCEDURE AllText*(d: Doc): Ropes.Rope;
+  VAR parts: Stack; np, i: LONGINT; r: Ropes.Rope; x: Doc;
 BEGIN
-  IF d = NIL THEN RETURN NIL END;
-  CASE d.kind OF
-    text: RETURN d.s
-  | concat: RETURN Ropes.Cat(AllText(d.a), AllText(d.b))
-  | prefixed, beforeNonBlank, flush: RETURN AllText(d.a)
-  ELSE
+  parts := NIL; Unfold(d, parts, np);
+  r := NIL;
+  FOR i := 0 TO np - 1 DO
+    x := parts[i];
+    CASE x.kind OF
+      text: r := Ropes.Cat(r, x.s)
+    | prefixed, beforeNonBlank, flush: r := Ropes.Cat(r, AllText(x.a))
+    ELSE
+    END
   END;
-  RETURN NIL
+  RETURN r
 END AllText;
 
 (* Whether the text r ends a sentence, as pandoc's splitSentences

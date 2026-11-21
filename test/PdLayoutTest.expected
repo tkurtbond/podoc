@@ -140,3 +140,7 @@ cd
 ef
 gh
 i|
+== long right spine
+1000000 1000000 1000000 TRUE FALSE|
+== long left spine
+1000000 1000000 1000000 TRUE FALSE|
