@@ -2,7 +2,8 @@
 
 ## Unnumbered "quoted" heading {#unnumbered-quoted-heading .unnumbered}
 
-.leading period and 'single' "double" and @ \~ \^ \` and a [Mixed Smallcaps 3x]{.smallcaps}.
+.leading period and 'single' "double" and @ \~ \^ \` and a [Mixed
+Smallcaps 3x]{.smallcaps}.
 
 ![A caption with *emph*](pic.pdf){width="2in" height="3cm"}
 
@@ -54,7 +55,8 @@ Term two
 
 A note.[^1] And another.[^2]
 
-[link](#hé-ad) and [web](https://example.com/a%20b?q=1@x) and <me@example.com>.
+[link](#hé-ad) and [web](https://example.com/a%20b?q=1@x) and
+<me@example.com>.
 
 Term with note[^3]
 : def

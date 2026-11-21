@@ -798,13 +798,17 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
 - Acceptance: byte for byte with pandoc's default `plain` output, or
   differences listed.
 
-### Phase 17.2: Wrapping for markdown
+### Phase 17.2: Wrapping for markdown [done]
 
 - The same for `-t markdown` (decision 11), whose expected files are
   now `--wrap=none`: they keep `--wrap=none` in their `.args`, and
   new cases check wrapped output; the round trip must hold with
   wrapping on, and the `-whole.md` targets must still read back to
   pandoc's AST.
+- Done otherwise in one respect: a case's `.args` serve all its
+  formats, so `--wrap=none` there would unwrap its `plain` output too.
+  The `markdown` expected files were instead replaced by the wrapped
+  output, each checked against pandoc's first, as in 17.1.
 
 ## Later, not scheduled
 
@@ -1506,3 +1510,30 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   and the scope is killed): 1374 of 1584 the same; with HEAD's podoc,
   1352, its 22 extra differences all `--columns` cases; no new
   difference. Phase 17.2 next.
+- 2026-11-20: Phase 17.2 done, and with it Phase 17. `-t markdown`
+  wraps at `--columns` under `--wrap=auto`, the default (`podoc.Mod`
+  passes it to `PdMdWriter.SetWrapping`; the writer needed nothing
+  more). Checked against pandoc 3.10, byte for byte: every case
+  through `tools/compare` changed to wrap, at 72 and 40 columns (the
+  same differences as unwrapped, all earlier ones: filters pandoc
+  does not find, `-f` extensions); a file of markdown-only constructs
+  (YAML metadata, heading, span, code, image and div attributes,
+  notes, line blocks, quotes, definition lists, bad wraps, rules,
+  reference links) at 12, 20, 30, 50, 72 and 100 columns, with and
+  without `-s`, and with `--wrap=preserve`; pandoc's `tables.markdown`
+  at 72 and 20; `testsuite.txt`, the same but for the `%` title block
+  and raw TeX the reader does not read. On the user's 54 markdown
+  documents at 40, 72 and 100 columns, with and without `-s`: 324
+  runs each under `-O2` and `-OC`, all the same, so the `-whole.md`
+  targets come out as pandoc writes them. The 18 `markdown` cases
+  without `--wrap` now expect wrapped output, each checked against
+  pandoc with its arguments first (`filter-general-markdown`: the same
+  but for `general.lua`'s messages, as before); `plain-wrap` and
+  `plain-columns` gained `markdown` expected files, the same as
+  pandoc's. `tools/roundtrip` also writes each case wrapped at 20
+  columns and checks that, read and written with `--wrap=none`, it is
+  the case written with `--wrap=none`: all 23 pass; at 8 and 10
+  columns, all but `roundtrip`, whose task list item's `[x]` wraps
+  away from its marker and reads back as text, in pandoc too
+  (recorded in docs/user/differences.md). `make test` passed
+  under `-O2` and `-OC`: 237 case tests and 23 round trips.

@@ -253,8 +253,11 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
 - An autolink is written as `<...>` when its scheme is in podoc's
   list of URI schemes (the reader's, from pandoc's), which may differ
   from pandoc's own list for a rare scheme.
-- Output is not wrapped, as for HTML; `--wrap=preserve` keeps the
-  input's line breaks.
+- Output is wrapped at `--columns` (72) as pandoc wraps it, the
+  YAML metadata block too; `--wrap=preserve` keeps the input's line
+  breaks. On the user's 54 markdown documents, at 40, 72 and 100
+  columns, with and without `-s`, podoc's output is pandoc's, byte
+  for byte.
 - The round trip is not exact, in pandoc either: markdown cannot hold
   everything the AST can. Written and read again, consecutive lists
   gain `<!-- -->` separators, an example list becomes a decimal list,
@@ -264,7 +267,9 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
   quotes in text come back as Quoted, a tight definition's
   paragraphs are joined, metadata numbers and some literal block
   scalars change, and without `--wrap=preserve` line breaks become
-  spaces. `make test` checks the round trip on the cases listed in
+  spaces and wrapping turns spaces into line breaks. At 10 columns or
+  fewer a task list item's `[x]` can wrap away from its marker and
+  read back as text, in pandoc too. `make test` checks the round trip on the cases listed in
   `test/roundtrip.txt`; on the user's 49 documents, 40 read back to
   the same AST and the other 9 lose only what pandoc's round trip
   loses.

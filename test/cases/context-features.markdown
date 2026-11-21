@@ -1,6 +1,8 @@
 # Escapes {#esc-1}
 
-Braces {} backslash \\ dollar \$ bar \| percent % tilde \~ hash \# \[brackets\]. Dashes -- and --- and ... and it's "quoted" and 'single'. Non-breaking space.
+Braces {} backslash \\ dollar \$ bar \| percent % tilde \~ hash \#
+\[brackets\]. Dashes -- and --- and ... and it's "quoted" and 'single'.
+Non-breaking space.
 
 ## Unnumbered {#unnumbered .unnumbered}
 
@@ -10,15 +12,21 @@ Braces {} backslash \\ dollar \$ bar \| percent % tilde \~ hash \# \[brackets\].
 
 # Inlines
 
-*em* **bf** [sc]{.smallcaps} [ul]{.underline} ~~strike~~ x^2^ H~2~O `plain` `a{b}` `{"'\`()-+=%,.:;}``x}y`$a+b$ and $$\int x$$ and``\raw`{=tex}`{=context}``\tex`{=tex}`{=tex}``<b>`{=html}\`{=html}
+*em* **bf** [sc]{.smallcaps} [ul]{.underline} ~~strike~~ x^2^ H~2~O
+`plain` `a{b}`
+`{"'\`()-+=%,.:;}``x}y`$a+b$ and $$\int x$$ and``\raw`{=tex}`{=context}``\tex`{=tex}`{=tex}``<b>`{=html}\`{=html}
 
 Line\
 after\
 break.
 
-A <https://example.com/a%20b#frag> autolink and <me@example.com>. [Text](https://example.com/x%y#z "t") and [internal](#esc-1) and [odd](#a=b).
+A <https://example.com/a%20b#frag> autolink and <me@example.com>.
+[Text](https://example.com/x%y#z "t") and [internal](#esc-1) and
+[odd](#a=b).
 
-![Alt](img/a%20b.png){.cls width="50%" height="3cm"} ![Inline](c:\path\x.png){width="100px"} ![](pic.jpg){width="2.5in" height="12pt"}
+![Alt](img/a%20b.png){.cls width="50%" height="3cm"}
+![Inline](c:\path\x.png){width="100px"} ![](pic.jpg){width="2.5in"
+height="12pt"}
 
 [Span]{#sp lang="fr" dir="ltr"} [rtl]{dir="rtl"}.
 
@@ -119,13 +127,14 @@ main = print 1
 
   -----------------
 
-  -----------------------------------------------------------------------
-               Wide              Narrow
-  ------------------------------ ----------------------------------------
-   A multiline cell that wraps.  B
+  -------------------------------------------------------------
+          Wide         Narrow
+  -------------------- ----------------------------------------
+    A multiline cell   B
+      that wraps.      
 
-                C                D
-  -----------------------------------------------------------------------
+           C           D
+  -------------------------------------------------------------
 
   : Multiline with widths
 

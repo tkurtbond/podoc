@@ -1,6 +1,7 @@
 # Chapter *one* and **two** straße
 
-Some *emphasis*, **strong *with emph* and `code`**, *nested **strong***, [small caps]{.smallcaps}, a note[^1] and **çé ÿ ǆ**.
+Some *emphasis*, **strong *with emph* and `code`**, *nested **strong***,
+[small caps]{.smallcaps}, a note[^1] and **çé ÿ ǆ**.
 
 ## Section two
 

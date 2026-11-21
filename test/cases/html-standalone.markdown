@@ -9,7 +9,8 @@ title: Feature *test* & more
 ---
 
 - [[1]{.toc-section-number} Intro](#intro){#toc-intro}
-  - [[1.1]{.toc-section-number} Sub link here](#sub-link-here){#toc-sub-link-here}
+  - [[1.1]{.toc-section-number} Sub link
+    here](#sub-link-here){#toc-sub-link-here}
     - [Deep](#deep){#toc-deep}
 - [[2]{.toc-section-number} Second](#second){#toc-second}
   - [Empty header](#empty-header){#toc-empty-header}
@@ -65,9 +66,12 @@ Inside div.
 
 ![A figure caption](fig.png "Title"){#fig1 width="300px" height="2.5cm"}
 
-![](inline.svg){width="50%"} inline ![alt *x*](a.jpg){alt="given"} and ![](s.mp3) and ![](doc.pdf)
+![](inline.svg){width="50%"} inline ![alt *x*](a.jpg){alt="given"} and
+![](s.mp3) and ![](doc.pdf)
 
-[span]{.smallcaps} [k]{#s1 .kbd .x} [m]{.mark} [u]{.underline} [p]{.csl-no-emph} [plain]{.foo style="color:red"} `x`{.sample} `y`{.variable .z}
+[span]{.smallcaps} [k]{#s1 .kbd .x} [m]{.mark} [u]{.underline}
+[p]{.csl-no-emph} [plain]{.foo style="color:red"} `x`{.sample}
+`y`{.variable .z}
 
 ::: raw
 raw html
@@ -99,13 +103,15 @@ Term 2
 
   : Simple table
 
-  ------------------------------------------------------------------
-   Centered Header  Default Aligned     Right Aligned Left Aligned
-  ----------------- ----------------- --------------- --------------
-        First       row                          12.0 Example long
+  ---------------------------------------------
+   Centered  Default           Right Left
+    Header   Aligned         Aligned Aligned
+  ---------- ------------ ---------- ----------
+    First    row                12.0 Example
+                                     long
 
-       Second       row                           5.0 Here
-  ------------------------------------------------------------------
+    Second   row                 5.0 Here
+  ---------------------------------------------
 
   : Multiline {#tbl .c}
 

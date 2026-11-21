@@ -7,7 +7,15 @@
 #
 #     PODOC -s --wrap=preserve -t markdown <name>.md
 #
-# and reads that back to JSON. The two must be the same. Not every case
+# and reads that back to JSON. The two must be the same. Then it writes
+# it wrapped at 20 columns,
+#
+#     PODOC -s --columns=20 -t markdown <name>.md
+#
+# and that, read and written again with -s --wrap=none -t markdown,
+# must be the same as <name>.md written with -s --wrap=none -t markdown
+# (wrapping turns spaces into soft breaks, so the JSON differs there,
+# as it does in pandoc). Not every case
 # is listed: markdown cannot hold everything the AST can, in pandoc too
 # (docs/user/differences.md). Results go in OUTDIR. Prints an "ok   - "
 # or "FAIL - " line for each, and exits 1 if any failed.
@@ -35,7 +43,11 @@ while read -r name rest; do
   if "$podoc" -t json "$name.md" > "$out.json" 2> "$out.err" &&
      "$podoc" -s --wrap=preserve -t markdown "$name.md" > "$out.markdown" 2>> "$out.err" &&
      "$podoc" -t json "$out.markdown" > "$out.again.json" 2>> "$out.err" &&
-     cmp -s "$out.json" "$out.again.json"; then
+     cmp -s "$out.json" "$out.again.json" &&
+     "$podoc" -s --columns=20 -t markdown "$name.md" > "$out.wrapped.markdown" 2>> "$out.err" &&
+     "$podoc" -s --wrap=none -t markdown "$name.md" > "$out.none.markdown" 2>> "$out.err" &&
+     "$podoc" -s --wrap=none -t markdown "$out.wrapped.markdown" > "$out.again.markdown" 2>> "$out.err" &&
+     cmp -s "$out.none.markdown" "$out.again.markdown"; then
     echo "ok   - $name"
   else
     echo "FAIL - $name (round trip; see $out.*)"

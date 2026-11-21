@@ -72,7 +72,7 @@ when no files are named. `podoc --help` lists the options:
 | `-c URL`, `--id-prefix STRING` | a style sheet and an identifier prefix, for HTML |
 | `--pdf-engine PROGRAM`, `--pdf-engine-opt STRING` | how PDF is made |
 | `-F PROGRAM`, `-L FILE` | the built-in filters (see below) |
-| `--wrap auto\|none\|preserve` | wrapping: for `plain`, `auto` (the default) wraps at `--columns`; other writers do not wrap |
+| `--wrap auto\|none\|preserve` | wrapping: for `plain` and `markdown`, `auto` (the default) wraps at `--columns`; other writers do not wrap |
 | `--columns N` | the line length, 72 by default; it also sets table column widths, as in pandoc |
 | `--tab-stop N`, `-p` | tabs |
 
