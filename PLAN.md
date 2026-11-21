@@ -169,6 +169,16 @@ Made by the user on 2026-11-20, on the questions of §15.
     machine's addresses is taken as the most they allow. Chosen over a
     bigger default (4 GB on 64-bit systems, 2 GB on 32-bit) and over no
     limit, which would let a runaway reach the OOM killer.
+25. **Links in rST footnotes are resolved** (2026-11-21). pandoc's
+    rST reader leaves named hyperlink references (`` `name`_ ``),
+    anonymous ones and substitutions in a footnote's text unresolved,
+    with its placeholder URLs (`##REF##name`, `##SUBST##|name|`); podoc
+    resolves them, after the rest of the document, so that the main
+    text and its anonymous references stay pandoc's. A footnote
+    reference inside a footnote stays as pandoc leaves it
+    (`##NOTE##2`): resolving it would nest one note in another, which
+    no writer, pandoc's or podoc's, renders properly. None of the
+    user's 73 rST files is affected.
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -2433,3 +2443,16 @@ ConTeXt.
     entry. Not run on the BSDs: the change is portable Oberon only.
   - docs/user/podoc.md and differences.md no longer list the title
     block as unread, and name `pandoc_title_block`.
+- 2026-11-21: Decision 25: hyperlink references and substitutions in
+  rST footnotes are resolved, where pandoc leaves its placeholders.
+  - `PdRst.Resolve` walks each footnote's text after the rest of the
+    document, so the main text, with its anonymous references, stays
+    pandoc's; a footnote reference inside a footnote is left as pandoc
+    leaves it.
+  - New case `rst-note-links` (podoc's output, differing from
+    pandoc's only in the three resolved references);
+    `rst-references2.json` now has the note's link resolved.
+  - The user's 73 rST files still give pandoc's JSON byte for byte
+    (`-OC`). `make test` passed under `-O2` and `-OC` on atla (286
+    case tests, 23 round trips, 6 image tests). Recorded in
+    docs/user/differences.md.

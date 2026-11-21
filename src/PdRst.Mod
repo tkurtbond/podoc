@@ -32,6 +32,8 @@ TYPE
   END;
   Subst = POINTER TO SubstDesc;
   SubstDesc = RECORD key: A.Rope; blocks: A.Block; next: Subst END;
+  Pending = POINTER TO PendingDesc; (* a note whose text is resolved later *)
+  PendingDesc = RECORD note: A.NoteInl; next: Pending END;
   SubstWalker = POINTER TO SubstWalkerDesc;
   SubstWalkerDesc = RECORD (A.WalkerDesc) END;
   Longs = POINTER TO ARRAY OF LONGINT;
@@ -68,6 +70,8 @@ VAR
   highlight: A.Rope; (* the highlight directive's language, or NIL *)
   main: B.Text; mainLen: LONGINT;
   notes, notesLast: Note; (* stateNotes, in document order *)
+  inNote: BOOLEAN; (* whether Resolve is walking a note's text *)
+  pending, pendingLast: Pending; (* notes made by Resolve, in order *)
   citations: Note; (* stateCitations, sorted by ref *)
   substs: Subst; (* stateSubstitutions *)
   incs: Inc; (* the files being included, the innermost first *)
@@ -3100,6 +3104,7 @@ END Block;
 PROCEDURE (w: RefWalker) Inline*(i: A.Inline): A.Inline;
   VAR l: A.LinkInl; ref, key: A.Rope; k: RI.Key; n, prev: Note; nl: A.LinkInl;
     saved, savedLast: Note; c: CHAR; sb: Subst; bl: A.Block; il: A.Inlines;
+    pn: Pending;
 BEGIN
   IF ~(i IS A.LinkInl) OR (i.kind # A.Link) THEN RETURN i END;
   l := i(A.LinkInl);
@@ -3125,6 +3130,7 @@ BEGIN
   ELSIF Prefix(l.url, "##NOTE##", ref) THEN
     prev := NIL; n := notes;
     WHILE (n # NIL) & ~Ropes.Equal(n.ref, ref) DO prev := n; n := n.next END;
+    IF inNote THEN RETURN i END;
     IF n = NIL THEN NotFound(ref); RETURN i END;
     saved := notes; savedLast := notesLast; notes := NIL; notesLast := NIL;
     i := A.NewNote(RopeBlocks(n.raw));
@@ -3135,6 +3141,11 @@ BEGIN
         IF prev = NIL THEN notes := n.next ELSE prev.next := n.next END;
         IF notesLast = n THEN notesLast := prev END
       END
+    END;
+    IF ~inNote THEN
+      NEW(pn); pn.note := i(A.NoteInl); pn.next := NIL;
+      IF pending = NIL THEN pending := pn ELSE pendingLast.next := pn END;
+      pendingLast := pn
     END;
     RETURN i
   ELSIF Prefix(l.url, "##SUBST##", ref) THEN
@@ -3184,8 +3195,21 @@ BEGIN
   A.WalkMetaValue(sw, d.meta);
   d.blocks := A.WalkBlocks(sw, d.blocks);
   NEW(w);
+  pending := NIL; pendingLast := NIL; inNote := FALSE;
   A.WalkMetaValue(w, d.meta);
-  d.blocks := A.WalkBlocks(w, d.blocks)
+  d.blocks := A.WalkBlocks(w, d.blocks);
+  (* Unlike pandoc, which leaves them unresolved, resolve the
+     substitutions and references in the notes' text (decision 25),
+     after the rest, so that anonymous references take their targets
+     there as in pandoc. A note's reference to a note is left as pandoc
+     leaves it: notes do not nest in the writers. *)
+  inNote := TRUE;
+  WHILE pending # NIL DO
+    pending.note.blocks := A.WalkBlocks(sw, pending.note.blocks);
+    pending.note.blocks := A.WalkBlocks(w, pending.note.blocks);
+    pending := pending.next
+  END;
+  pendingLast := NIL; inNote := FALSE
 END Resolve;
 
 (* Standalone: the title transform and the docinfo *)
@@ -3365,7 +3389,7 @@ BEGIN
   main := B.t; mainLen := n + 2 - k;
   nextKind := RI.OrgUnknown; nextName := NIL; lastUnknown := -1;
   RI.unknownRole := UnknownRole;
-  notes := NIL; notesLast := NIL; citations := NIL; substs := NIL;
+  notes := NIL; notesLast := NIL; inNote := FALSE; citations := NIL; substs := NIL;
   nStyles := 0; ids := NIL; highlight := NIL; incs := NIL;
   RI.Reset;
   d := A.NewDoc();

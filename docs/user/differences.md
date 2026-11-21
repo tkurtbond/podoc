@@ -148,6 +148,13 @@ read:
   gives a warning, "Anonymous reference with no target", and the
   reference is left unresolved; pandoc ends with a parse error,
   status 64.
+- Hyperlink references (`` `name`_ ``, `` `name`__ ``) and
+  substitutions (`|name|`) in a footnote's text are resolved; pandoc
+  leaves them as links to its internal placeholders (`##REF##name`,
+  `##SUBST##|name|`). Anonymous references in footnotes take the
+  targets left after the rest of the document. A reference to a
+  footnote inside a footnote (`[2]_`) is left as pandoc leaves it,
+  a link to `##NOTE##2`.
 - `--verbose` reports what the reader skips inside list items,
   substitution definitions and notes too. pandoc parses these more
   than once and loses the messages logged there, so it reports only
