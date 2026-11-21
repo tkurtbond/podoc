@@ -1143,6 +1143,20 @@ before it.
 - Templates: the pipes `left`, `right` and `center` (block layout);
   the `meta-json` variable; `--variable-json`; `--data-dir`; the
   "expecting ..." part of template error messages.
+- Memory use of the writers that lay out with `PdLayout` (found
+  2026-11-20, `-OC` on atla, pandoc 3.10's `MANUAL.txt` repeated):
+  at ×10 (3 MB) `-t ms` reaches 450 MB RSS, `markdown` 370 MB,
+  `plain` 360 MB and `context` 340 MB, about 110-150 times the input,
+  against 100 MB for `json` and 140 MB for `html`. At ×40 (12 MB)
+  `ms` and `markdown` hit poc's default 1 GB heap limit
+  (`GarbageCollectedHeap.defaultHeapLimit`): the collector thrashes
+  for 2 to 4 minutes, then `NEW` gives NIL and podoc ends with "NIL
+  pointer dereference". The user's documents are far smaller, so
+  nothing fails today. To look at: what holds the memory (the `Doc`
+  trees, `Flatten`'s lists, intermediate ropes, the whole body kept
+  as a `Doc` for the template), and whether parts can be laid out
+  and dropped earlier. Meanwhile, running out of heap should end
+  podoc with a message, not a NIL trap.
 
 ## State
 
