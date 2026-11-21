@@ -94,6 +94,10 @@ private directories wholesale.
   16 and 32 bits; under `-OC` they are 32 and 64. Every module must
   compile and pass its tests under both. Text lengths and file sizes
   can exceed 32,767, so index text with `LONGINT` where it can.
+- **`-trap-heap-exhausted`** is in the GNUmakefile's `POCFLAGS`: a
+  `NEW` that finds no memory stops podoc with "heap exhausted"
+  (trap 11) instead of leaving NIL. It is compiled into each `NEW`, so
+  it covers podoc's modules, not the installed libraries.
 - **Functions cannot return records or arrays** in poc; they come back
   through a `VAR` parameter.
 - **C**, when an optional feature needs it, is called with

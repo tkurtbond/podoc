@@ -24,6 +24,10 @@ BINDIR ?= $(PREFIX)/bin
 DOCDIR ?= $(PREFIX)/share/doc/podoc
 MODEL ?= OC
 BUILD := build
+# -trap-heap-exhausted: a NEW that finds no memory stops podoc with
+# "heap exhausted" (trap 11), not a NIL pointer met later. It applies to
+# the NEWs poc compiles here, not to those in installed libraries.
+POCFLAGS ?= -trap-heap-exhausted
 
 # An installed library on POC_LIBRARY_PATH would be taken in place of the
 # one in $(POCLIBDIR).
@@ -50,7 +54,7 @@ $(POC_STAMP): FORCE
 
 $(BUILD)/%/podoc: $(SRCS) $(POC_STAMP)
 	mkdir -p $(BUILD)/$*
-	$(POC) -$* -library-path $(POCLIBDIR) -import-path src \
+	$(POC) -$* $(POCFLAGS) -library-path $(POCLIBDIR) -import-path src \
 	  -output-dir $(BUILD)/$* -o $@ src/podoc.Mod
 
 test: test-o2 test-oc
@@ -71,7 +75,7 @@ $(BUILD)/%.passed: $(SRCS) test/$$(notdir $$*).Mod test/$$(notdir $$*).expected 
   $$(wildcard test/$$(notdir $$*).errors) $(wildcard test/templates/* test/templates/data/templates/*) \
   $(POC_STAMP)
 	mkdir -p $(BUILD)/$(dir $*)
-	$(POC) -$(firstword $(subst /, ,$*)) -library-path $(POCLIBDIR) \
+	$(POC) -$(firstword $(subst /, ,$*)) $(POCFLAGS) -library-path $(POCLIBDIR) \
 	  -import-path src -import-path test -output-dir $(BUILD)/$(dir $*) \
 	  -o $(BUILD)/$* test/$(notdir $*).Mod
 	cd $(BUILD)/$(dir $*) && ./$(notdir $*) > $(notdir $*).out 2> $(notdir $*).err

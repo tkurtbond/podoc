@@ -140,10 +140,22 @@ buckets keyed by `Ropes.Hash`, and plain takes 2.8 s at ×40.
   370–550 MB, about 30–45 times the input: the AST, its ropes and the
   heap's room to grow. That is the reader's memory, not the layout
   writers'.
-- **Running out of heap still ends in a NIL trap.** poc's
-  `GarbageCollectedHeap.Allocate` answers 0 at the ceiling, and `NEW`
-  gives NIL, with no hook for a message. A clear "out of memory" needs
-  the runtime's help, or a check after every `NEW`.
+- **Running out of heap can still end in a NIL trap.** poc's
+  `GarbageCollectedHeap.Allocate` answers 0 at the ceiling, and by
+  default `NEW` then gives NIL. poc's `-trap-heap-exhausted` makes such
+  a `NEW` stop the program instead, with "heap exhausted: NEW cannot
+  allocate the block" (trap 11). podoc is built with it since
+  2026-11-20. The option is compiled into each `NEW`, though, so it
+  covers podoc's own modules but not the installed libraries: a `NEW`
+  in Ropes, pounicode or ArgParser that fails still gives NIL and a
+  "NIL pointer dereference" later. Checked with a test program that
+  lowers the heap limit (`GarbageCollectedHeap.SetHeapLimit`): its own
+  `NEW` trapped with the message, a `NEW` inside the installed Ropes
+  gave the NIL trap, and Ropes compiled from source with the option
+  trapped with the message. The libraries' makefiles have no variable
+  for poc's options. podoc on MANUAL ×150 (45 MB, `-t json`) stopped with
+  the message and status 11, but only after 6 minutes of the collector
+  running over and over near the limit.
 
 ## Allocation takes half the time
 

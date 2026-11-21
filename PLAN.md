@@ -1219,8 +1219,11 @@ ConTeXt.
   same day, see docs/developer/memory-use-problem.md). Left:
   - ConTeXt's sections are its top-level blocks, each built whole;
   - the AST itself: 30-45 times the input at 12 MB, for every writer;
-  - running out of poc's heap ends in a NIL trap, not a message:
-    `GarbageCollectedHeap` has no hook for it (a question for poc).
+  - running out of poc's heap: podoc is built with poc's
+    `-trap-heap-exhausted` (2026-11-20), which gives "heap exhausted"
+    for its own modules' `NEW`s; a `NEW` in an installed library
+    (Ropes, pounicode, ArgParser) still gives NIL and a NIL trap, unless
+    the library is built with the option too.
 
 ## State
 
@@ -2108,3 +2111,19 @@ ConTeXt.
     MANUAL, podoc now takes 18.8–23.3 MiB, at most 1.4 MiB more than
     without it. The Lost-Worlds ConTeXt build went from 12.5 to
     8.2 MiB, and the digest from 20.6 to 13.5 MiB.
+- 2026-11-20: podoc is built with poc's `-trap-heap-exhausted`
+  (`POCFLAGS` in the GNUmakefile), and docs/developer/memory-use-problem.md
+  corrected: poc had the option all along.
+  - The option is compiled into each `NEW`. A test program with a 4 MB
+    heap limit (`GarbageCollectedHeap.SetHeapLimit`) gave "heap
+    exhausted: NEW cannot allocate the block" for its own `NEW`, but
+    "NIL pointer dereference" for a `NEW` in the installed Ropes;
+    Ropes compiled from source with the option gave the message.
+  - podoc with the option on MANUAL ×150 (45 MB, `-t json`, `-OC`):
+    the message and exit status 11, after 6 min 15 s.
+  - `make test` passed under `-O2` and `-OC` after `make clean`: 247
+    case tests and 23 round trips under each.
+  - Recorded for poc as Peaseblossom's "Ongoing implementation
+    enhancements" 15 (2cdad0b): a program-wide form, a flag set in the program's entry
+    point before any module body runs, so that `Allocate` itself traps
+    and libraries built without the option are covered too.
