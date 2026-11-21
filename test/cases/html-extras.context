@@ -82,8 +82,10 @@ Entry one. x
 \startxtablehead[head]
 \startxrowgroup[lastrow]
 \startxrow
-\startxcell[align=right,width={0.51\textwidth}] A long column header that is wide \stopxcell
-\startxcell[align=left,width={0.44\textwidth}] B header that is also quite long indeed \stopxcell
+\startxcell[align=right,width={0.51\textwidth}] A long column header
+that is wide \stopxcell
+\startxcell[align=left,width={0.44\textwidth}] B header that is also
+quite long indeed \stopxcell
 \startxcell[width={0.05\textwidth}] C \stopxcell
 \stopxrow
 \stopxrowgroup

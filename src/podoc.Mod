@@ -174,6 +174,7 @@ BEGIN
     PdMs.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "context" THEN
     PdConTeXt.SetOptions(O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth);
+    IF O.wrap = "auto" THEN PdConTeXt.SetWidth(O.columns) ELSE PdConTeXt.SetWidth(0) END;
     PdConTeXt.WriteDoc(Doc(text, len), tmpl)
   ELSIF (to = "markdown") OR (to = "plain") THEN
     PdHtml.SetOptions(O.idPrefix, O.numberSections, FALSE, FALSE, O.tocDepth, "-");

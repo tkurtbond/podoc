@@ -83,7 +83,8 @@ Text with a note\footnote{First note.
 
   Second para of note.} and another.\footnote{Inline {\em note} here.}
 
-\startsectionlevel[title={Sub \goto{link}[url(http://x.com)] here},reference={sub-link-here}]
+\startsectionlevel[title={Sub \goto{link}[url(http://x.com)]
+here},reference={sub-link-here}]
 
 \startitemize[packed]
 \item
@@ -140,9 +141,12 @@ Inside div.
 {\externalfigure[fig.png][width=3.125in,height=2.5cm]}
 \stopplacefigure
 
-{\externalfigure[inline.svg][width=0.5\textwidth]} inline {\externalfigure[a.jpg]} and {\externalfigure[s.mp3]} and {\externalfigure[doc.pdf]}
+{\externalfigure[inline.svg][width=0.5\textwidth]} inline
+{\externalfigure[a.jpg]} and {\externalfigure[s.mp3]} and
+{\externalfigure[doc.pdf]}
 
-{\setsmallcaps span} \reference[s1]{}k m \underbar{u} p plain \type{x} \type{y}
+{\setsmallcaps span} \reference[s1]{}k m \underbar{u} p plain \type{x}
+\type{y}
 
 raw html
 
@@ -210,8 +214,10 @@ nested
 \startxtablehead[head]
 \startxrowgroup[lastrow]
 \startxrow
-\startxcell[align=middle,width={0.15\textwidth}] Centered Header \stopxcell
-\startxcell[align=right,width={0.18\textwidth}] Default Aligned \stopxcell
+\startxcell[align=middle,width={0.15\textwidth}] Centered
+Header \stopxcell
+\startxcell[align=right,width={0.18\textwidth}] Default
+Aligned \stopxcell
 \startxcell[align=left,width={0.15\textwidth}] Right Aligned \stopxcell
 \startxcell[align=right,width={0.15\textwidth}] Left Aligned \stopxcell
 \stopxrow
@@ -248,7 +254,8 @@ nested
 
 \startsectionlevel[title={Second},reference={second}]
 
-Back link \goto{a@b.com}[url(mailto:a@b.com)] and \goto{mail}[url(mailto:x@y.z)] and \goto{int}[intro].
+Back link \goto{a@b.com}[url(mailto:a@b.com)] and
+\goto{mail}[url(mailto:x@y.z)] and \goto{int}[intro].
 
 Cite H\low{2}O \overstrikes{s} \high{sup}
 
@@ -258,7 +265,8 @@ Para\startbuffer \starttyping
 code note
 \stoptyping\stopbuffer\footnote{\getbuffer}
 
-\startsectionlevel[title={Empty header},reference={empty-header},number=no,incrementnumber=no]
+\startsectionlevel[title={Empty
+header},reference={empty-header},number=no,incrementnumber=no]
 
 \startsectionlevel[title={Not header},reference={not-header}]
 

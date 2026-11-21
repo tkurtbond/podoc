@@ -58,7 +58,8 @@
 \startxrow
 \startxcell[align=left,width={0.22\textwidth}] Bananas \stopxcell
 \startxcell[align=right,width={0.22\textwidth}] \$1.34 \stopxcell
-\startxcell[align=middle,width={0.29\textwidth}] built-in wrapper \stopxcell
+\startxcell[align=middle,width={0.29\textwidth}] built-in
+wrapper \stopxcell
 \stopxrow
 \stopxrowgroup
 \stopxtablebody
@@ -97,7 +98,8 @@
 \stopxtablehead
 \startxtablebody[body]
 \startxrow
-\startxcell[width={0.19\textwidth},nr=3] Temperature 1961-1990 \stopxcell
+\startxcell[width={0.19\textwidth},nr=3] Temperature
+1961-1990 \stopxcell
 \startxcell[width={0.11\textwidth}] min \stopxcell
 \startxcell[width={0.15\textwidth}] -89.2 °C \stopxcell
 \stopxrow
@@ -483,7 +485,8 @@ Table with cells spanning multiple rows or columns:
 \stopxtablehead
 \startxtablebody[body]
 \startxrow
-\startxcell[width={0.19\textwidth},nr=3] Temperature 1961-1990 \stopxcell
+\startxcell[width={0.19\textwidth},nr=3] Temperature
+1961-1990 \stopxcell
 \startxcell[width={0.11\textwidth}] min \stopxcell
 \startxcell[width={0.15\textwidth}] -89.2 °C \stopxcell
 \stopxrow
@@ -510,7 +513,8 @@ Table with complex header:
 \startxtablehead[head]
 \startxrow
 \startxcell[width={0.31\textwidth},nr=2] Location \stopxcell
-\startxcell[width={0.33\textwidth},nc=3] Temperature 1961-1990 in degree Celsius \stopxcell
+\startxcell[width={0.33\textwidth},nc=3] Temperature 1961-1990 in degree
+Celsius \stopxcell
 \stopxrow
 \startxrowgroup[lastrow]
 \startxrow

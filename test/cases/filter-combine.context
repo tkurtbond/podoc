@@ -52,7 +52,8 @@ Text.
 
 Just text.
 
-\startsectionlevel[title={Lone three},reference={no-title_here-lone-three}]
+\startsectionlevel[title={Lone
+three},reference={no-title_here-lone-three}]
 
 \startsectionlevel[title={Four},reference={no-title_here-four}]
 

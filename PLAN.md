@@ -838,7 +838,7 @@ must show no new differences.
 - PDF output through `pdfroff` and `groff -Tpdf` still works, checked
   on a wrapped document.
 
-### Phase 18.2: ConTeXt
+### Phase 18.2: ConTeXt [done]
 
 - `PdConTeXt` renders at `--columns` under `--wrap=auto`.
 - PDF output through `context` still works, checked on a wrapped
@@ -1601,3 +1601,33 @@ must show no new differences.
   `-O2` and `-OC`: 239 case tests and 23 round trips. `make compare`:
   1374 of 1584 the same, as before; the `ms` differences are the
   unwrapped ones.
+- 2026-11-20: Phase 18.2 done, and with it Phase 18. `-t context`
+  wraps at `--columns` under `--wrap=auto` (`PdConTeXt.SetWidth`,
+  set by `podoc.Mod`; pandoc's ConTeXt writer keeps nothing from
+  wrapping). Checked against pandoc 3.10: the ms edge-case file of
+  18.1 at 10, 20, 30, 50, 72 and 100 columns, plain, with `-s`, with
+  `--toc -N -s` and with `--wrap=preserve`: all the same.
+  `tables.markdown` at 20 and 72, plain, `-s` and `--wrap=preserve`:
+  the same; `testsuite.txt`: the known differences only (the `%`
+  title block and raw TeX, now wrapped). The user's 54 documents at
+  40, 72 and 100 columns, with and without `-s`, under `-O2` and
+  `-OC`: 648 runs, all the same but the 12 of Galactic-Bounty-Hunters'
+  CLAUDE.md (highlighted code, as unwrapped) and 8 at 40 columns, of
+  `galactic_bounty_hunters_one_shot.md` and its `-whole.md`: a
+  heading starting `🏛️` (U+1F3DB U+FE0F) wraps one word later,
+  because `PdWidth` counts the emoji and its variation selector as
+  one column where doclayout counts two (the emoji-sequence entry in
+  "Later"; recorded in docs/user/differences.md). The 16 `context`
+  cases whose expected files changed were checked against pandoc with
+  their arguments first: the same, but for `filter-general-context`
+  (`general.lua`'s messages, as before) and `filter-combine`, whose
+  filters pandoc does not find here; its wrapped output has the
+  expected file's words. `plain-wrap` and `plain-columns` gained
+  `context` expected files, the same as pandoc's. The edge file makes
+  PDFs through `context` wrapped (`--columns=20 -s --toc -N`) and
+  unwrapped, with the same words; as in pandoc, the wrapped line
+  block's lines break in the PDF too, since `\startlines` keeps line
+  breaks (the user's documents have no line blocks). `make test`
+  passed under `-O2` and `-OC`: 241 case tests and 23 round trips.
+  `make compare`: 1374 of 1584 the same, the same differences as
+  before.

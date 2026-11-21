@@ -1,8 +1,11 @@
-\startsectionlevel[title={Héading with x\high{2} and H\low{2}O and {\setsmallcaps Small}},reference={hé-ad}]
+\startsectionlevel[title={Héading with x\high{2} and H\low{2}O and
+{\setsmallcaps Small}},reference={hé-ad}]
 
-\startsectionlevel[title={Unnumbered \quotation{quoted} heading},reference={unnumbered-quoted-heading},number=no,incrementnumber=no]
+\startsectionlevel[title={Unnumbered \quotation{quoted}
+heading},reference={unnumbered-quoted-heading},number=no,incrementnumber=no]
 
-.leading period and \quote{single} \quotation{double} and @ \lettertilde{} ^ ` and a {\setsmallcaps Mixed Smallcaps 3x}.
+.leading period and \quote{single} \quotation{double} and @
+\lettertilde{} ^ ` and a {\setsmallcaps Mixed Smallcaps 3x}.
 
 \startplacefigure[title={A caption with {\em emph}}]
 {\externalfigure[pic.pdf][width=2in,height=3cm]}
@@ -86,7 +89,8 @@ A note.\footnote{Note text.
 code note
 \stoptyping\stopbuffer\footnote{\getbuffer}
 
-\goto{link}[hé-ad] and \goto{web}[url(https://example.com/a\%20b?q=1@x)] and \goto{me@example.com}[url(mailto:me@example.com)].
+\goto{link}[hé-ad] and \goto{web}[url(https://example.com/a\%20b?q=1@x)]
+and \goto{me@example.com}[url(mailto:me@example.com)].
 
 \startdescription{Term with note\footnote{in a term}}
   def
@@ -150,7 +154,8 @@ Div para.
 Line one\crlf
 line two.
 
-\type{code} and \type{.dot} and {\bf bold {\em both}} and \overstrikes{strike}.
+\type{code} and \type{.dot} and {\bf bold {\em both}} and
+\overstrikes{strike}.
 
 \stopsectionlevel
 

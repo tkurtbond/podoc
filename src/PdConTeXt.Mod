@@ -21,6 +21,7 @@ VAR
   numberSections, preserve, wantToc: BOOLEAN;
   ligatures: BOOLEAN; (* whether dashes and apostrophes become ligatures *)
   tocDepth: INTEGER;
+  width: LONGINT; (* the width lines are wrapped at, 0 for none *)
 
   (* the writer's state *)
   nextRef: LONGINT; (* the number of the next \useURL *)
@@ -857,6 +858,13 @@ BEGIN
   ligatures := on
 END SetLigatures;
 
+(* Sets the width lines are wrapped at (--columns under --wrap=auto),
+   0 for none *)
+PROCEDURE SetWidth*(w: LONGINT);
+BEGIN
+  width := w
+END SetWidth;
+
 (* The text of the simple value of key in ctx; found FALSE if it is
    not there or not simple *)
 PROCEDURE Field(ctx: T.Value; key: ARRAY OF CHAR; VAR found: BOOLEAN): Rope;
@@ -917,7 +925,7 @@ BEGIN
   ctx := C.Build(meta, BlockDoc, InlineDoc);
   main := Blocks(Sh.MakeSections(FALSE, -1, doc.blocks));
   IF tmpl = NIL THEN
-    L.Write(L.Chomp(main), 0); PdIO.WriteLn;
+    L.Write(L.Chomp(main), width); PdIO.WriteLn;
     RETURN
   END;
   C.DefField(ctx, "toc", T.NewBool(wantToc));
@@ -967,11 +975,11 @@ BEGIN
     C.DefField(ctx, "context-dir", T.NewSimple(L.Literal(s)))
   ELSE C.DefField(ctx, "context-dir", T.NewSimple(NIL))
   END;
-  L.Write(T.Render(tmpl, ctx), 0)
+  L.Write(T.Render(tmpl, ctx), width)
 END WriteDoc;
 
 BEGIN
   numberSections := FALSE; preserve := FALSE; wantToc := FALSE; tocDepth := 3;
   nextRef := 1; listLevel := 0; cslRefs := FALSE; cslHanging := FALSE;
-  ligatures := TRUE
+  ligatures := TRUE; width := 0
 END PdConTeXt.

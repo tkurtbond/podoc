@@ -12,7 +12,8 @@
 
 \startsectionlevel[reference={section}]
 
-\#5 not a heading \#\#\#\#\#\#\# seven \# closing hashes \#\#\# \#\# Trailing \# in text \#
+\#5 not a heading \#\#\#\#\#\#\# seven \# closing hashes \#\#\# \#\#
+Trailing \# in text \#
 
 Text - not a list after para
 
@@ -58,7 +59,8 @@ line two
 
 \stopsectionlevel
 
-\startsectionlevel[title={Unicode Ünïcode héading},reference={unicode-ünïcode-héading}]
+\startsectionlevel[title={Unicode Ünïcode
+héading},reference={unicode-ünïcode-héading}]
 
 \startsectionlevel[title={123 Numbers first},reference={numbers-first}]
 

@@ -1,4 +1,10 @@
-A \goto{link}[url(http://example.com)] and \goto{ref}[url(http://example.com/ref)] and \goto{r1}[url(http://example.com/ref)] and \goto{r1}[url(http://example.com/ref)]. An image {\externalfigure[img.png][width=0.5\textwidth]} inline, an autolink \useURL[url1][http://a.b/c]\from[url1] and \goto{me@example.com}[url(mailto:me@example.com)], and a span.
+A \goto{link}[url(http://example.com)] and
+\goto{ref}[url(http://example.com/ref)] and
+\goto{r1}[url(http://example.com/ref)] and
+\goto{r1}[url(http://example.com/ref)]. An image
+{\externalfigure[img.png][width=0.5\textwidth]} inline, an autolink
+\useURL[url1][http://a.b/c]\from[url1] and
+\goto{me@example.com}[url(mailto:me@example.com)], and a span.
 
 \startplacefigure[reference=fig:one,title={A figure caption}]
 {\externalfigure[fig.png]}
@@ -6,6 +12,7 @@ A \goto{link}[url(http://example.com)] and \goto{ref}[url(http://example.com/ref
 
 Text with a note\footnote{The note's text,
 
-  with a second paragraph.} and an inline note\footnote{Inline {\em note}.} and the same note again.\footnote{The note's text,
+  with a second paragraph.} and an inline note\footnote{Inline {\em
+  note}.} and the same note again.\footnote{The note's text,
 
   with a second paragraph.}
