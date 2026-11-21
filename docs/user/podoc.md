@@ -39,6 +39,8 @@ output is pandoc's, or equivalent to it. Where it knowingly differs,
   version 6's `convert` and `identify`) for PNG, JPEG, GIF and other
   bitmaps. groff before 1.25 reads only PDF 1.4, which podoc asks
   `rsvg-convert` for.
+- For EPS and PostScript images in PDF made with `groff`: Ghostscript
+  (`gs`), optionally.
 
 podoc is built and tested on Linux (Fedora), FreeBSD, NetBSD and
 OpenBSD.
@@ -252,6 +254,15 @@ an image type (`.svg`, `.png`, `.jpg`, `.gif`, ...), to PDF and writes
 - A width given as a percentage (`{width=50%}`) is written as `0p`,
   as pandoc writes it for a `.pdf` image, and groff then skips the
   image.
+
+EPS and PostScript images (`.eps` and `.ps`, in lower case, as pandoc
+matches them) are written as `.PSPIC`, which `groff -Tps` and
+`pdfroff` show and `groff -Tpdf` ignores. So for PDF made with
+`--pdf-engine=groff`, the default for ms, podoc converts them to PDF
+with Ghostscript (`gs`), cropped to their bounding box, and writes
+`.PDFPIC`. Without `gs`, or if the conversion fails, podoc warns and
+the image is left out, as before. `-t ms` output and `pdfroff` keep
+`.PSPIC`.
 
 ## Exit statuses
 

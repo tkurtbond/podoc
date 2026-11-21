@@ -6,7 +6,9 @@ MODULE PdPdf;
    images into it and points the images at the copies (fillMediaBag and
    extractMedia); for ConTeXt it also converts SVG images to PDF with
    rsvg-convert (convertImages), and for groff and pdfroff every image
-   they cannot show (PdImages.Convert, decision 23). The writer then writes its source into
+   they cannot show (PdImages.Convert, decision 23), and for groff, whose
+   gropdf ignores .PSPIC, EPS and PostScript images too (decision 26).
+   The writer then writes its source into
    the directory, at the path Source gives, and Make runs the engine on
    it: pdfroff and groff in the working directory, the source on their
    standard input and the PDF from their standard output; context in
@@ -35,6 +37,7 @@ TYPE
 VAR
   tmp: Path; (* the temporary directory, "" if there is none *)
   tex: BOOLEAN; (* whether the engine is context *)
+  gropdf: BOOLEAN; (* whether the engine is groff, which runs groff -Tpdf *)
   seen: Seen;
   images: LONGINT; (* the number of the next image copied *)
 
@@ -79,6 +82,17 @@ END Failed;
 
 (* Images *)
 
+(* The last part of the path p *)
+PROCEDURE BaseName(VAR p, base: ARRAY OF CHAR);
+  VAR i, start, k: LONGINT;
+BEGIN
+  i := 0; start := 0;
+  WHILE p[i] # 0X DO IF p[i] = "/" THEN start := i + 1 END; INC(i) END;
+  k := 0;
+  WHILE p[start] # 0X DO base[k] := p[start]; INC(k); INC(start) END;
+  base[k] := 0X
+END BaseName;
+
 (* Sets path to a new name in the temporary directory, with the
    extension ext *)
 PROCEDURE TempName(VAR path: ARRAY OF CHAR; ext: ARRAY OF CHAR);
@@ -90,7 +104,8 @@ END TempName;
 (* What the image src becomes: the path of its copy in the temporary
    directory, or NIL if it cannot be read. For ConTeXt an SVG image is
    converted to PDF, for groff and pdfroff any image they cannot show
-   (decision 23); one that cannot be converted keeps its copy. *)
+   (decision 23), and for groff an EPS or PostScript image (decision
+   26); one that cannot be converted keeps its copy. *)
 PROCEDURE Fetch(src: Rope): Rope;
   VAR s: Seen; url, path, ext, pdf: Path; r: Rope;
 BEGIN
@@ -107,7 +122,8 @@ BEGIN
     TempName(path, ext);
     IF ~R.Copy(url, path) THEN r := NIL
     ELSE
-      IF tex & PdImages.IsExt(ext, ".svg") OR ~tex & PdImages.Convertible(path) THEN
+      IF tex & PdImages.IsExt(ext, ".svg") OR ~tex & PdImages.Convertible(path)
+          OR gropdf & PdImages.PostScript(path) THEN
         TempName(pdf, ".pdf");
         IF PdImages.Convert(path, pdf, ~tex) THEN COPY(pdf, path) END
       END;
@@ -138,9 +154,11 @@ END Inline;
 (* Makes the temporary directory and handles the images of d for the
    engine: context when context is TRUE, else pdfroff or groff. *)
 PROCEDURE Prepare*(d: A.Doc; context: BOOLEAN);
-  VAR ok: BOOLEAN; w: Walker;
+  VAR ok: BOOLEAN; w: Walker; prog, base: Path;
 BEGIN
   tex := context; seen := NIL; images := 0;
+  COPY(O.pdfEngine, prog); BaseName(prog, base);
+  gropdf := ~tex & (base # "pdfroff");
   R.MakeTempDir(tmp, ok);
   IF ~ok THEN tmp := ""; PdIO.Fail("", "cannot make a temporary directory", PdIO.IOError) END;
   NEW(w);
@@ -194,17 +212,6 @@ BEGIN
   f := O.pdfEngineOpts;
   WHILE f # NIL DO R.Add(c, f.name^); f := f.next END
 END AddOpts;
-
-(* The last part of the path p *)
-PROCEDURE BaseName(VAR p, base: ARRAY OF CHAR);
-  VAR i, start, k: LONGINT;
-BEGIN
-  i := 0; start := 0;
-  WHILE p[i] # 0X DO IF p[i] = "/" THEN start := i + 1 END; INC(i) END;
-  k := 0;
-  WHILE p[start] # 0X DO base[k] := p[start]; INC(k); INC(start) END;
-  base[k] := 0X
-END BaseName;
 
 (* Writes the PDF in the file pdf to the output, -o or standard output,
    and removes the temporary directory. *)
@@ -295,5 +302,5 @@ BEGIN
 END CheckTerminal;
 
 BEGIN
-  tmp := ""; tex := FALSE; seen := NIL; images := 0
+  tmp := ""; tex := FALSE; gropdf := FALSE; seen := NIL; images := 0
 END PdPdf.

@@ -10,7 +10,8 @@ MODULE PdImages;
    cannot show to PDF, beside them, and points the images at the PDFs,
    for .PDFPIC. ForMs converts them without --extract-media, into the
    directory beside the ms file. Convert converts one image to PDF;
-   PdPdf uses it for the images of a PDF made with groff or pdfroff. *)
+   PdPdf uses it for the images of a PDF made with groff or pdfroff,
+   and with groff for PostScript images too (decision 26). *)
 
 IMPORT Ropes, A := PdAst, PdIO, R := PdRun, PdMime, PdSha1;
 
@@ -116,6 +117,17 @@ BEGIN
   i := 0; WHILE ext[i] # 0X DO ext[i] := ext[i + 1]; INC(i) END;
   RETURN PdMime.Category(ext) = PdMime.Image
 END Convertible;
+
+(* Whether the image at path is PostScript, which the ms writer shows
+   with .PSPIC: its extension is .eps or .ps, matched exactly, as
+   pandoc's ms writer matches it. groff -Tpdf (gropdf) ignores .PSPIC,
+   so for PDF made with groff these are converted (decision 26). *)
+PROCEDURE PostScript*(VAR path: ARRAY OF CHAR): BOOLEAN;
+  VAR ext: Path;
+BEGIN
+  Extension(path, ext);
+  RETURN (ext = ".eps") OR (ext = ".ps")
+END PostScript;
 
 (* Whether ch separates the parts of a path *)
 PROCEDURE Sep(ch: CHAR): BOOLEAN;
@@ -245,11 +257,12 @@ END Magick;
 
 (* Converts the image src to the PDF out: SVG with rsvg-convert, as
    pandoc's convertImage does, but for groff (groff TRUE) as PDF 1.4,
-   which gropdf can read, if rsvg-convert can write it; any other image
-   with the first of img2pdf and magick (or ImageMagick 6's convert)
-   that is found and succeeds. (GraphicsMagick's PDFs have an object
-   gropdf refuses, so gm is not used.) Returns whether it converted
-   the image; if not, warns. *)
+   which gropdf can read, if rsvg-convert can write it; PostScript
+   (.eps and .ps) with Ghostscript, as PDF 1.4 cropped to the bounding
+   box (decision 26); any other image with the first of img2pdf and
+   magick (or ImageMagick 6's convert) that is found and succeeds.
+   (GraphicsMagick's PDFs have an object gropdf refuses, so gm is not
+   used.) Returns whether it converted the image; if not, warns. *)
 PROCEDURE Convert*(VAR src, out: ARRAY OF CHAR; groff: BOOLEAN): BOOLEAN;
   VAR ext: Path; m: ARRAY R.PathLen + 100 OF CHAR; tried: BOOLEAN;
 
@@ -270,8 +283,29 @@ PROCEDURE Convert*(VAR src, out: ARRAY OF CHAR; groff: BOOLEAN): BOOLEAN;
     RETURN Quiet(c)
   END Img2pdf;
 
+  PROCEDURE Gs(): BOOLEAN;
+    VAR c: R.Command; o: ARRAY R.PathLen + 16 OF CHAR;
+  BEGIN
+    c := R.New(); R.Add(c, "gs");
+    R.Add(c, "-q"); R.Add(c, "-dSAFER"); R.Add(c, "-dBATCH"); R.Add(c, "-dNOPAUSE");
+    R.Add(c, "-sDEVICE=pdfwrite"); R.Add(c, "-dEPSCrop");
+    R.Add(c, "-dCompatibilityLevel=1.4");
+    o := "-sOutputFile="; R.Append(o, out); R.Add(c, o);
+    R.Add(c, src);
+    RETURN Quiet(c)
+  END Gs;
+
 BEGIN
   m := "Could not convert image "; R.Append(m, src);
+  IF PostScript(src) THEN
+    IF ~R.Found("gs") THEN
+      R.Append(m, ": check that gs is in path.");
+      PdIO.Warn(m); RETURN FALSE
+    END;
+    IF Gs() THEN RETURN TRUE END;
+    R.Append(m, ": conversion from PostScript failed"); PdIO.Warn(m);
+    RETURN FALSE
+  END;
   Extension(src, ext);
   IF IsExt(ext, ".svg") THEN
     IF ~R.Found("rsvg-convert") THEN

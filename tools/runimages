@@ -8,9 +8,11 @@
 #
 # These tests run with a PATH that holds only the commands podoc's shell
 # commands need besides the converters (mkdir, cp, head, grep), so the
-# results do not depend on what is installed. A last test, "convert",
-# converts with the converters found in the usual PATH, and is skipped
-# without rsvg-convert and one of img2pdf and magick (or convert).
+# results do not depend on what is installed. Two tests use the usual
+# PATH: "convert" converts with the converters found there, and is
+# skipped without rsvg-convert and one of img2pdf and magick (or
+# convert); "pdf-eps" makes a PDF with groff from an EPS image
+# (decision 26), and is skipped without groff, gs and pdftotext.
 # Prints an "ok   - " or "FAIL - " line for each, and exits 1 if any
 # failed.
 
@@ -84,6 +86,20 @@ if have rsvg-convert && { have img2pdf || have magick || have convert; }; then
   check convert
 else
   echo "skip - images convert: no rsvg-convert, or no img2pdf or magick"
+fi
+
+# EPS in PDF made with groff -Tpdf, converted with Ghostscript
+# (decision 26): the text drawn in the EPS is found in the PDF
+if have groff && have gs && have pdftotext; then
+  name=pdf-eps; w=$outdir/$name
+  mkdir -p "$w" && cp -R test/images/. "$w/" || exit 2
+  (cd "$w/doc" && "$podoc" img/eps.md -t ms --pdf-engine=groff \
+     -o img/out.pdf > ../out 2> ../err)
+  echo "status $?" >> "$w/out"
+  pdftotext "$w/doc/img/out.pdf" - 2>/dev/null | grep -c EPSMARK >> "$w/out"
+  check $name
+else
+  echo "skip - images pdf-eps: no groff, gs or pdftotext"
 fi
 
 echo "$((total - failed)) of $total image tests passed"

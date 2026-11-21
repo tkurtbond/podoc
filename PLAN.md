@@ -180,6 +180,20 @@ Made by the user on 2026-11-20, on the questions of §15.
     no writer, pandoc's or podoc's, renders properly. None of the
     user's 73 rST files is affected.
 
+26. **EPS images in PDF made with groff** (2026-11-21). pandoc's ms
+    writer writes `.PSPIC` for `.eps` and `.ps` images, which
+    `groff -Tpdf` (gropdf) ignores, so with `--pdf-engine=groff`, the
+    default for ms, they are missing from the PDF; `pdfroff` showed
+    them, but groff 1.24 and later do not include `pdfroff`. Asked for
+    by the user after the 005-merchant scenario's figures (`for-format
+    ms`, `.gen.eps`) went missing under groff 1.25.0: for PDF made with
+    `groff`, podoc converts local `.eps` and `.ps` images (matched
+    exactly, as pandoc matches them) to PDF with Ghostscript (`gs
+    -sDEVICE=pdfwrite -dEPSCrop -dCompatibilityLevel=1.4`, PDF 1.4 for
+    gropdf before 1.25) and writes `.PDFPIC`. `pdfroff` and `-t ms`
+    output keep `.PSPIC`, which `groff -Tps` shows. Planned and done
+    as Phase 22.
+
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
 JSON AST compared byte for byte.
@@ -1241,6 +1255,17 @@ ConTeXt.
   a test that is skipped when the tool is missing); a PDF built with
   an SVG, a PNG and a JPEG, each image found in it (`pdfimages
   -list`).
+
+## Phase 22: EPS images in PDF made with groff [done]
+
+Decision 26. `PdImages.PostScript` tells `.eps` and `.ps` images;
+`PdImages.Convert` converts them with `gs`; `PdPdf.Fetch` does so when
+the engine is not `pdfroff` or `context`. The writer then sees a
+`.pdf` and writes `.PDFPIC`, and `PdPdf.Roff` adds `-U`. Without `gs`
+or when it fails, podoc warns and the image keeps `.PSPIC`. Tested by
+`tools/runimages`' `pdf-eps`: a PDF made with groff from an EPS that
+draws the text `EPSMARK`, found in it with `pdftotext`; skipped
+without groff, gs and pdftotext.
 
 ## Later, not scheduled
 
@@ -2526,3 +2551,18 @@ ConTeXt.
     `-O2` and `-OC`, as at 5e2f6e4 (288 case tests, 23 round trips,
     5 image tests; the conversion test skipped, with no converters
     installed).
+- 2026-11-21: Phase 22 done (decision 26): EPS and PostScript images
+  converted to PDF with Ghostscript for PDF made with `groff`.
+  - Checked on atla: the 005-merchant scenario's statement PDF, built
+    from its directory with its Makefile's arguments and
+    `--pdf-engine=groff`, under groff 1.25.0 and 1.23.0 and podoc
+    `-O2` and `-OC`: 26 pages of 5.5×8.5 in, both figures in it, on
+    pages 8 and 26 at the resolution of the `pdfroff` PDF (115 and
+    200 ppi), the lizardman figure matching it by eye; 452 KB with
+    1.25.0 (whose gropdf subsets fonts), 4.3 MB with 1.23.0. Before
+    the change neither figure was in it.
+  - By hand: `pdfroff` still shows the EPS through `.PSPIC`; with no
+    `gs` on the PATH, podoc warns ("check that gs is in path") and
+    the PDF is made without the image.
+  - `make test` passed under `-O2` and `-OC` (288 case tests, 23
+    round trips, 7 image tests with the new `pdf-eps`).

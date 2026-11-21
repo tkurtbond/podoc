@@ -303,6 +303,10 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
   `--extract-media=DIR`, beside the copies in `DIR`. To standard
   output, without `--extract-media`, podoc writes pandoc's output and
   warns. pandoc converts images only for its TeX engines.
+- For PDF made with `groff` (`groff -Tpdf`), podoc also converts local
+  EPS and PostScript images (`.eps`, `.ps`) to PDF with Ghostscript
+  and writes `.PDFPIC` for them (decision 26). pandoc writes `.PSPIC`,
+  which gropdf ignores, so the images are missing from its PDF.
 - `--extract-media` copies local images only, where pandoc also
   fetches URLs and decodes `data:` URIs; podoc leaves those images as
   they are. As for PDF output, images are found relative to the
