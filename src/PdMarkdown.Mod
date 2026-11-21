@@ -19,7 +19,7 @@ MODULE PdMarkdown;
    document has been read, as pandoc resolves them (its F monad). *)
 
 IMPORT Ropes, PdIO, PdSource, A := PdAst, B := PdMdBase, I := PdMdInline,
-  G := PdGridTable, Y := PdYaml;
+  G := PdGridTable, Y := PdYaml, SH := PdShared;
 
 CONST
   (* what starts a list item *)
@@ -1889,53 +1889,6 @@ END PipeTable;
 
 (* Grid tables *)
 
-(* An empty cell, as pandoc's table builder adds *)
-PROCEDURE EmptyCell(): A.Cell;
-  VAR c: A.Cell;
-BEGIN
-  NEW(c); c.attr := NIL; c.align := A.AlignDefault;
-  c.rowSpan := 1; c.colSpan := 1; c.blocks := NIL; c.next := NIL;
-  RETURN c
-END EmptyCell;
-
-(* normalizeHeaderSection width: the rows r, in order, clipped
-   (clipRows) and placed on a grid width columns wide
-   (placeRowSection), as pandoc's table builder does *)
-PROCEDURE PlaceRows(r: A.Row; width: LONGINT);
-  VAR hang, newHang: Longs; n, k, pos, w, m: LONGINT; x: A.Row;
-    c, next, last: A.Cell;
-BEGIN
-  n := 0; x := r;
-  WHILE x # NIL DO INC(n); x := x.next END;
-  NEW(hang, width + 1); NEW(newHang, width + 1);
-  FOR k := 0 TO width - 1 DO hang[k] := 1 END;
-  WHILE r # NIL DO
-    c := r.cells;
-    WHILE c # NIL DO
-      IF c.rowSpan < 1 THEN c.rowSpan := 1 END;
-      IF c.rowSpan > n THEN c.rowSpan := n END;
-      c := c.next
-    END;
-    c := r.cells; r.cells := NIL; last := NIL; pos := 0;
-    WHILE pos < width DO
-      IF hang[pos] > 1 THEN newHang[pos] := hang[pos] - 1; INC(pos)
-      ELSE
-        IF c = NIL THEN c := EmptyCell() END;
-        next := c.next;
-        w := c.colSpan; IF w < 1 THEN w := 1 END;
-        m := 0;
-        WHILE (m < w) & (pos + m < width) & (hang[pos + m] = 1) DO INC(m) END;
-        c.colSpan := m; c.next := NIL;
-        FOR k := pos TO pos + m - 1 DO newHang[k] := c.rowSpan END;
-        IF last = NIL THEN r.cells := c ELSE last.next := c END;
-        last := c; INC(pos, m); c := next
-      END
-    END;
-    FOR k := 0 TO width - 1 DO hang[k] := newHang[k] END;
-    DEC(n); r := r.next
-  END
-END PlaceRows;
-
 (* The rows of t, from row from to row to-1, in order *)
 PROCEDURE GridRows(VAR t: G.Table; from, to: LONGINT): A.Row;
   VAR first, last, r: A.Row; c, clast: A.Cell; x: G.Cell; i, j: LONGINT;
@@ -1947,7 +1900,7 @@ BEGIN
     FOR j := 0 TO t.cols - 1 DO
       x := t.cells[i * t.cols + j];
       IF x # NIL THEN
-        c := EmptyCell(); c.rowSpan := x.rowSpan; c.colSpan := x.colSpan;
+        c := SH.EmptyCell(); c.rowSpan := x.rowSpan; c.colSpan := x.colSpan;
         b := MetaBlocksOf(x.text);
         (* plainify *)
         IF (b # NIL) & (b.next = NIL) & (b IS A.InlinesBlk)
@@ -2025,9 +1978,9 @@ BEGIN
   IF (t.head.rows # NIL) & (t.head.rows.next = NIL) & NullHeader(t.head.rows) THEN
     t.head.rows := NIL
   END;
-  PlaceRows(t.head.rows, g.cols);
-  PlaceRows(tb.body, g.cols);
-  PlaceRows(t.foot.rows, g.cols);
+  SH.PlaceRows(t.head.rows, g.cols);
+  SH.PlaceRows(tb.body, g.cols);
+  SH.PlaceRows(t.foot.rows, g.cols);
   RETURN q
 END GridTable;
 

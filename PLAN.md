@@ -1065,7 +1065,7 @@ All of this runs under `-O2` and `-OC`, as every phase does.
 - An unknown directive becomes a `Div` with its name as a class and
   its options as attributes (pandoc's `SkippedContent`).
 
-### Phase 19.4: Tables
+### Phase 19.4: Tables [done]
 
 - Grid tables through `PdGridTable`, the same `gridTableWith` the
   markdown reader uses. The tracer reads from `PdMdBase`'s buffer;
@@ -2327,3 +2327,35 @@ ConTeXt.
     round trips and the 6 image tests under each.
   - Not yet: tables and the table directives (19.4). Not checked:
     `raw` with both `:file:` and an indented body.
+- 2026-11-21: Phase 19.4 done: tables.
+  - `PdRst`: grid tables through `PdGridTable` (`G.Trace` on the
+    shared buffer; fractional widths from `--columns`, which
+    `podoc` passes as `PdRst.columns`); simple tables (column
+    boundaries from the `=` borders, continuation lines, spans marked
+    by `-` underlines, several header rows, headless tables); the
+    `table` directive (title caption; `:widths:` `auto`, `grid` or
+    numbers divided by `columns` less the column count),
+    `list-table` (`:header-rows:`, only the first row a header, as
+    pandoc; `:widths:` normalised) and `csv-table` (inline,
+    `:file:`/`:url:` relative to the working directory, `:delim:`,
+    `:quote:`, `:escape:`, `:keepspace:`, `:header:`,
+    `:header-rows:`, `:widths:`), parsing CSV as pandoc's
+    `Text.Pandoc.CSV`, with its parse errors (status 64) and "File
+    ... not found in resource path" (status 99). `:stub-columns:` is
+    ignored, as in pandoc. `EmptyCell` and `PlaceRows` moved from
+    `PdMarkdown` to `PdShared`.
+  - Fixed: section titles register their reference keys (`` `Title`_
+    `` links to the header's identifier), missed in 19.1; a lone `\`
+    cell gives no `Plain`.
+  - New cases `rst-grid-tables`, `rst-simple-tables`,
+    `rst-table-directives` (with `test/cases/rst-tables/data.csv`),
+    `rst-csv-error` and `rst-csv-missing`, with JSON, messages and
+    statuses from pandoc 3.10; each matched pandoc.
+  - The corpus files `minimal-opend6-srd.rst` and
+    `return-005-merchant.rst` give pandoc's JSON byte for byte, under
+    `-O2` and `-OC`.
+  - `make test` passed under `-O2` and `-OC`: 270 case tests, 23
+    round trips and the 6 image tests under each.
+  - Differences: `csv-table`'s single-character options are ASCII
+    only, `:url:` is a local file, and some CSV error messages differ
+    (docs/user/differences.md).

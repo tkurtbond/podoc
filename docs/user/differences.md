@@ -129,6 +129,18 @@ read:
 - citations, example references (`@label`), wikilinks and base64
   data URIs.
 
+## The reStructuredText reader
+
+- `csv-table` takes `:delim:`, `:quote:` and `:escape:` only as one
+  ASCII character (or `tab` and `space` for `:delim:`); pandoc takes
+  any one character. Otherwise podoc uses the default, as pandoc does
+  for a value it cannot use.
+- `csv-table`'s `:url:` is read as a local file, relative to the
+  working directory, as `:file:` is; pandoc fetches a URL.
+- A CSV parse error gives pandoc's message for an unclosed quote, for
+  text after a closing quote and for text after blank lines; other
+  messages may differ from pandoc's in what they say was expected.
+
 ## YAML metadata
 
 podoc reads YAML with its own small reader, `PdYaml`, not libyaml.

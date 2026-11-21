@@ -5,7 +5,7 @@
 MODULE PdRst;
 
 IMPORT Ropes, Strings, Platform, PdIO, PdJson, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
-  RI := PdRstInline, SH := PdShared;
+  RI := PdRstInline, SH := PdShared, G := PdGridTable;
 
 CONST
   MaxStyles = 64;
@@ -31,6 +31,14 @@ TYPE
   SubstDesc = RECORD key: A.Rope; blocks: A.Block; next: Subst END;
   SubstWalker = POINTER TO SubstWalkerDesc;
   SubstWalkerDesc = RECORD (A.WalkerDesc) END;
+  Longs = POINTER TO ARRAY OF LONGINT;
+  RawRow = RECORD (* a line of a simple table, split into cells *)
+    n: LONGINT; (* how many *)
+    s, e, span: Longs (* each one's text, t[s[i] .. e[i]-1], and span *)
+  END;
+  RawRows = POINTER TO ARRAY OF RawRow;
+  Reals = POINTER TO ARRAY OF LONGREAL;
+  CsvOpts = RECORD delim, quote, esc: CHAR; keep: BOOLEAN END; (* esc 0X: none *)
   Inc = POINTER TO IncDesc;
   IncDesc = RECORD
     name: PdIO.Text; (* as the include directive gave it *)
@@ -45,6 +53,7 @@ TYPE
 VAR
   autoIds*: BOOLEAN; (* auto_identifiers, on by default *)
   lhs*: BOOLEAN; (* the extension literate_haskell *)
+  columns*: LONGINT; (* pandoc's readerColumns, from --columns *)
   styles: ARRAY MaxStyles OF Style;
   nStyles: INTEGER;
   ids: Id; (* the header identifiers used *)
@@ -119,6 +128,17 @@ BEGIN
   RETURN A.NewAttr(try)
 END HeaderAttr;
 
+(* The header with the level level and text inl, its text a reference
+   to it (stateKeys) *)
+PROCEDURE NewHeader(level: INTEGER; inl: A.Inline): A.Block;
+  VAR a: A.Attr; id: A.Rope;
+BEGIN
+  a := HeaderAttr(inl); id := NIL;
+  IF a # NIL THEN id := a.id END;
+  RI.SetKey(RI.RopeKey(SH.Stringify(inl)), Ropes.Cat(A.S("#"), id), NIL, NIL);
+  RETURN A.NewHeader(level, a, inl)
+END NewHeader;
+
 (* The inlines of one line from B.pos: many1 (notFollowedBy blankline
    >> inline); NIL if there are none *)
 PROCEDURE LineInlines(): A.Inline;
@@ -150,7 +170,7 @@ BEGIN
   q := B.BlankLines(q);
   IF q < 0 THEN B.pos := p; RETURN FALSE END;
   B.pos := q;
-  A.AddBlock(l, A.NewHeader(Level(c, FALSE), HeaderAttr(inl), inl));
+  A.AddBlock(l, NewHeader(Level(c, FALSE), inl));
   RETURN TRUE
 END SingleHeader;
 
@@ -177,7 +197,7 @@ BEGIN
   q := B.BlankLines(q);
   IF q < 0 THEN B.pos := p; RETURN FALSE END;
   B.pos := q;
-  A.AddBlock(l, A.NewHeader(Level(c, TRUE), HeaderAttr(inl), inl));
+  A.AddBlock(l, NewHeader(Level(c, TRUE), inl));
   RETURN TRUE
 END DoubleHeader;
 
@@ -1043,7 +1063,7 @@ BEGIN
     ELSE
       A.AddBlock(l, A.NewInlinesBlock(A.Para, inl))
     END
-  ELSE
+  ELSIF inl # NIL THEN (* B.plain drops empty inlines *)
     A.AddBlock(l, A.NewInlinesBlock(A.Plain, inl))
   END;
   RETURN TRUE
@@ -1974,6 +1994,10 @@ BEGIN
   END
 END RawFile;
 
+PROCEDURE^ TableDirective(VAR d: Directive; VAR l: A.Blocks);
+PROCEDURE^ ListTableDirective(VAR d: Directive; VAR l: A.Blocks);
+PROCEDURE^ CsvTableDirective(VAR d: Directive; VAR l: A.Blocks);
+
 (* Runs the directive d, adding its blocks to l; FALSE if it fails.
    B.pos is after the directive. *)
 PROCEDURE RunDirective(VAR d: Directive; VAR l: A.Blocks): BOOLEAN;
@@ -2049,6 +2073,9 @@ BEGIN
   ELSIF d.label = "bibliography" THEN A.AddBlock(l, A.NewDiv(A.NewAttr(A.S("refs")), NIL))
   ELSIF d.label = "class" THEN A.AddBlock(l, ClassDirective(d))
   ELSIF d.label = "line-block" THEN A.AddBlock(l, LineBlockDirective(d))
+  ELSIF d.label = "table" THEN TableDirective(d, l)
+  ELSIF d.label = "list-table" THEN ListTableDirective(d, l)
+  ELSIF d.label = "csv-table" THEN CsvTableDirective(d, l)
   ELSE
     (* pandoc logs SkippedContent, an INFO message *)
     A.AddBlock(l, A.NewDiv(DirAttr(d, d.label), TopBodyBlocks(d)))
@@ -2120,6 +2147,658 @@ BEGIN
   RETURN TRUE
 END SubstKey;
 
+(* Tables *)
+
+PROCEDURE Ratio(a, b: LONGINT): LONGREAL;
+  VAR x: LONGREAL;
+BEGIN
+  x := a;
+  RETURN x / b
+END Ratio;
+
+(* The cell blocks b, a lone Para made Plain (plainify) *)
+PROCEDURE Plainify(b: A.Block): A.Block;
+BEGIN
+  IF (b # NIL) & (b.next = NIL) & (b IS A.InlinesBlk)
+      & (b(A.InlinesBlk).kind = A.Para) THEN
+    b := A.NewInlinesBlock(A.Plain, b(A.InlinesBlk).inlines)
+  END;
+  RETURN b
+END Plainify;
+
+(* The rows of t, from row from to row to-1, in order *)
+PROCEDURE GridRows(VAR t: G.Table; from, to: LONGINT): A.Row;
+  VAR first, last, r: A.Row; c, clast: A.Cell; x: G.Cell; i, j: LONGINT;
+BEGIN
+  first := NIL; last := NIL;
+  FOR i := from TO to - 1 DO
+    NEW(r); r.attr := NIL; r.cells := NIL; r.next := NIL; clast := NIL;
+    FOR j := 0 TO t.cols - 1 DO
+      x := t.cells[i * t.cols + j];
+      IF x # NIL THEN
+        c := SH.EmptyCell(); c.rowSpan := x.rowSpan; c.colSpan := x.colSpan;
+        c.blocks := Plainify(BlocksOf(x.text));
+        IF clast = NIL THEN r.cells := c ELSE clast.next := c END;
+        clast := c
+      END
+    END;
+    IF last = NIL THEN first := r ELSE last.next := r END;
+    last := r
+  END;
+  RETURN first
+END GridRows;
+
+(* gridTable (gridTableWith parseBlocks) *)
+PROCEDURE GridTable(VAR l: A.Blocks): BOOLEAN;
+  VAR g: G.Table; q, k, bodyEnd, total, norm: LONGINT; cs, last: A.ColSpec;
+    tb: A.TableBody; t: A.TableBlk;
+BEGIN
+  IF B.pos >= B.len THEN RETURN FALSE END;
+  q := G.Trace(B.pos, 0, g);
+  IF q < 0 THEN RETURN FALSE END;
+  t := A.NewTable(NIL);
+  (* fractionalColumnWidths columns *)
+  total := 0;
+  FOR k := 0 TO g.cols - 1 DO INC(total, g.width[k] + 1) END;
+  norm := total + g.cols - 2;
+  IF norm < columns THEN norm := columns END;
+  last := NIL;
+  FOR k := 0 TO g.cols - 1 DO
+    NEW(cs); cs.next := NIL;
+    CASE g.align[k] OF
+      G.AlignLeft: cs.align := A.AlignLeft
+    | G.AlignRight: cs.align := A.AlignRight
+    | G.AlignCenter: cs.align := A.AlignCenter
+    ELSE cs.align := A.AlignDefault
+    END;
+    cs.width := Ratio(g.width[k] + 1, norm); cs.hasWidth := TRUE;
+    IF last = NIL THEN t.colSpecs := cs ELSE last.next := cs END;
+    last := cs
+  END;
+  IF g.headLen > g.rows THEN g.headLen := g.rows END;
+  B.pos := q;
+  t.head.rows := GridRows(g, 0, g.headLen);
+  IF g.foot >= 0 THEN
+    bodyEnd := g.foot - 1;
+    IF bodyEnd < g.headLen THEN bodyEnd := g.headLen END;
+    IF bodyEnd > g.rows THEN bodyEnd := g.rows END
+  ELSE
+    bodyEnd := g.rows
+  END;
+  NEW(tb); tb.attr := NIL; tb.rowHeadColumns := 0; tb.head := NIL;
+  tb.body := GridRows(g, g.headLen, bodyEnd); tb.next := NIL;
+  t.bodies := tb;
+  t.foot.rows := GridRows(g, bodyEnd, g.rows);
+  SH.PlaceRows(t.head.rows, g.cols);
+  SH.PlaceRows(tb.body, g.cols);
+  SH.PlaceRows(t.foot.rows, g.cols);
+  q := B.BlankLines(B.pos); IF q >= 0 THEN B.pos := q END;
+  A.AddBlock(l, t);
+  RETURN TRUE
+END GridTable;
+
+(* Simple tables *)
+
+(* simpleDashedLines ch at p: the end of its line, or -1; the column
+   indices (dashedLinesToLinesWithIndices) in idx[0 .. n-1] *)
+PROCEDURE DashedLines(p: LONGINT; ch: CHAR; VAR idx: Longs; VAR n: LONGINT): LONGINT;
+  VAR q, d, sp, k, cnt: LONGINT;
+BEGIN
+  q := p; cnt := 0;
+  WHILE B.C(q) = ch DO
+    WHILE B.C(q) = ch DO INC(q) END;
+    WHILE B.C(q) = " " DO INC(q) END;
+    INC(cnt)
+  END;
+  IF cnt = 0 THEN RETURN -1 END;
+  WHILE (B.C(q) = " ") OR (B.C(q) = 09X) DO INC(q) END;
+  IF (q >= B.len) OR (B.C(q) # 0AX) THEN RETURN -1 END;
+  NEW(idx, cnt + 1); idx[0] := 0; n := cnt + 1;
+  q := p;
+  FOR k := 1 TO cnt DO
+    d := 0; WHILE B.C(q) = ch DO INC(d); INC(q) END;
+    sp := 0; WHILE B.C(q) = " " DO INC(sp); INC(q) END;
+    IF k = cnt THEN idx[k] := idx[k - 1] + d ELSE idx[k] := idx[k - 1] + d + sp END
+  END;
+  RETURN B.LineEnd(p) + 1
+END DashedLines;
+
+(* colSpans idx cidx: the spans in spans[0 .. m-1], or FALSE *)
+PROCEDURE ColSpans(VAR idx: Longs; n: LONGINT; VAR cidx: Longs; cn: LONGINT;
+    VAR spans: Longs; VAR m: LONGINT): BOOLEAN;
+  VAR i, j, cnt: LONGINT;
+BEGIN
+  NEW(spans, cn + 1); i := 0; j := 0; m := 0;
+  LOOP
+    IF (i = n) & (j = cn) THEN RETURN TRUE
+    ELSIF (i = n) OR (j = cn) THEN RETURN FALSE
+    ELSIF idx[i] # cidx[j] THEN INC(i)
+    ELSE (* colSpanCount *)
+      INC(i); INC(j); cnt := 1;
+      LOOP
+        IF i = n THEN EXIT
+        ELSIF j = cn THEN i := n; EXIT
+        ELSIF idx[i] = cidx[j] THEN
+          IF j + 1 = cn THEN INC(i); INC(j) END;
+          EXIT
+        ELSE INC(i); INC(cnt)
+        END
+      END;
+      spans[m] := cnt; INC(m)
+    END
+  END
+END ColSpans;
+
+(* The line t[ls .. le-1] split at the indices idx (simpleTableSplitLine),
+   each piece without the white space at its end *)
+PROCEDURE SplitLine(ls, le: LONGINT; VAR idx: Longs; n: LONGINT; VAR ln: RawRow);
+  VAR k, m, q, q2, w, target: LONGINT;
+BEGIN
+  m := n - 1; IF m < 1 THEN m := 1 END;
+  NEW(ln.s, m); NEW(ln.e, m); ln.n := m;
+  q := ls;
+  FOR k := 1 TO m - 1 DO
+    target := idx[k] - idx[k - 1]; ln.s[k - 1] := q; w := 0;
+    WHILE (w < target) & (q < le) DO INC(w, MI.CharWidth(q, q2)); q := q2 END;
+    ln.e[k - 1] := q
+  END;
+  ln.s[m - 1] := q; ln.e[m - 1] := le;
+  FOR k := 0 TO m - 1 DO
+    WHILE (ln.e[k] > ln.s[k]) & ((B.t[ln.e[k] - 1] = " ") OR (B.t[ln.e[k] - 1] = 09X)
+        OR (B.t[ln.e[k] - 1] = 0DX) OR (B.t[ln.e[k] - 1] = 0AX)) DO
+      DEC(ln.e[k])
+    END
+  END
+END SplitLine;
+
+(* rowWithOptionalColSpan and simpleTableSplitLine at p: the end, -1 if
+   there is no line, -2 if the spans do not match *)
+PROCEDURE RowLine(p: LONGINT; VAR idx: Longs; n: LONGINT; VAR ln: RawRow): LONGINT;
+  VAR le, q, cn, m, k: LONGINT; cidx, spans: Longs;
+BEGIN
+  IF p >= B.len THEN RETURN -1 END;
+  le := B.LineEnd(p); q := le + 1;
+  k := DashedLines(q, "-", cidx, cn);
+  IF k >= 0 THEN
+    IF ~ColSpans(idx, n, cidx, cn, spans, m) THEN RETURN -2 END;
+    SplitLine(p, le, cidx, cn, ln);
+    IF m < ln.n THEN ln.n := m END;
+    ln.span := spans; q := k
+  ELSE
+    SplitLine(p, le, idx, n, ln);
+    NEW(ln.span, ln.n); FOR k := 0 TO ln.n - 1 DO ln.span[k] := 1 END
+  END;
+  RETURN q
+END RowLine;
+
+(* simpleTableFooter at p: the end, or -1 *)
+PROCEDURE SimpleFooter(p: LONGINT): LONGINT;
+  VAR idx: Longs; n: LONGINT;
+BEGIN
+  p := DashedLines(p, "=", idx, n);
+  IF p >= 0 THEN p := B.BlankLines(p) END;
+  RETURN p
+END SimpleFooter;
+
+(* The inlines of a header cell, trimmed, as a Plain, or NIL *)
+PROCEDURE HeadCell(s, e: LONGINT): A.Block;
+  VAR inl: A.Inline;
+BEGIN
+  WHILE (s < e) & ((B.t[s] = " ") OR (B.t[s] = 09X)) DO INC(s) END;
+  IF s = e THEN RETURN NIL END;
+  inl := RI.ParseInlines(B.t^, s, e - s);
+  RETURN A.NewInlinesBlock(A.Plain, inl)
+END HeadCell;
+
+(* The row of the cells of ln, the blocks of each from blk *)
+PROCEDURE NewRow(VAR ln: RawRow; VAR blk: ARRAY OF A.Block): A.Row;
+  VAR r: A.Row; c, last: A.Cell; k: LONGINT;
+BEGIN
+  NEW(r); r.attr := NIL; r.cells := NIL; r.next := NIL; last := NIL;
+  FOR k := 0 TO ln.n - 1 DO
+    c := SH.EmptyCell(); c.colSpan := ln.span[k]; c.blocks := blk[k];
+    IF last = NIL THEN r.cells := c ELSE last.next := c END;
+    last := c
+  END;
+  RETURN r
+END NewRow;
+
+(* simpleTableRow at p: the end, -1 if there is none, -2 if the table
+   fails *)
+PROCEDURE SimpleRow(p: LONGINT; VAR idx: Longs; n: LONGINT; VAR row: A.Row): LONGINT;
+  VAR first, ln: RawRow; q, r, k, j, cols: LONGINT;
+    bufs: POINTER TO ARRAY OF B.Buf; blk: POINTER TO ARRAY OF A.Block;
+    cont, more: RawRows; nc: LONGINT;
+BEGIN
+  IF (B.BlankLines(p) >= 0) OR (SimpleFooter(p) >= 0) THEN RETURN -1 END;
+  q := RowLine(p, idx, n, first);
+  IF q < 0 THEN RETURN q END;
+  NEW(cont, 8); nc := 0;
+  LOOP
+    r := RowLine(q, idx, n, ln);
+    IF (r < 0) OR (ln.s[0] # ln.e[0]) THEN EXIT END;
+    IF nc = LEN(cont^) THEN
+      NEW(more, 2 * nc); FOR k := 0 TO nc - 1 DO more[k] := cont[k] END; cont := more
+    END;
+    cont[nc] := ln; INC(nc); q := r
+  END;
+  (* transpose, T.unlines *)
+  cols := first.n;
+  FOR k := 0 TO nc - 1 DO IF cont[k].n > cols THEN cols := cont[k].n END END;
+  NEW(bufs, cols);
+  FOR j := 0 TO cols - 1 DO B.InitBuf(bufs[j]) END;
+  FOR j := 0 TO first.n - 1 DO
+    B.Put(bufs[j], first.s[j], first.e[j]); B.PutChar(bufs[j], 0AX)
+  END;
+  FOR k := 0 TO nc - 1 DO
+    FOR j := 0 TO cont[k].n - 1 DO
+      B.Put(bufs[j], cont[k].s[j], cont[k].e[j]); B.PutChar(bufs[j], 0AX)
+    END
+  END;
+  NEW(blk, first.n);
+  FOR j := 0 TO first.n - 1 DO
+    RI.TrimBuf(bufs[j]); B.PutChar(bufs[j], 0AX); B.PutChar(bufs[j], 0AX);
+    blk[j] := Plainify(BlocksOf(bufs[j]))
+  END;
+  row := NewRow(first, blk^);
+  RETURN q
+END SimpleRow;
+
+(* simpleTable headless *)
+PROCEDURE SimpleTable(VAR l: A.Blocks; headless: BOOLEAN): BOOLEAN;
+  VAR p, q, n, k, cn: LONGINT; idx, cidx: Longs; ln: RawRow; t: A.TableBlk;
+    head, hlast, row, rlast: A.Row; blk: POINTER TO ARRAY OF A.Block;
+    cs, clast: A.ColSpec; tb: A.TableBody;
+BEGIN
+  p := B.pos;
+  q := B.BlankLines(p); IF q >= 0 THEN p := q END;
+  q := DashedLines(p, "=", idx, n);
+  IF q < 0 THEN RETURN FALSE END;
+  head := NIL; hlast := NIL;
+  IF ~headless THEN
+    REPEAT
+      k := RowLine(q, idx, n, ln);
+      IF k < 0 THEN RETURN FALSE END;
+      NEW(blk, ln.n);
+      FOR cn := 0 TO ln.n - 1 DO blk[cn] := HeadCell(ln.s[cn], ln.e[cn]) END;
+      row := NewRow(ln, blk^);
+      IF row.cells # NIL THEN
+        IF hlast = NIL THEN head := row ELSE hlast.next := row END;
+        hlast := row
+      END;
+      q := k
+    UNTIL DashedLines(q, "=", cidx, cn) >= 0;
+    q := DashedLines(q, "=", cidx, cn)
+  END;
+  rlast := NIL; t := A.NewTable(NIL); NEW(tb); tb.attr := NIL;
+  tb.rowHeadColumns := 0; tb.head := NIL; tb.body := NIL; tb.next := NIL;
+  LOOP
+    k := SimpleRow(q, idx, n, row);
+    IF k = -2 THEN RETURN FALSE ELSIF k < 0 THEN EXIT END;
+    IF rlast = NIL THEN tb.body := row ELSE rlast.next := row END;
+    rlast := row; q := k
+  END;
+  IF tb.body = NIL THEN RETURN FALSE END;
+  k := SimpleFooter(q);
+  IF k < 0 THEN RETURN FALSE END;
+  B.pos := k;
+  clast := NIL;
+  FOR k := 1 TO n - 1 DO
+    NEW(cs); cs.next := NIL; cs.align := A.AlignDefault; cs.hasWidth := FALSE;
+    IF clast = NIL THEN t.colSpecs := cs ELSE clast.next := cs END;
+    clast := cs
+  END;
+  t.head.rows := head; t.bodies := tb;
+  SH.PlaceRows(t.head.rows, n - 1);
+  SH.PlaceRows(tb.body, n - 1);
+  A.AddBlock(l, t);
+  RETURN TRUE
+END SimpleTable;
+
+(* table *)
+PROCEDURE Table(VAR l: A.Blocks): BOOLEAN;
+BEGIN
+  RETURN GridTable(l) OR SimpleTable(l, FALSE) OR SimpleTable(l, TRUE)
+END Table;
+
+(* The table directives *)
+
+(* The trimmed field widths r split on spaces and commas (splitTextBy),
+   each read as a real, 0 if it cannot be, in ws[0 .. n-1] *)
+PROCEDURE WidthSpecs(r: A.Rope; VAR ws: Reals; VAR n: LONGINT);
+  VAR b: B.Buf; i, s, k: LONGINT; x: LONGREAL; more: Reals;
+BEGIN
+  B.InitBuf(b); MI.PutRope(b, r); NEW(ws, 8); n := 0; i := 0;
+  WHILE i < b.len DO
+    s := i;
+    WHILE (i < b.len) & (b.t[i] # " ") & (b.t[i] # ",") DO INC(i) END;
+    IF ~ReadReal(Ropes.FromSubchars(b.t^, s, i - s), x) THEN x := 0 END;
+    IF n = LEN(ws^) THEN
+      NEW(more, 2 * n); FOR k := 0 TO n - 1 DO more[k] := ws[k] END; ws := more
+    END;
+    ws[n] := x; INC(n);
+    WHILE (i < b.len) & ((b.t[i] = " ") OR (b.t[i] = ",")) DO INC(i) END
+  END
+END WidthSpecs;
+
+(* Keeps the first n of specs, giving each the width ws[k] / div if it
+   is positive, ColWidthDefault otherwise, or if ws is NIL (zip) *)
+PROCEDURE SetWidths(VAR specs: A.ColSpec; n: LONGINT; ws: Reals; div: LONGREAL);
+  VAR cs, last: A.ColSpec; k: LONGINT; x: LONGREAL;
+BEGIN
+  cs := specs; last := NIL; k := 0;
+  WHILE (cs # NIL) & (k < n) DO
+    cs.hasWidth := FALSE; cs.width := 0;
+    IF ws # NIL THEN
+      x := ws[k] / div;
+      IF x > 0 THEN cs.hasWidth := TRUE; cs.width := x END
+    END;
+    last := cs; cs := cs.next; INC(k)
+  END;
+  IF last = NIL THEN specs := NIL ELSE last.next := NIL END
+END SetWidths;
+
+(* The caption of the table directive d: its title, as a Plain *)
+PROCEDURE SetCaption(VAR d: Directive; t: A.TableBlk);
+  VAR title: A.Inline;
+BEGIN
+  title := RI.ParseRope(Trim(BufR(d.top)));
+  t.caption.hasShort := FALSE; t.caption.short := NIL; t.caption.blocks := NIL;
+  IF title # NIL THEN t.caption.blocks := A.NewInlinesBlock(A.Plain, title) END
+END SetCaption;
+
+(* tableDirective *)
+PROCEDURE TableDirective(VAR d: Directive; VAR l: A.Blocks);
+  VAR bl: A.Block; t: A.TableBlk; cols, n: LONGINT; c: A.Cell; r: A.Rope; ws: Reals;
+    div: LONGREAL;
+BEGIN
+  bl := BodyBlocks(d);
+  (* otherwise pandoc logs SkippedContent, an INFO message *)
+  IF (bl = NIL) OR (bl.next # NIL) OR ~(bl IS A.TableBlk) THEN RETURN END;
+  t := bl(A.TableBlk);
+  SetCaption(d, t);
+  cols := 0;
+  IF t.head.rows # NIL THEN
+    c := t.head.rows.cells;
+    WHILE c # NIL DO
+      IF c.colSpan > 1 THEN INC(cols, c.colSpan) ELSE INC(cols) END;
+      c := c.next
+    END
+  END;
+  r := FieldVal(d, "widths");
+  IF r # NIL THEN
+    r := Trim(r);
+    IF Is(r, "auto") THEN SetWidths(t.colSpecs, cols, NIL, 1)
+    ELSIF ~Is(r, "grid") THEN
+      WidthSpecs(r, ws, n);
+      div := columns - cols; IF div < 1 THEN div := 1 END;
+      SetWidths(t.colSpecs, n, ws, div)
+    END
+  END;
+  A.AddBlock(l, t)
+END TableDirective;
+
+(* The table of list-table and csv-table, with the rows rows, the
+   first headerRows of them the header (only the first one is), as
+   pandoc's table builder makes it *)
+PROCEDURE RowsTable(VAR d: Directive; rows: A.Row; headerRows: LONGINT; VAR l: A.Blocks);
+  VAR t: A.TableBlk; tb: A.TableBody; head: A.Row; c: A.Cell; cols, n, k: LONGINT;
+    cs, last: A.ColSpec; r: A.Rope; ws: Reals; sum: LONGREAL;
+BEGIN
+  cols := 0;
+  IF rows # NIL THEN
+    c := rows.cells; WHILE c # NIL DO INC(cols); c := c.next END
+  END;
+  head := NIL;
+  IF (rows # NIL) & (headerRows > 0) THEN
+    head := rows; rows := rows.next; head.next := NIL;
+    IF head.cells = NIL THEN head := NIL END
+  END;
+  t := A.NewTable(NIL);
+  SetCaption(d, t);
+  last := NIL;
+  FOR k := 1 TO cols DO
+    NEW(cs); cs.next := NIL; cs.align := A.AlignDefault; cs.hasWidth := FALSE;
+    IF last = NIL THEN t.colSpecs := cs ELSE last.next := cs END;
+    last := cs
+  END;
+  r := FieldVal(d, "widths");
+  IF r # NIL THEN r := Trim(r) END;
+  IF (r # NIL) & ~Is(r, "auto") THEN
+    WidthSpecs(r, ws, n);
+    sum := 0; FOR k := 0 TO n - 1 DO sum := sum + ws[k] END;
+    IF sum < 1 THEN sum := 1 END;
+    SetWidths(t.colSpecs, n, ws, sum)
+  END;
+  n := 0; cs := t.colSpecs; WHILE cs # NIL DO INC(n); cs := cs.next END;
+  NEW(tb); tb.attr := NIL; tb.rowHeadColumns := 0; tb.head := NIL;
+  tb.body := rows; tb.next := NIL;
+  t.head.rows := head; t.bodies := tb;
+  SH.PlaceRows(t.head.rows, n);
+  SH.PlaceRows(tb.body, n);
+  A.AddBlock(l, t)
+END RowsTable;
+
+(* A row of the cells blocks *)
+PROCEDURE AddCellTo(VAR row: A.Row; VAR last: A.Cell; blocks: A.Block);
+  VAR c: A.Cell;
+BEGIN
+  c := SH.EmptyCell(); c.blocks := blocks;
+  IF last = NIL THEN row.cells := c ELSE last.next := c END;
+  last := c
+END AddCellTo;
+
+PROCEDURE NewEmptyRow(): A.Row;
+  VAR r: A.Row;
+BEGIN
+  NEW(r); r.attr := NIL; r.cells := NIL; r.next := NIL;
+  RETURN r
+END NewEmptyRow;
+
+(* listTableDirective *)
+PROCEDURE ListTableDirective(VAR d: Directive; VAR l: A.Blocks);
+  VAR bl: A.Block; it, sub: A.BlockList; first, last, row: A.Row; c: A.Cell; h: LONGINT;
+BEGIN
+  bl := BodyBlocks(d);
+  first := NIL; last := NIL;
+  IF (bl # NIL) & (bl.next = NIL) & (bl.kind = A.BulletList) THEN
+    it := bl(A.ListBlk).items;
+    WHILE it # NIL DO
+      row := NewEmptyRow(); c := NIL;
+      IF (it.blocks # NIL) & (it.blocks.next = NIL) & (it.blocks.kind = A.BulletList) THEN
+        sub := it.blocks(A.ListBlk).items;
+        WHILE sub # NIL DO AddCellTo(row, c, sub.blocks); sub := sub.next END
+      END;
+      IF last = NIL THEN first := row ELSE last.next := row END;
+      last := row; it := it.next
+    END
+  END;
+  IF ~ReadInt(FieldVal(d, "header-rows"), h) THEN h := 0 END;
+  RowsTable(d, first, h, l)
+END ListTableDirective;
+
+(* A CSV parse error at b.t[p], as pandoc reports it, ending podoc *)
+PROCEDURE CsvError(VAR b: B.Buf; p: LONGINT; expect: ARRAY OF CHAR);
+  VAR m: Message; i, line, col, u, k: LONGINT; ch: CHAR; s: ARRAY 2 OF CHAR;
+BEGIN
+  line := 1; col := 1;
+  FOR i := 0 TO p - 1 DO
+    ch := b.t[i];
+    IF ch = 0AX THEN INC(line); col := 1
+    ELSIF ch = 09X THEN col := ((col - 1) DIV 8 + 1) * 8 + 1
+    ELSIF (ORD(ch) < 80H) OR (ORD(ch) >= 0C0H) THEN INC(col)
+    END
+  END;
+  m := "Error at "; Cat(m, 22X); Cat(m, "csv"); Cat(m, 22X);
+  Cat(m, " (line "); CatNum(m, line); Cat(m, ", column "); CatNum(m, col);
+  Cat(m, "):"); Cat(m, 0AX); Cat(m, "unexpected ");
+  IF p >= b.len THEN Cat(m, "end of input")
+  ELSE
+    ch := b.t[p]; Cat(m, "'");
+    IF ch = 0AX THEN Cat(m, "\n")
+    ELSIF ch = 0DX THEN Cat(m, "\r")
+    ELSIF ch = 09X THEN Cat(m, "\t")
+    ELSIF ch = "'" THEN Cat(m, "\'")
+    ELSIF ch = "\" THEN Cat(m, "\\")
+    ELSIF ORD(ch) >= 80H THEN
+      (* Haskell's show of a Char: its code in decimal *)
+      u := ORD(ch); k := 0;
+      IF u >= 0F0H THEN u := u MOD 8; k := 3
+      ELSIF u >= 0E0H THEN u := u MOD 16; k := 2
+      ELSIF u >= 0C0H THEN u := u MOD 32; k := 1
+      END;
+      i := p + 1;
+      WHILE (k > 0) & (i < b.len) DO u := u * 64 + ORD(b.t[i]) MOD 64; INC(i); DEC(k) END;
+      Cat(m, "\"); CatNum(m, u)
+    ELSIF ch < " " THEN Cat(m, "\"); CatNum(m, ORD(ch))
+    ELSE s[0] := ch; s[1] := 0X; Cat(m, s)
+    END;
+    Cat(m, "'")
+  END;
+  IF expect # "" THEN Cat(m, 0AX); Cat(m, "expecting "); Cat(m, expect) END;
+  PdIO.Fail("", m, PdIO.ParseError)
+END CsvError;
+
+(* parseCSV o of b: its rows, their cells parsed with parseCell, added
+   to first .. last *)
+PROCEDURE ParseCsv(VAR b: B.Buf; VAR o: CsvOpts; VAR first, last: A.Row);
+  VAR p, s: LONGINT; row: A.Row;
+
+  PROCEDURE Cell(VAR t: B.Buf);
+    VAR ch: CHAR;
+  BEGIN
+    B.InitBuf(t);
+    IF (p < b.len) & (b.t[p] = o.quote) THEN
+      INC(p);
+      LOOP
+        IF p >= b.len THEN EXIT END;
+        ch := b.t[p];
+        IF (ch # o.quote) & ((o.esc = 0X) OR (ch # o.esc)) THEN B.PutChar(t, ch); INC(p)
+        ELSIF (o.esc # 0X) & (ch = o.esc) & (p + 1 < b.len)
+            & (b.t[p + 1] # 0DX) & (b.t[p + 1] # 0AX) THEN
+          B.PutChar(t, b.t[p + 1]); INC(p, 2)
+        ELSIF (o.esc = 0X) & (ch = o.quote) & (p + 1 < b.len) & (b.t[p + 1] = o.quote) THEN
+          B.PutChar(t, ch); INC(p, 2)
+        ELSE EXIT
+        END
+      END;
+      IF (p < b.len) & (b.t[p] = o.quote) THEN INC(p) ELSE CsvError(b, p, "") END
+    ELSE
+      WHILE (p < b.len) & (b.t[p] # o.delim) & (b.t[p] # 0DX) & (b.t[p] # 0AX) DO
+        B.PutChar(t, b.t[p]); INC(p)
+      END
+    END
+  END Cell;
+
+  (* parseCell *)
+  PROCEDURE Add(VAR t: B.Buf; VAR last: A.Cell);
+  BEGIN
+    RI.TrimBuf(t); B.PutChar(t, 0AX); B.PutChar(t, 0AX);
+    AddCellTo(row, last, Plainify(BlocksOf(t)))
+  END Add;
+
+  (* pCSVRow: FALSE if it fails without taking any text *)
+  PROCEDURE Row(): BOOLEAN;
+    VAR t: B.Buf; start, n: LONGINT; null: BOOLEAN; c: A.Cell;
+  BEGIN
+    start := p; Cell(t);
+    null := t.len = 0; n := 0;
+    row := NewEmptyRow(); c := NIL;
+    Add(t, c);
+    WHILE (p < b.len) & (b.t[p] = o.delim) DO
+      INC(p);
+      IF ~o.keep THEN
+        WHILE (p < b.len) & ((b.t[p] = " ") OR (b.t[p] = 09X) & (o.delim # 09X)) DO INC(p) END
+      END;
+      Cell(t); Add(t, c); INC(n)
+    END;
+    IF null & (n = 0) THEN
+      IF p = start THEN RETURN FALSE END;
+      CsvError(b, p, "")
+    END;
+    RETURN TRUE
+  END Row;
+
+BEGIN
+  p := 0;
+  LOOP
+    IF ~Row() THEN EXIT END;
+    IF last = NIL THEN first := row ELSE last.next := row END;
+    last := row;
+    IF (p < b.len) & (b.t[p] = 0DX) THEN
+      INC(p);
+      IF (p < b.len) & (b.t[p] = 0AX) THEN INC(p) ELSE CsvError(b, p, "") END
+    ELSIF (p < b.len) & (b.t[p] = 0AX) THEN INC(p)
+    ELSE EXIT
+    END
+  END;
+  s := p;
+  WHILE (p < b.len) & ((b.t[p] = " ") OR (b.t[p] >= 09X) & (b.t[p] <= 0DX)) DO INC(p) END;
+  IF p < b.len THEN
+    IF p = s THEN CsvError(b, p, "white space or end of input")
+    ELSE CsvError(b, p, "end of input")
+    END
+  END
+END ParseCsv;
+
+(* A single character option of csv-table: the field name, trimmed, if
+   it is one ASCII character; def otherwise *)
+PROCEDURE CsvChar(VAR d: Directive; name: ARRAY OF CHAR; def: CHAR): CHAR;
+  VAR r: A.Rope;
+BEGIN
+  r := FieldVal(d, name);
+  IF r # NIL THEN
+    r := Trim(r);
+    IF (Ropes.Length(r) = 1) & (Ropes.Fetch(r, 0) < 80X) THEN RETURN Ropes.Fetch(r, 0) END
+  END;
+  RETURN def
+END CsvChar;
+
+(* csvTableDirective *)
+PROCEDURE CsvTableDirective(VAR d: Directive; VAR l: A.Blocks);
+  VAR o, def: CsvOpts; r, hdr: A.Rope; b: B.Buf; f: ARRAY 1024 OF CHAR; t: PdIO.Text;
+    i, n, len, h: LONGINT; first, last: A.Row; m: Message; b2: B.Buf;
+BEGIN
+  o.delim := CsvChar(d, "delim", ",");
+  r := FieldVal(d, "delim");
+  IF r # NIL THEN
+    r := Trim(r);
+    IF Is(r, "tab") THEN o.delim := 09X ELSIF Is(r, "space") THEN o.delim := " " END
+  END;
+  o.quote := CsvChar(d, "quote", 22X);
+  o.esc := CsvChar(d, "escape", 0X);
+  r := FieldVal(d, "keepspace");
+  o.keep := (r # NIL) & Is(Trim(r), "true");
+  hdr := FieldVal(d, "header");
+  IF hdr # NIL THEN h := 1 ELSE h := 0 END;
+  IF ReadInt(FieldVal(d, "header-rows"), n) THEN h := n END;
+  r := FieldVal(d, "file");
+  IF r = NIL THEN r := FieldVal(d, "url") END;
+  B.InitBuf(b);
+  IF r # NIL THEN
+    r := Trim(r); n := Ropes.Length(r);
+    IF n >= LEN(f) THEN n := LEN(f) - 1 END;
+    Ropes.Blit(r, 0, f, 0, n); f[n] := 0X;
+    IF ~PdIO.Exists(f) THEN
+      m := "File '"; Cat(m, f); Cat(m, "' not found in resource path");
+      PdIO.Fail("", m, PdIO.ResourceNotFound)
+    END;
+    PdIO.ReadFile(f, t, len); i := 0;
+    IF (len >= 3) & (t[0] = 0EFX) & (t[1] = 0BBX) & (t[2] = 0BFX) THEN i := 3 END;
+    WHILE i < len DO B.PutChar(b, t[i]); INC(i) END
+  ELSE
+    PutBuf(b, d.body); B.PutChar(b, 0AX); B.PutChar(b, 0AX)
+  END;
+  first := NIL; last := NIL;
+  IF hdr # NIL THEN
+    def.delim := ","; def.quote := 22X; def.esc := 0X; def.keep := FALSE;
+    B.InitBuf(b2); MI.PutRope(b2, Trim(hdr));
+    ParseCsv(b2, def, first, last)
+  END;
+  ParseCsv(b, o, first, last);
+  RowsTable(d, first, h, l)
+END CsvTableDirective;
+
 PROCEDURE Block(VAR l: A.Blocks): BOOLEAN;
   VAR q: LONGINT;
 BEGIN
@@ -2128,7 +2807,7 @@ BEGIN
   RETURN CodeBlock(l) OR BlockQuote(l) OR FieldList(l) OR OptionList(l)
     OR SubstKey(l) OR ReferenceKey(l) OR NoteBlock(l)
     OR CitationBlock(l) OR DirectiveBlock(l) OR Anchor(l) OR Comment(l)
-    OR DoubleHeader(l) OR SingleHeader(l) OR Hrule(l) OR LineBlock(l)
+    OR DoubleHeader(l) OR SingleHeader(l) OR Hrule(l) OR LineBlock(l) OR Table(l)
     OR List(l, FALSE) OR List(l, TRUE) OR DefinitionList(l) OR LhsCodeBlock(l) OR Para(l)
 END Block;
 
@@ -2382,5 +3061,5 @@ BEGIN
 END Read;
 
 BEGIN
-  autoIds := TRUE
+  autoIds := TRUE; columns := 72
 END PdRst.

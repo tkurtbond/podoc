@@ -732,4 +732,51 @@ BEGIN
   pend := NIL
 END LegacyRows;
 
+(* An empty cell, as pandoc's table builder adds *)
+PROCEDURE EmptyCell*(): A.Cell;
+  VAR c: A.Cell;
+BEGIN
+  NEW(c); c.attr := NIL; c.align := A.AlignDefault;
+  c.rowSpan := 1; c.colSpan := 1; c.blocks := NIL; c.next := NIL;
+  RETURN c
+END EmptyCell;
+
+(* normalizeHeaderSection width: the rows r, in order, clipped
+   (clipRows) and placed on a grid width columns wide
+   (placeRowSection), as pandoc's table builder does *)
+PROCEDURE PlaceRows*(r: A.Row; width: LONGINT);
+  VAR hang, newHang: Longs; n, k, pos, w, m: LONGINT; x: A.Row;
+    c, next, last: A.Cell;
+BEGIN
+  n := 0; x := r;
+  WHILE x # NIL DO INC(n); x := x.next END;
+  NEW(hang, width + 1); NEW(newHang, width + 1);
+  FOR k := 0 TO width - 1 DO hang[k] := 1 END;
+  WHILE r # NIL DO
+    c := r.cells;
+    WHILE c # NIL DO
+      IF c.rowSpan < 1 THEN c.rowSpan := 1 END;
+      IF c.rowSpan > n THEN c.rowSpan := n END;
+      c := c.next
+    END;
+    c := r.cells; r.cells := NIL; last := NIL; pos := 0;
+    WHILE pos < width DO
+      IF hang[pos] > 1 THEN newHang[pos] := hang[pos] - 1; INC(pos)
+      ELSE
+        IF c = NIL THEN c := EmptyCell() END;
+        next := c.next;
+        w := c.colSpan; IF w < 1 THEN w := 1 END;
+        m := 0;
+        WHILE (m < w) & (pos + m < width) & (hang[pos + m] = 1) DO INC(m) END;
+        c.colSpan := m; c.next := NIL;
+        FOR k := pos TO pos + m - 1 DO newHang[k] := c.rowSpan END;
+        IF last = NIL THEN r.cells := c ELSE last.next := c END;
+        last := c; INC(pos, m); c := next
+      END
+    END;
+    FOR k := 0 TO width - 1 DO hang[k] := newHang[k] END;
+    DEC(n); r := r.next
+  END
+END PlaceRows;
+
 END PdShared.
