@@ -1156,7 +1156,8 @@ before it.
   trees, `Flatten`'s lists, intermediate ropes, the whole body kept
   as a `Doc` for the template), and whether parts can be laid out
   and dropped earlier. Meanwhile, running out of heap should end
-  podoc with a message, not a NIL trap.
+  podoc with a message, not a NIL trap. See
+  docs/developer/memory-use-problem.md.
 
 ## State
 
