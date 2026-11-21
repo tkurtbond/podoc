@@ -127,15 +127,31 @@ Made by the user on 2026-11-20, on the questions of §15.
     any other image (SVG, PNG, JPEG) becomes a groff comment and is
     missing from the PDF, and pandoc converts images only for its TeX
     engines. podoc will convert such images to PDF and write
-    `.PDFPIC`, both for PDF output and for `-t ms`. With `-t ms`, when
-    an image is converted, the `.ms` file and the converted PDFs are
-    written to one directory: the one the user names, or else one
-    podoc makes. A deliberate difference from pandoc, to be listed in
-    docs/user/differences.md. Planned as Phase 21. Bitmaps are
-    converted with the first of `img2pdf`, `magick` (or ImageMagick
-    6's `convert`) and `gm convert` found (decided 2026-11-20:
-    img2pdf keeps JPEGs unchanged and keeps transparency; gm loses
-    transparency).
+    `.PDFPIC`, both for PDF output and for `-t ms`. A deliberate
+    difference from pandoc, to be listed in docs/user/differences.md.
+    Planned as Phase 21. Decided on 2026-11-20 too:
+    - **Converters:** bitmaps are converted with the first of
+      `img2pdf`, `magick` (or ImageMagick 6's `convert`) and `gm
+      convert` found (img2pdf keeps JPEGs unchanged and keeps
+      transparency; gm loses transparency).
+    - **`--extract-media=DIR`**, pandoc's option: podoc copies local
+      images into `DIR`, as pandoc does, and converts them there too.
+    - **Without it,** `-o out.ms` puts the converted images in
+      `out-media/` beside `out.ms`. groff finds `.PDFPIC` files from
+      the directory it runs in, not the `.ms` file's, so the paths
+      written work with groff run in the output's directory. (This
+      replaces the user's first idea, one temporary directory for
+      the `.ms` and the PDFs.)
+    - **To standard output,** without `--extract-media`, the images
+      keep pandoc's output and podoc warns, suggesting
+      `--extract-media`.
+    - **Names:** the image's name with `.pdf` (`map.png` gives
+      `map.pdf`); a number is added when two would clash.
+    - **Resolution:** the converter is given 96 dpi, pandoc's default
+      `--dpi`, for an image with none of its own, so an image's size
+      does not depend on which converter is installed.
+    - **Case:** `.pdf`, `.ps` and `.eps` are matched exactly, as
+      pandoc does; the extensions to convert ignore case.
 
 24. **The heap limit** (2026-11-20). podoc keeps poc's default heap
     limit, 1 GB, which inputs above about 35 MB reach; the environment
@@ -1146,36 +1162,49 @@ figure `\" .IMAGE "src" size`, inline `[IMAGE: alt] \" "src" size`
 images into the temporary directory but converts SVG only for
 ConTeXt.
 
-- **Which images:** local files whose extension is not `.pdf`,
-  `.ps` or `.eps`, in a figure or inline. URLs and `data:` URIs keep
-  pandoc's output.
+- **Which images:** local files, in a figure or inline, whose
+  extension is one to convert: `.svg`, `.png`, `.jpg` and the like,
+  ignoring case (`MAP.PNG` is converted). `.pdf`, `.ps` and `.eps`
+  are matched exactly, as pandoc does: `fig.PDF` keeps pandoc's
+  comment. URLs and `data:` URIs
+  keep pandoc's output.
 - **Conversion:**
   - SVG with `rsvg-convert -f pdf`, as ConTeXt PDFs do already
     (`PdPdf.ConvertSvg`);
   - bitmaps (PNG, JPEG, GIF, TIFF and the like) with the first
-    converter found, in this order (decision 23): `img2pdf`, `magick` (or
+    converter found, in this order: `img2pdf`, `magick` (or
     ImageMagick 6's `convert`), then `gm convert`;
+  - 96 dpi, pandoc's default `--dpi`, given to the converter for an
+    image with no resolution of its own (img2pdf assumes 96, magick
+    and gm 72);
   - when no converter is found or a conversion fails, a warning, and
     the image keeps pandoc's output.
-- **The ms written:** `.PDFPIC "converted.pdf"` with the image's size
+- **The ms written:** `.PDFPIC "path.pdf"` with the image's size
   attributes, in place of the comment, in a figure and inline (the
-  `[IMAGE: alt]` text goes). Check what `pdfroff` and `groff -Tpdf` do
-  with a converted image that has no width (its PDF page size), and
-  that `-U` is passed, as it is now when the source has `.PDFPIC`.
+  `[IMAGE: alt]` text goes). `-U` is passed to groff, as it is now
+  when the source has `.PDFPIC`. With no width, groff (checked
+  2026-11-20, `groff -Tpdf`) scales an image wider than the line
+  down to the line's width and prints a narrower one at its PDF
+  page size; check `pdfroff` too.
+- **Names:** the image's name with `.pdf` (`map.png` gives
+  `map.pdf`); a number added when two images would get the same
+  name (`map.png` and `map.jpg`, or two `logo.png` from different
+  directories).
 - **PDF output** (`--pdf-engine=pdfroff` or `groff`): the converted
   files go in podoc's temporary directory, beside the copies it
   makes now, and are removed with it.
-- **`-t ms`:** when an image is converted, the `.ms` file and the
-  converted PDFs are written to one directory, so that the `.ms`
-  file finds them:
-  - the directory the user names, with a new podoc option (name to
-    be settled when it is built);
-  - otherwise a directory podoc makes; podoc says on standard error
-    where it is.
-  - To settle when this is built: where podoc makes that directory
-    and what it is called; what happens with `-o file.ms` and with
-    output to standard output; the converted files' names (from the
-    image's name, kept unique).
+- **`--extract-media=DIR`**, a new option, pandoc's: local images
+  are copied into `DIR` and the output refers to the copies, as
+  pandoc does (checked 2026-11-20 with `-t ms`: `"media/big.png"`);
+  for ms, podoc also converts them there and writes `.PDFPIC`. Check
+  what pandoc does with it for the other writers and match it.
+- **`-t ms` without `--extract-media`:**
+  - with `-o out.ms`, the converted images go in `out-media/` beside
+    `out.ms`, and the paths written are relative to the output's
+    directory: groff finds `.PDFPIC` files from the directory it
+    runs in, not the `.ms` file's (checked 2026-11-20);
+  - to standard output, the images keep pandoc's output, and podoc
+    warns, suggesting `--extract-media`.
 - **The converters compared** (2026-11-20, on atla; a JPEG photo, a
   PNG with transparency, a plain PNG):
   - `img2pdf` 0.6.3: embeds the JPEG unchanged (lossless); keeps the
