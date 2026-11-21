@@ -155,7 +155,8 @@ buckets keyed by `Ropes.Hash`, and plain takes 2.8 s at ×40.
   trapped with the message. The libraries' makefiles have no variable
   for poc's options. podoc on MANUAL ×150 (45 MB, `-t json`) stopped with
   the message and status 11, but only after 6 minutes of the collector
-  running over and over near the limit.
+  running over and over near the limit. With `PODOC_HEAP_LIMIT=3072`
+  (decision 24), it finishes in 9.6 s at 1.6 GB.
 
 ## Allocation takes half the time
 

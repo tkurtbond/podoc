@@ -16,9 +16,12 @@ MODULE podoc;
    curdir.
 
    The filters run in order on the document read: pandoc-include is
-   PdInclude, the user's Lua filters are PdFilters. *)
+   PdInclude, the user's Lua filters are PdFilters.
 
-IMPORT Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
+   The heap may grow to poc's default limit, 1 GB, or to the number of
+   megabytes PODOC_HEAP_LIMIT gives. *)
+
+IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt, PdMdWriter,
   PdInclude, PdFilters, PdPdf, O := PdOptions;
 
@@ -29,6 +32,33 @@ VAR
   doc: A.Doc; (* the document, once it is read *)
 
 (* Running *)
+
+(* Sets the heap's limit from PODOC_HEAP_LIMIT, a number of megabytes,
+   when it is set; one too big for the machine's addresses is taken as
+   the most they allow. Anything but a positive number ends podoc with
+   status 6. *)
+PROCEDURE SetHeapLimit;
+  CONST mb = 1048576;
+  VAR v: ARRAY 64 OF CHAR; n, most: SYSTEM.ADDRESS; i: INTEGER;
+BEGIN
+  v := ""; Platform.GetEnv("PODOC_HEAP_LIMIT", v);
+  IF v # "" THEN
+    most := MAX(SYSTEM.ADDRESS) DIV mb;
+    n := 0; i := 0;
+    WHILE (i < LEN(v)) & (v[i] >= "0") & (v[i] <= "9") DO
+      IF n <= (most - (ORD(v[i]) - ORD("0"))) DIV 10 THEN
+        n := n * 10 + (ORD(v[i]) - ORD("0"))
+      ELSE
+        n := most
+      END;
+      INC(i)
+    END;
+    IF (i < LEN(v)) & (v[i] # 0X) OR (n = 0) THEN
+      PdIO.Fail("PODOC_HEAP_LIMIT", "not a positive number of megabytes", 6)
+    END;
+    GarbageCollectedHeap.SetHeapLimit(n * mb)
+  END
+END SetHeapLimit;
 
 (* Sets the keys of the map from in the map to *)
 PROCEDURE MergeMeta(to, from: A.MetaMapV);
@@ -191,6 +221,7 @@ BEGIN
 END Run;
 
 BEGIN
+  SetHeapLimit;
   O.Parse;
   IF O.done THEN PdIO.CloseOutput ELSE Run END
 END podoc.

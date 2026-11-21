@@ -137,6 +137,15 @@ Made by the user on 2026-11-20, on the questions of §15.
     img2pdf keeps JPEGs unchanged and keeps transparency; gm loses
     transparency).
 
+24. **The heap limit** (2026-11-20). podoc keeps poc's default heap
+    limit, 1 GB, which inputs above about 35 MB reach; the environment
+    variable `PODOC_HEAP_LIMIT`, a number of megabytes, changes it
+    (`GarbageCollectedHeap.SetHeapLimit`). A value that is not a
+    positive number ends podoc with status 6; one too big for the
+    machine's addresses is taken as the most they allow. Chosen over a
+    bigger default (4 GB on 64-bit systems, 2 GB on 32-bit) and over no
+    limit, which would let a runaway reach the OOM killer.
+
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
 JSON AST compared byte for byte.
@@ -2127,3 +2136,19 @@ ConTeXt.
     enhancements" 15 (2cdad0b): a program-wide form, a flag set in the program's entry
     point before any module body runs, so that `Allocate` itself traps
     and libraries built without the option are covered too.
+- 2026-11-20: Decision 24, `PODOC_HEAP_LIMIT`, done (podoc.Mod's
+  `SetHeapLimit`), and documented in docs/user/podoc.md ("Memory",
+  exit statuses).
+  - MANUAL ×150 (45 MB), which stops at the default limit after
+    6 minutes, finishes with `PODOC_HEAP_LIMIT=3072`: `-t json` in
+    9.6 s (1.6 GB) under `-OC` and `-O2`, `-t ms` in 14.4–14.7 s
+    (1.9–2.0 GB). pandoc: 34 s, 2.9 GiB (json); 46 s, 4.6 GiB (ms).
+    With 4 GB, html, context and markdown took 14–18 s at 2.0 GB.
+  - Checked under both models: `abc`, `12x`, `0`, `-5` and ` 64` end
+    podoc with status 6 and a message; a 26-digit number is taken as
+    the most; empty, unset and `1024` give the same output.
+  - With 30–60 MB on MANUAL ×10, podoc stops with "heap exhausted" or,
+    when a library's `NEW` fails, "NIL pointer dereference"
+    (Peaseblossom's enhancement 15).
+  - `make test` passed under `-O2` and `-OC`: 247 case tests and 23
+    round trips under each.

@@ -83,6 +83,18 @@ ms, or `context`), and the engine implies the writer; `-t ms` alone
 uses `groff`, as pandoc does, and `-t context` alone uses `context`.
 PDF needs one of these. pandoc's default, LaTeX, is not available.
 
+### Memory
+
+podoc's heap may grow to 1 GB, enough for an input of about 35 MB.
+For a larger one, set `PODOC_HEAP_LIMIT` to the limit in megabytes:
+
+    PODOC_HEAP_LIMIT=4096 podoc -o big.html big.md
+
+When the heap is full, podoc stops with "heap exhausted: NEW cannot
+allocate the block" and status 11, or, if it ran out inside one of
+its libraries, with "NIL pointer dereference". Close to the limit it
+can run for minutes before it stops.
+
 ### Examples
 
     podoc -s --toc -o book.html book.md
@@ -203,13 +215,14 @@ podoc ends with pandoc's exit status for each error:
 | 2 | an unknown option or a missing argument (pandoc: 6) |
 | 4 | PDF output podoc cannot make, or PDF to a terminal |
 | 5 | a template error |
-| 6 | a bad option value |
+| 6 | a bad option value, or a `PODOC_HEAP_LIMIT` that is not a positive number |
 | 21, 22, 23 | an unknown input format, output format, or extension |
 | 43 | a PDF engine that fails |
 | 47 | a PDF engine that is not there |
 | 64 | a parse error (YAML) |
 | 83 | a filter error |
 | 97, 98, 99 | a data file, metadata file, or resource not found |
+| 11 | the heap is full (see "Memory") |
 
 ## Differences from pandoc
 
