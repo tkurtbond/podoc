@@ -507,7 +507,7 @@ Oberon (decision 7).
   as pandoc's does. The `-whole.md` acceptance moves to Phase 12,
   which builds those targets.
 
-## Phase 11: The command line
+## Phase 11: The command line [done]
 
 ### Phase 11.1: `PdOptions` [done]
 
@@ -532,7 +532,7 @@ not pandoc's 6. Until Phase 14, PDF output ends podoc with status 43
 once the writer and engine are chosen; until Phases 12 and 13, the
 user's filters end it with status 83.
 
-## Phase 12: Includes
+## Phase 12: Includes [done]
 
 ### Phase 12.1: `PdInclude` [done]
 
@@ -557,9 +557,9 @@ rendered as pandoc-include sees it, `markdown_strict` with `\*` and
 Headers shifted below level 1 are written as paragraphs in HTML, as
 pandoc writes them.
 
-## Phase 13: Native filters
+## Phase 13: Native filters [done]
 
-### Phase 13.1: The filter mechanism
+### Phase 13.1: The filter mechanism [done]
 
 - `--lua-filter` and `-F` options become a list of passes, run in
   command-line order; a pass is chosen by the filter's base name.
@@ -575,7 +575,7 @@ Lua's `FORMAT` is the writer's name as given (`html5`, and `ms` for
 PDF made through ms), kept as `PdOptions.filterFormat`. A filter's
 messages go through `PdIO.Note`, without "podoc: ".
 
-### Phase 13.2: `subs` and `strip-comments`
+### Phase 13.2: `subs` and `strip-comments` [done]
 
 - The new substitutions format (decision 5): a metadata map,
   `substitutions`, usually kept in its own file and given with
@@ -601,7 +601,7 @@ naming the map and `--metadata-file`. Keys are applied in key order
 (metadata maps are kept sorted), each over every `Str`, left to right
 without rescanning.
 
-### Phase 13.3: `general`
+### Phase 13.3: `general` [done]
 
 - The Div and Span rules of §4.3 for HTML, ms and ConTeXt, written as
   raw blocks and inlines, with the same warnings on standard error.
@@ -613,7 +613,7 @@ without `markdown` are dropped, and the Span messages are printed.
 All its messages go to standard error, the Spans' first
 (docs/user/differences.md).
 
-### Phase 13.4: `toc-columns` and `combine-docs`
+### Phase 13.4: `toc-columns` and `combine-docs` [done]
 
 - `toc-columns`: the raw ConTeXt block, placed as §2.1 says.
 - `combine-docs`: the digest of §2.1, reading each file with the
@@ -629,7 +629,7 @@ identifiers with the file's stem, and puts a ConTeXt `\page` between
 files. `tools/compare` takes `FILTERDIR`, a directory of the user's Lua
 filters, so that pandoc finds them.
 
-## Phase 14: PDF output
+## Phase 14: PDF output [done]
 
 ### Phase 14.1: `PdRun` [done]
 
@@ -672,7 +672,7 @@ engine not found, 4 for PDF to a terminal. The differences (images
 found from the working directory only, URLs not fetched, `img<n>`
 names, no `--verbose` log) are in docs/user/differences.md.
 
-## Phase 15: The proof of concept, finished
+## Phase 15: The proof of concept, finished [done]
 
 ### Phase 15.1: Portability [done]
 
@@ -704,7 +704,7 @@ which a binary distribution must carry) in `DOCDIR`; `PREFIX`
 defaults to `~/.local`, and `DESTDIR` is honoured. `POCLIBDIR` no
 longer follows `PREFIX`. `make uninstall` removes what it installed.
 
-## Phase 16: Plain text and grid tables
+## Phase 16: Plain text and grid tables [done]
 
 Planned 2026-11-20 at the user's request; no build of the user's
 uses `-t plain` so far. pandoc's `plain` writer is its markdown writer
@@ -841,7 +841,7 @@ writer to test it.
 - Tests: cases with each convention, under both models; acceptance as
   16.1.
 
-## Phase 17: Wrapping
+## Phase 17: Wrapping [done]
 
 pandoc wraps `plain` at 72 columns by default (`--wrap=auto`,
 `--columns`). `PdLayout` already wraps at a width as doclayout does
@@ -875,7 +875,7 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   The `markdown` expected files were instead replaced by the wrapped
   output, each checked against pandoc's first, as in 17.1.
 
-## Phase 18: Wrapping for ms and ConTeXt
+## Phase 18: Wrapping for ms and ConTeXt [done]
 
 pandoc wraps `ms` and `context` at `--columns` (72) by default too.
 `PdMs` and `PdConTeXt` already build `PdLayout` Docs with breaking
