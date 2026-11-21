@@ -2468,3 +2468,23 @@ ConTeXt.
     (`-OC`). `make test` passed under `-O2` and `-OC` on atla (286
     case tests, 23 round trips, 6 image tests). Recorded in
     docs/user/differences.md.
+- 2026-11-21: Three approximations in the rST reader replaced by
+  pandoc's rules (the user's request; no decision needed, since each
+  now matches pandoc).
+  - Option lists: `PdRst.IsAlnumAt` is Haskell's `isAlphaNum` (it took
+    every non-ASCII byte as a letter), `optArg` starts with `isAlpha`,
+    and the option parser steps by character, not byte, so `-日` is an
+    option and `-→` is not.
+  - The "Reference not found" warning prints the name as pandoc's
+    `tshow` does (`'"caf\233"'`), with `PdRst.CatShow`.
+  - The `date` directive's format and the image and figure `:width:`
+    and `:height:` drop Haskell's `isSpace` characters (U+00A0,
+    U+3000 and the rest; not U+2028), with `PdRst.SpaceLen` and
+    `StripBuf`.
+  - Checked against pandoc 3.10 under `-O2` and `-OC`: eleven option
+    lists, five substitution names, four date formats and five
+    widths and heights. New cases `rst-unicode` and `rst-subst-show`
+    (pandoc's output and warning). The user's 73 rST files still give
+    pandoc's JSON byte for byte (`-OC`). `make test` passed under
+    `-O2` and `-OC` on atla (288 case tests, 23 round trips, 6 image
+    tests).

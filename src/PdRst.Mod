@@ -603,9 +603,11 @@ BEGIN
   FOR i := 0 TO c.len - 1 DO B.PutChar(b, c.t[i]) END
 END PutBuf;
 
+(* Whether the character at p is a letter or a digit, as Haskell's
+   isAlphaNum *)
 PROCEDURE IsAlnumAt(p: LONGINT): BOOLEAN;
 BEGIN
-  RETURN B.IsAlnum(B.C(p)) OR (B.C(p) >= 80X)
+  RETURN MI.AlnumAt(p)
 END IsAlnumAt;
 
 (* noteBlock' with noteMarker (cite FALSE) or citationMarker *)
@@ -884,6 +886,16 @@ BEGIN
   RETURN TRUE
 END FieldList;
 
+(* Whether the character at p is a letter, as Haskell's isAlpha *)
+PROCEDURE LetterAt(p: LONGINT): BOOLEAN;
+  VAR r: Utf8.Rune; q: LONGINT;
+BEGIN
+  IF p >= B.len THEN RETURN FALSE END;
+  q := MI.RuneAt(p, r);
+  IF r < 80H THEN RETURN B.IsLetter(B.t[p]) END;
+  RETURN Unicode.IsLetter(r)
+END LetterAt;
+
 PROCEDURE IsOptChar(p: LONGINT): BOOLEAN;
 BEGIN
   RETURN IsAlnumAt(p) OR (B.C(p) = "_") OR (B.C(p) = "-")
@@ -897,9 +909,9 @@ BEGIN
     WHILE (B.C(p) # "<") & (B.C(p) # ">") & (p < B.len) DO INC(p) END;
     IF B.C(p) # ">" THEN RETURN -1 END;
     RETURN p + 1
-  ELSIF B.IsLetter(B.C(p)) OR (B.C(p) >= 80X) THEN
-    INC(p);
-    WHILE IsOptChar(p) DO INC(p) END;
+  ELSIF LetterAt(p) THEN
+    p := MI.RuneEnd(p);
+    WHILE IsOptChar(p) DO p := MI.RuneEnd(p) END;
     RETURN p
   END;
   RETURN -1
@@ -910,21 +922,21 @@ PROCEDURE AnyOpt(p: LONGINT): LONGINT;
   VAR q, r: LONGINT;
 BEGIN
   IF (B.C(p) = "-") & IsAlnumAt(p + 1) THEN (* shortOpt *)
-    q := p + 2;
+    q := MI.RuneEnd(p + 1);
     r := q; IF B.C(r) = " " THEN INC(r) END;
     r := OptArg(r);
     IF r >= 0 THEN q := r END;
     RETURN q
-  ELSIF B.Looking(p, "--") & IsAlnumAt(p + 2) & IsOptChar(p + 3) THEN
-    q := p + 4;
-    WHILE IsOptChar(q) DO INC(q) END;
+  ELSIF B.Looking(p, "--") & IsAlnumAt(p + 2) & IsOptChar(MI.RuneEnd(p + 2)) THEN
+    q := MI.RuneEnd(p + 2);
+    WHILE IsOptChar(q) DO q := MI.RuneEnd(q) END;
     IF (B.C(q) = " ") OR (B.C(q) = "=") THEN
       r := OptArg(q + 1);
       IF r >= 0 THEN q := r END
     END;
     RETURN q
   ELSIF (B.C(p) = "/") & (IsAlnumAt(p + 1) OR (B.C(p + 1) = "?")) THEN
-    q := p + 2;
+    q := MI.RuneEnd(p + 1);
     IF B.C(q) = " " THEN
       r := OptArg(q + 1);
       IF r >= 0 THEN q := r END
@@ -1680,16 +1692,56 @@ END ImageScale;
 
 (* Adds to a the dimension name (width or height) of d, scaled by
    scale, as pandoc's imgAttr *)
+(* The length in bytes of the character at t[i] (n bytes in all) if it
+   is white space as Haskell's isSpace has it (ASCII white space, U+00A0
+   and the space separators), or 0 *)
+PROCEDURE SpaceLen(VAR t: ARRAY OF CHAR; i, n: LONGINT): LONGINT;
+  VAR c: CHAR;
+BEGIN
+  c := t[i];
+  IF (c = " ") OR (c >= 9X) & (c <= 0DX) THEN RETURN 1
+  ELSIF (c = 0C2X) & (i + 1 < n) & (t[i + 1] = 0A0X) THEN RETURN 2
+  ELSIF (i + 2 < n) & (
+      (c = 0E1X) & (t[i + 1] = 09AX) & (t[i + 2] = 080X)
+      OR (c = 0E2X) & (t[i + 1] = 080X) & ((t[i + 2] >= 080X) & (t[i + 2] <= 08AX) OR (t[i + 2] = 0AFX))
+      OR (c = 0E2X) & (t[i + 1] = 081X) & (t[i + 2] = 09FX)
+      OR (c = 0E3X) & (t[i + 1] = 080X) & (t[i + 2] = 080X)) THEN RETURN 3
+  END;
+  RETURN 0
+END SpaceLen;
+
+(* T.strip: b without white space, as Haskell's isSpace has it, at its
+   ends *)
+PROCEDURE StripBuf(VAR b: B.Buf);
+  VAR s, i, k: LONGINT; more: BOOLEAN;
+BEGIN
+  REPEAT
+    more := FALSE; k := 1;
+    WHILE ~more & (k <= 3) & (k <= b.len) DO
+      IF SpaceLen(b.t^, b.len - k, b.len) = k THEN DEC(b.len, k); more := TRUE END;
+      INC(k)
+    END
+  UNTIL ~more;
+  s := 0;
+  WHILE (s < b.len) & (SpaceLen(b.t^, s, b.len) > 0) DO INC(s, SpaceLen(b.t^, s, b.len)) END;
+  IF s > 0 THEN
+    FOR i := s TO b.len - 1 DO b.t[i - s] := b.t[i] END;
+    DEC(b.len, s)
+  END;
+  b.t[b.len] := 0X
+END StripBuf;
+
 PROCEDURE AddDim(VAR d: Directive; a: A.Attr; name: ARRAY OF CHAR; scale: LONGREAL);
-  VAR r: A.Rope; b, o: B.Buf; i, s: LONGINT; x, y: LONGREAL; f: LONGINT; num: ARRAY 64 OF CHAR;
+  VAR r: A.Rope; b, o: B.Buf; i, s, k: LONGINT; x, y: LONGREAL; f: LONGINT; num: ARRAY 64 OF CHAR;
     unit: ARRAY 8 OF CHAR; ok: BOOLEAN; fx: A.Rope;
 BEGIN
   r := FieldVal(d, name);
   IF r = NIL THEN RETURN END;
   B.InitBuf(b); B.InitBuf(o); MI.PutRope(b, r);
-  s := 0;
-  FOR i := 0 TO b.len - 1 DO
-    IF ~B.IsWhite(b.t[i]) THEN b.t[s] := b.t[i]; INC(s) END
+  s := 0; i := 0;
+  WHILE i < b.len DO
+    k := SpaceLen(b.t^, i, b.len);
+    IF k > 0 THEN INC(i, k) ELSE b.t[s] := b.t[i]; INC(s); INC(i) END
   END;
   b.len := s; i := 0;
   WHILE (i < b.len) & (i < LEN(num) - 1)
@@ -2167,7 +2219,7 @@ BEGIN
     UnicodeTransform(d.top, b);
     A.AddBlock(l, A.NewInlinesBlock(A.Para, RI.ParseRope(Trim(BufR(b)))))
   ELSIF d.label = "date" THEN
-    RI.TrimBuf(d.top);
+    StripBuf(d.top);
     IF d.top.len = 0 THEN B.InitBuf(d.top); MI.PutRope(d.top, A.S("%Y-%m-%d")) END;
     FormatDate(d.top, b);
     A.AddBlock(l, A.NewInlinesBlock(A.Para, RI.TextOf(BufR(b))))
@@ -3069,6 +3121,52 @@ BEGIN
   RETURN n
 END CopyBlock;
 
+(* r as Haskell's show writes a string (tshow), added to m: in double
+   quotes, with non-ASCII and control characters escaped *)
+PROCEDURE CatShow(VAR m: ARRAY OF CHAR; r: A.Rope);
+  CONST names = "NULSOHSTXETXEOTENQACKBELBS HT LF VT FF CR SO SI DLEDC1DC2DC3DC4NAKSYNETBCANEM SUBESCFS GS RS US ";
+  VAR b: B.Buf; i, u, k: LONGINT; ch: CHAR; s: ARRAY 4 OF CHAR; nm: ARRAY 100 OF CHAR;
+    num: BOOLEAN;
+BEGIN
+  nm := names;
+  B.InitBuf(b); MI.PutRope(b, r);
+  Cat(m, 22X); i := 0; num := FALSE;
+  WHILE i < b.len DO
+    ch := b.t[i];
+    (* protectEsc: \& between a numeric escape and a digit, and in \SO\&H *)
+    IF num & (ch >= "0") & (ch <= "9") THEN Cat(m, "\&") END;
+    num := FALSE;
+    IF ch = 22X THEN Cat(m, "\"); Cat(m, 22X); INC(i)
+    ELSIF ch = "\" THEN Cat(m, "\\"); INC(i)
+    ELSIF ch = 7FX THEN Cat(m, "\DEL"); INC(i)
+    ELSIF ch = 07X THEN Cat(m, "\a"); INC(i)
+    ELSIF ch = 08X THEN Cat(m, "\b"); INC(i)
+    ELSIF ch = 09X THEN Cat(m, "\t"); INC(i)
+    ELSIF ch = 0AX THEN Cat(m, "\n"); INC(i)
+    ELSIF ch = 0BX THEN Cat(m, "\v"); INC(i)
+    ELSIF ch = 0CX THEN Cat(m, "\f"); INC(i)
+    ELSIF ch = 0DX THEN Cat(m, "\r"); INC(i)
+    ELSIF ch < " " THEN
+      Cat(m, "\"); k := ORD(ch) * 3;
+      s[0] := nm[k]; s[1] := nm[k + 1]; s[2] := nm[k + 2]; s[3] := 0X;
+      IF s[2] = " " THEN s[2] := 0X END;
+      Cat(m, s); INC(i);
+      IF (ch = 0EX) & (i < b.len) & (b.t[i] = "H") THEN Cat(m, "\&") END
+    ELSIF ORD(ch) >= 80H THEN
+      u := ORD(ch); k := 0;
+      IF u >= 0F0H THEN u := u MOD 8; k := 3
+      ELSIF u >= 0E0H THEN u := u MOD 16; k := 2
+      ELSIF u >= 0C0H THEN u := u MOD 32; k := 1
+      END;
+      INC(i);
+      WHILE (k > 0) & (i < b.len) DO u := u * 64 + ORD(b.t[i]) MOD 64; INC(i); DEC(k) END;
+      Cat(m, "\"); CatNum(m, u); num := TRUE
+    ELSE s[0] := ch; s[1] := 0X; Cat(m, s); INC(i)
+    END
+  END;
+  Cat(m, 22X)
+END CatShow;
+
 (* The substitution of ref, "|name|", or NIL; warns if there is none *)
 PROCEDURE FindSubst(ref: A.Rope): Subst;
   VAR key: A.Rope; sb: Subst; m: Message;
@@ -3078,7 +3176,7 @@ BEGIN
   WHILE (sb # NIL) & ~Ropes.Equal(sb.key, key) DO sb := sb.next END;
   IF sb = NIL THEN
     (* pandoc shows the key with tshow *)
-    m := "Reference not found for '"; Cat(m, 22X); CatRope(m, key); Cat(m, 22X);
+    m := "Reference not found for '"; CatShow(m, key);
     Cat(m, "'"); WarnAtEnd(m)
   END;
   RETURN sb
