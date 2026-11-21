@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # mktemplates: writes src/PdDefaults.Mod, pandoc's default templates
-# and their partials, from the files in data/templates.
+# and their partials, and podoc's default.mom, from the files in
+# data/templates.
 #   tools/mktemplates > src/PdDefaults.Mod
 import os, sys
 
 here = os.path.dirname(os.path.abspath(sys.argv[0]))
 tdir = os.path.join(here, '..', 'data', 'templates')
 names = ['default.html5', 'styles.html', 'styles.citations.html',
-         'default.ms', 'default.context', 'default.markdown',
+         'default.ms', 'default.mom', 'default.context', 'default.markdown',
          'default.plain']
 
 def pieces(data):
@@ -32,7 +33,8 @@ def pieces(data):
 w = sys.stdout.write
 w('''MODULE PdDefaults;
 (* PdDefaults: pandoc 3.10's default templates and their partials,
-   from data/templates. Written by tools/mktemplates; do not edit. *)
+   and podoc's own default.mom, from data/templates. Written by
+   tools/mktemplates; do not edit. *)
 
 IMPORT PdIO;
 

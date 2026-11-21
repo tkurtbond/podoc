@@ -33,5 +33,8 @@ the BSD 3-clause license:
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+default.mom is podoc's own (pandoc has no mom writer), under podoc's
+licence, in LICENSE.
+
 They are built into podoc as src/PdDefaults.Mod, which
 tools/mktemplates writes from them.

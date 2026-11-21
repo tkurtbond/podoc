@@ -174,6 +174,7 @@ BEGIN
   IF O.standalone & (O.template # "") THEN C.Get(O.template, to, tmpl)
   ELSIF O.standalone & (to = "html") THEN C.GetDefault("html5", tmpl)
   ELSIF O.standalone & (to = "ms") THEN C.GetDefault("ms", tmpl)
+  ELSIF O.standalone & (to = "mom") THEN C.GetDefault("mom", tmpl)
   ELSIF O.standalone & (to = "context") THEN C.GetDefault("context", tmpl)
   ELSIF O.standalone & (to = "markdown") THEN C.GetDefault("markdown", tmpl)
   ELSIF O.standalone & (to = "plain") THEN C.GetDefault("plain", tmpl)
@@ -220,7 +221,8 @@ BEGIN
     IF O.wrap = "auto" THEN PdMs.SetWidth(O.columns) ELSE PdMs.SetWidth(0) END;
     PdMs.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "mom" THEN
-    PdMom.SetOptions(O.wrap = "preserve", O.toc, O.referenceLocation = "document");
+    PdMom.SetOptions(O.wrap = "preserve", O.toc, O.tocDepth, O.numberSections,
+      O.referenceLocation = "document");
     PdMom.SetOutput(O.output);
     IF O.wrap = "auto" THEN PdMom.SetWidth(O.columns) ELSE PdMom.SetWidth(0) END;
     PdMom.WriteDoc(Doc(text, len), tmpl)

@@ -1,0 +1,22 @@
+.\" Written by podoc's default mom template, for groff 1.23 and later
+.TITLE "Covers"
+.AUTHOR "Someone"
+.MISC "2026-11-21"
+.COVER TITLE AUTHOR MISC
+.DOCTYPE CHAPTER
+.\" PAPER comes before PRINTSTYLE, which sets the page from it
+.PRINTSTYLE TYPESET
+.\" the colour for strikeout
+.defcolor strikecolor rgb 0.7 0.7 0.7
+.\" captions below images
+.CAPTION_AFTER_LABEL IMG
+.PDF_TITLE "Covers"
+.TOC_HEADER_STRING "Table of Contents"
+.AUTO_RELOCATE_TOC
+.START
+.HEADING 1 NAMED one "One"
+.PP
+Text.
+.\" groff 1.23 leaves vertical traps off after endnotes
+.if \n[.vpt]=0 .vpt
+.TOC

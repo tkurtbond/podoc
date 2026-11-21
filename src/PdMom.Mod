@@ -19,7 +19,8 @@ TYPE
 
 VAR
   (* options *)
-  preserve, wantToc, endnotes: BOOLEAN;
+  preserve, wantToc, endnotes, numberSections: BOOLEAN;
+  tocDepth: INTEGER; (* the heading levels in the contents *)
   width: LONGINT; (* the width lines are wrapped at, 0 for none *)
   outDir: Run.Path; (* the output's directory, "" for the current one *)
 
@@ -387,15 +388,28 @@ BEGIN
 END Target;
 
 PROCEDURE Header(h: A.HeaderBlk): L.Doc;
-  VAR contents, d: L.Doc; id: Rope;
+  VAR contents, d, n: L.Doc; id: Rope;
 BEGIN
   inHeader := TRUE;
   contents := Arg(h.inlines);
   inHeader := FALSE;
-  d := L.Cat(Lit(".HEADING "), L.Literal(Sh.IntRope(h.level)));
+  n := L.Literal(Sh.IntRope(h.level));
+  d := L.Cat(Lit(".HEADING "), n);
   id := AttrId(h.attr);
   IF Len(id) > 0 THEN d := L.Cat3(d, Lit(" NAMED "), Name(id)) END;
-  RETURN L.NoWrap(L.Cat3(d, L.Space(), DQ(contents)))
+  d := L.NoWrap(L.Cat3(d, L.Space(), DQ(contents)));
+  IF numberSections & A.HasClass(h.attr, "unnumbered") THEN
+    (* mom's NO_NUMBER and NUMBER would restart the count *)
+    d := Above3(L.Cat(Lit(".rr #NUMBER_HEAD_"), n), d,
+      L.Cat3(Lit(".nr #NUMBER_HEAD_"), n, Lit(" 1")))
+  END;
+  IF wantToc & (h.level > tocDepth) THEN
+    (* left out of the contents: HEADING calls HD_TO_TOC in the
+       environment TOC_EV, which HD_TO_TOC leaves *)
+    d := Above3(Above(Lit(".als pd:hd-to-toc HD_TO_TOC"), Lit(".de HD_TO_TOC")),
+      Above(Lit(".ev"), Lit("..")), Above(d, Lit(".als HD_TO_TOC pd:hd-to-toc")))
+  END;
+  RETURN d
 END Header;
 
 PROCEDURE CodeBlock(c: A.CodeBlk): L.Doc;
@@ -622,11 +636,15 @@ BEGIN
 END InlineDoc;
 
 (* Sets the writer's options: whether soft breaks are kept as new lines
-   (--wrap=preserve), whether there is a table of contents (--toc), and
-   whether notes are endnotes (--reference-location=document) *)
-PROCEDURE SetOptions*(preserveBreaks, toc, endnotesOn: BOOLEAN);
+   (--wrap=preserve), whether there is a table of contents (--toc) and
+   how many heading levels it has (--toc-depth), whether headings are
+   numbered (--number-sections), and whether notes are endnotes
+   (--reference-location=document) *)
+PROCEDURE SetOptions*(preserveBreaks, toc: BOOLEAN; depth: INTEGER;
+  numbered, endnotesOn: BOOLEAN);
 BEGIN
-  preserve := preserveBreaks; wantToc := toc; endnotes := endnotesOn
+  preserve := preserveBreaks; wantToc := toc; tocDepth := depth;
+  numberSections := numbered; endnotes := endnotesOn
 END SetOptions;
 
 (* Sets the width lines are wrapped at (--columns under --wrap=auto),
@@ -676,6 +694,9 @@ BEGIN
   END;
   ctx := C.Build(meta, BlockDoc, InlineDoc);
   C.DefField(ctx, "toc", T.NewBool(wantToc));
+  C.DefField(ctx, "numbersections", T.NewBool(numberSections));
+  C.DefField(ctx, "title-meta",
+    T.NewSimple(L.Literal(Ro.EscapeStr(Sh.Stringify(Sh.DocMeta(meta, "title"))))));
   slot := NIL;
   IF ~T.Has(ctx, "body") THEN slot := T.Slot(tmpl, "body") END;
   IF slot = NIL THEN
@@ -696,5 +717,6 @@ END WriteDoc;
 
 BEGIN
   preserve := FALSE; wantToc := FALSE; endnotes := FALSE; width := 0;
+  numberSections := FALSE; tocDepth := 3;
   outDir := ""
 END PdMom.

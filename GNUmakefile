@@ -9,7 +9,8 @@
 # test/roundtrip.txt names (tools/roundtrip). None of it needs pandoc.
 # `make install` installs the podoc built under $(MODEL), -OC by default
 # (32-bit INTEGER, 64-bit LONGINT), with tools/subs2yaml, in $(BINDIR),
-# and the user documentation and the templates' licence in $(DOCDIR),
+# and the user documentation, the templates' licence and the example
+# template statement.mom in $(DOCDIR),
 # under $(PREFIX), ~/.local by default, or $(DESTDIR)$(PREFIX) for a
 # package; `make uninstall` removes them. `make clean` removes build/.
 #
@@ -105,12 +106,16 @@ install: $(BUILD)/$(MODEL)/podoc
 	install -m 644 README.md LICENSE docs/user/podoc.md \
 	  docs/user/differences.md $(DESTDIR)$(DOCDIR)
 	install -m 644 data/templates/README $(DESTDIR)$(DOCDIR)/templates-LICENSE
+	install -d $(DESTDIR)$(DOCDIR)/examples
+	install -m 644 data/examples/statement.mom $(DESTDIR)$(DOCDIR)/examples
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/podoc $(DESTDIR)$(BINDIR)/subs2yaml
 	rm -f $(DESTDIR)$(DOCDIR)/README.md $(DESTDIR)$(DOCDIR)/LICENSE \
 	  $(DESTDIR)$(DOCDIR)/podoc.md $(DESTDIR)$(DOCDIR)/differences.md \
 	  $(DESTDIR)$(DOCDIR)/templates-LICENSE
+	rm -f $(DESTDIR)$(DOCDIR)/examples/statement.mom
+	-rmdir $(DESTDIR)$(DOCDIR)/examples
 	-rmdir $(DESTDIR)$(DOCDIR)
 
 clean:

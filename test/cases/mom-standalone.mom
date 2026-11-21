@@ -1,0 +1,49 @@
+.\" Written by podoc's default mom template, for groff 1.23 and later
+.TITLE "The \f[I]Merchant\f[R] and the Bandits"
+.SUBTITLE "Return to Alusia"
+.AUTHOR "T. Kurt Bond" "A. N. Other"
+.MISC "2026-11-21"
+.\" PAPER comes before PRINTSTYLE, which sets the page from it
+.PAPER STATEMENT
+.PRINTSTYLE TYPEWRITE
+.COLUMNS 2 1.5P
+.HEADING_STYLE 1 NUMBER
+.HEADING_STYLE 2 NUMBER
+.HEADING_STYLE 3 NUMBER
+.HEADING_STYLE 4 NUMBER
+.HEADING_STYLE 5 NUMBER
+.HEADING_STYLE 6 NUMBER
+.PDF_LINK_COLOR red
+.\" the colour for strikeout
+.defcolor strikecolor rgb 0.7 0.7 0.7
+.\" captions below images
+.CAPTION_AFTER_LABEL IMG
+.PDF_TITLE "The Merchant and the Bandits"
+.AUTO_RELOCATE_TOC TOP
+.START
+.BLOCKQUOTE
+.PP
+The PCs rescue a merchant.
+.BLOCKQUOTE OFF
+.HEADING 1 NAMED introduction "Introduction"
+.PP
+Text.
+.rr #NUMBER_HEAD_2
+.HEADING 2 NAMED background "Background"
+.nr #NUMBER_HEAD_2 1
+.PP
+More text.
+.als pd:hd-to-toc HD_TO_TOC
+.de HD_TO_TOC
+.ev
+..
+.HEADING 3 NAMED deep "Deep"
+.als HD_TO_TOC pd:hd-to-toc
+.PP
+Deep text.
+.HEADING 1 NAMED the-caves "The Caves"
+.PP
+End.
+.\" groff 1.23 leaves vertical traps off after endnotes
+.if \n[.vpt]=0 .vpt
+.TOC

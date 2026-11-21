@@ -1381,7 +1381,7 @@ the body.
 - **Inline images:** as the ms writer writes them.
 - **Tests:** case tests.
 
-### Phase 23.4: The default template and its variables
+### Phase 23.4: The default template and its variables [done]
 
 - **The template:** podoc's own, under podoc's licence (pandoc has
   none).
@@ -2823,4 +2823,29 @@ the body.
   `pdfmom -t` (1.23.0), gave only a "cannot break line" warning for a
   word in the narrow table's caption; figures, captions, percentage
   widths, inline images, repeated table headers, boxes and keeps were
-  looked at in PDFs. Phase 23.4 next.
+  looked at in PDFs.
+- 2026-11-21: Phase 23.4 done. `data/templates/default.mom`, podoc's
+  own, is built into `PdDefaults` by `tools/mktemplates`; the example
+  `data/examples/statement.mom` is installed in `$(DOCDIR)/examples`.
+  Tried in groff 1.23.0 and settled in the template: `.PAPER` must
+  come before `.PRINTSTYLE` (otherwise the contents page keeps letter
+  width); `.AUTO_RELOCATE_TOC` with no argument relocates only when
+  there are covers, so it is `TOP` without them; mom's docheader has
+  no date, so `date` (`.MISC`) shows only on covers; `.COLUMNS`
+  requires a gutter, so there is a new variable `column-gutter`, 1.5P
+  by default; `title-meta`, the plain title, is `.PDF_TITLE`.
+  `--toc-depth`: mom has no depth, so a heading below it is written
+  with `HD_TO_TOC` redefined, for that heading only, to pop the
+  environment `HEADING` pushed. An unnumbered heading under `-N` is
+  written between `.rr #NUMBER_HEAD_n` and `.nr #NUMBER_HEAD_n 1`.
+  Both use mom's internals. New case tests `mom-standalone` (title
+  block, authors, abstract, `--toc`, `--toc-depth`, `-N` with an
+  unnumbered heading, `columns`, `linkcolor`, `papersize`,
+  `printstyle`) and `mom-covers` (`covers`, `doctype`, `toc-title`);
+  both, and `mom-standalone` with `statement.mom`, rendered with
+  `pdfmom -t` without warnings and looked at. The merchant scenario
+  (a copy, its `for-format ms` containers given `mom` too), with
+  `--lua-filter=general.lua`, `statement.mom`, `--toc` and
+  `-V fontfamily=Optima`: 26 pages, contents first, images once, no
+  groff warnings. `make test` passed under `-O2` and `-OC`. Phase 23.5
+  next.

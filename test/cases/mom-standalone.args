@@ -1,0 +1,1 @@
+-s --toc --toc-depth=2 -N -V linkcolor=red -V columns=2 -V papersize=statement -V printstyle=TYPEWRITE

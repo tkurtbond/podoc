@@ -295,6 +295,19 @@ for groff 1.23 and later.
   no wider than it. A table that ends exactly at the foot of a page
   leaves its header alone at the top of the next (mom's behaviour in
   groff 1.23 to 1.25).
+- The default template, `default.mom`, is podoc's own. Its variables
+  are `title`, `subtitle`, `author`, `date`, `abstract`, `toc-title`,
+  `papersize`, the four margins, `fontfamily`, `pointsize`,
+  `lineheight`, and mom's own `columns` (with `column-gutter`, 1.5P by
+  default), `printstyle` (TYPESET by default), `doctype`, `linkcolor`
+  and `covers`. mom shows `date` only on covers.
+- `--toc` puts the contents first. mom has no contents depth;
+  `--toc-depth` and unnumbered headings under `--number-sections` are
+  written with mom's internal macros and registers.
+- `statement.mom`, installed with the documentation's examples, sets
+  statement paper (5.5 by 8.5 inches), the contents first and
+  `.special S Symbola`; groff finds Symbola with
+  `--pdf-engine-opt=-F<directory>`.
 
 ## The ConTeXt writer
 

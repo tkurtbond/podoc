@@ -1,6 +1,7 @@
 MODULE PdDefaults;
 (* PdDefaults: pandoc 3.10's default templates and their partials,
-   from data/templates. Written by tools/mktemplates; do not edit. *)
+   and podoc's own default.mom, from data/templates. Written by
+   tools/mktemplates; do not edit. *)
 
 IMPORT PdIO;
 
@@ -317,6 +318,65 @@ END T3;
 
 PROCEDURE T4;
 BEGIN
+  S(".\"); C(22X); S(" Written by podoc's default mom template, for groff 1.23 and"); S(" later");
+  C(0AX); S("$if(title)$"); C(0AX); S(".TITLE ");
+  C(22X); S("$title$"); C(22X); C(0AX);
+  S("$endif$"); C(0AX); S("$if(subtitle)$"); C(0AX);
+  S(".SUBTITLE "); C(22X); S("$subtitle$"); C(22X);
+  C(0AX); S("$endif$"); C(0AX); S("$if(author)$");
+  C(0AX); S(".AUTHOR$for(author)$ "); C(22X); S("$author$");
+  C(22X); S("$endfor$"); C(0AX); S("$endif$");
+  C(0AX); S("$if(date)$"); C(0AX); S(".MISC ");
+  C(22X); S("$date$"); C(22X); C(0AX);
+  S("$endif$"); C(0AX); S("$if(covers)$"); C(0AX);
+  S(".COVER$if(title)$ TITLE$endif$$if(subtitle)$ SUBTITLE$endif$"); S("$if(author)$ AUTHOR$endif$$if(date)$ MISC$endif$"); C(0AX); S("$endif$");
+  C(0AX); S("$if(doctype)$"); C(0AX); S(".DOCTYPE $doctype$");
+  C(0AX); S("$endif$"); C(0AX); S(".\");
+  C(22X); S(" PAPER comes before PRINTSTYLE, which sets the page from it"); C(0AX); S("$if(papersize)$");
+  C(0AX); S(".PAPER $papersize/uppercase$"); C(0AX); S("$endif$");
+  C(0AX); S(".PRINTSTYLE $if(printstyle)$$printstyle$$else$TYPESET$endif$"); C(0AX); S("$if(margin-left)$");
+  C(0AX); S(".L_MARGIN $margin-left$"); C(0AX); S("$endif$");
+  C(0AX); S("$if(margin-right)$"); C(0AX); S(".R_MARGIN $margin-right$");
+  C(0AX); S("$endif$"); C(0AX); S("$if(margin-top)$");
+  C(0AX); S(".T_MARGIN $margin-top$"); C(0AX); S("$endif$");
+  C(0AX); S("$if(margin-bottom)$"); C(0AX); S(".B_MARGIN $margin-bottom$");
+  C(0AX); S("$endif$"); C(0AX); S("$if(fontfamily)$");
+  C(0AX); S(".FAMILY $fontfamily$"); C(0AX); S("$endif$");
+  C(0AX); S("$if(pointsize)$"); C(0AX); S(".PT_SIZE $pointsize$");
+  C(0AX); S("$endif$"); C(0AX); S("$if(lineheight)$");
+  C(0AX); S(".LS $lineheight$"); C(0AX); S("$endif$");
+  C(0AX); S("$if(columns)$"); C(0AX); S(".COLUMNS $columns$ $if(column-gutter)$$column-gutter$$else$1");
+  S(".5P$endif$"); C(0AX); S("$endif$"); C(0AX);
+  S("$if(numbersections)$"); C(0AX); S(".HEADING_STYLE 1 NUMBER"); C(0AX);
+  S(".HEADING_STYLE 2 NUMBER"); C(0AX); S(".HEADING_STYLE 3 NUMBER"); C(0AX);
+  S(".HEADING_STYLE 4 NUMBER"); C(0AX); S(".HEADING_STYLE 5 NUMBER"); C(0AX);
+  S(".HEADING_STYLE 6 NUMBER"); C(0AX); S("$endif$"); C(0AX);
+  S("$if(linkcolor)$"); C(0AX); S(".PDF_LINK_COLOR $linkcolor$"); C(0AX);
+  S("$endif$"); C(0AX); S(".\"); C(22X);
+  S(" the colour for strikeout"); C(0AX); S(".defcolor strikecolor rgb 0.7 0.7 0.7"); C(0AX);
+  S(".\"); C(22X); S(" captions below images"); C(0AX);
+  S(".CAPTION_AFTER_LABEL IMG"); C(0AX); S("$if(title-meta)$"); C(0AX);
+  S(".PDF_TITLE "); C(22X); S("$title-meta$"); C(22X);
+  C(0AX); S("$endif$"); C(0AX); S("$for(header-includes)$");
+  C(0AX); S("$header-includes$"); C(0AX); S("$endfor$");
+  C(0AX); S("$if(toc)$"); C(0AX); S("$if(toc-title)$");
+  C(0AX); S(".TOC_HEADER_STRING "); C(22X); S("$toc-title$");
+  C(22X); C(0AX); S("$endif$"); C(0AX);
+  S(".AUTO_RELOCATE_TOC$if(covers)$$else$ TOP$endif$"); C(0AX); S("$endif$"); C(0AX);
+  S(".START"); C(0AX); S("$if(abstract)$"); C(0AX);
+  S(".BLOCKQUOTE"); C(0AX); S("$abstract$"); C(0AX);
+  S(".BLOCKQUOTE OFF"); C(0AX); S("$endif$"); C(0AX);
+  S("$for(include-before)$"); C(0AX); S("$include-before$"); C(0AX);
+  S("$endfor$"); C(0AX); S("$body$"); C(0AX);
+  S("$for(include-after)$"); C(0AX); S("$include-after$"); C(0AX);
+  S("$endfor$"); C(0AX); S("$if(toc)$"); C(0AX);
+  S(".\"); C(22X); S(" groff 1.23 leaves vertical traps off after endnotes"); C(0AX);
+  S(".if \n[.vpt]=0 .vpt"); C(0AX); S(".TOC"); C(0AX);
+  S("$endif$"); C(0AX)
+END T4;
+
+PROCEDURE T5;
+BEGIN
   S("$if(tagging)$"); C(0AX); S("\setupbackend[format=pdf/ua-2]"); C(0AX);
   S("\enabledirectives[backend.usetags=mkiv]"); C(0AX); S("\setuptagging[state=start]"); C(0AX);
   S("$endif$"); C(0AX); S("$if(context-lang)$"); C(0AX);
@@ -424,20 +484,6 @@ BEGIN
   C(0AX); S("$body$"); C(0AX); C(0AX);
   S("$for(include-after)$"); C(0AX); S("$include-after$"); C(0AX);
   S("$endfor$"); C(0AX); S("\stoptext"); C(0AX)
-END T4;
-
-PROCEDURE T5;
-BEGIN
-  S("$if(titleblock)$"); C(0AX); S("$titleblock$"); C(0AX);
-  C(0AX); S("$endif$"); C(0AX); S("$for(header-includes)$");
-  C(0AX); S("$header-includes$"); C(0AX); C(0AX);
-  S("$endfor$"); C(0AX); S("$for(include-before)$"); C(0AX);
-  S("$include-before$"); C(0AX); C(0AX); S("$endfor$");
-  C(0AX); S("$if(toc)$"); C(0AX); S("$table-of-contents$");
-  C(0AX); C(0AX); S("$endif$"); C(0AX);
-  S("$body$"); C(0AX); S("$for(include-after)$"); C(0AX);
-  C(0AX); S("$include-after$"); C(0AX); S("$endfor$");
-  C(0AX)
 END T5;
 
 PROCEDURE T6;
@@ -454,6 +500,20 @@ BEGIN
   C(0AX)
 END T6;
 
+PROCEDURE T7;
+BEGIN
+  S("$if(titleblock)$"); C(0AX); S("$titleblock$"); C(0AX);
+  C(0AX); S("$endif$"); C(0AX); S("$for(header-includes)$");
+  C(0AX); S("$header-includes$"); C(0AX); C(0AX);
+  S("$endfor$"); C(0AX); S("$for(include-before)$"); C(0AX);
+  S("$include-before$"); C(0AX); C(0AX); S("$endfor$");
+  C(0AX); S("$if(toc)$"); C(0AX); S("$table-of-contents$");
+  C(0AX); C(0AX); S("$endif$"); C(0AX);
+  S("$body$"); C(0AX); S("$for(include-after)$"); C(0AX);
+  C(0AX); S("$include-after$"); C(0AX); S("$endfor$");
+  C(0AX)
+END T7;
+
 (* Whether there is a default template or partial called name
    ("default.html5", "styles.html", ...); if there is, it is
    text[0 .. len-1] *)
@@ -464,9 +524,10 @@ BEGIN
   ELSIF name = "styles.html" THEN T1
   ELSIF name = "styles.citations.html" THEN T2
   ELSIF name = "default.ms" THEN T3
-  ELSIF name = "default.context" THEN T4
-  ELSIF name = "default.markdown" THEN T5
-  ELSIF name = "default.plain" THEN T6
+  ELSIF name = "default.mom" THEN T4
+  ELSIF name = "default.context" THEN T5
+  ELSIF name = "default.markdown" THEN T6
+  ELSIF name = "default.plain" THEN T7
   ELSE RETURN FALSE
   END;
   text := t; len := n; t := NIL;

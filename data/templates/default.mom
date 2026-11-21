@@ -1,0 +1,93 @@
+.\" Written by podoc's default mom template, for groff 1.23 and later
+$if(title)$
+.TITLE "$title$"
+$endif$
+$if(subtitle)$
+.SUBTITLE "$subtitle$"
+$endif$
+$if(author)$
+.AUTHOR$for(author)$ "$author$"$endfor$
+$endif$
+$if(date)$
+.MISC "$date$"
+$endif$
+$if(covers)$
+.COVER$if(title)$ TITLE$endif$$if(subtitle)$ SUBTITLE$endif$$if(author)$ AUTHOR$endif$$if(date)$ MISC$endif$
+$endif$
+$if(doctype)$
+.DOCTYPE $doctype$
+$endif$
+.\" PAPER comes before PRINTSTYLE, which sets the page from it
+$if(papersize)$
+.PAPER $papersize/uppercase$
+$endif$
+.PRINTSTYLE $if(printstyle)$$printstyle$$else$TYPESET$endif$
+$if(margin-left)$
+.L_MARGIN $margin-left$
+$endif$
+$if(margin-right)$
+.R_MARGIN $margin-right$
+$endif$
+$if(margin-top)$
+.T_MARGIN $margin-top$
+$endif$
+$if(margin-bottom)$
+.B_MARGIN $margin-bottom$
+$endif$
+$if(fontfamily)$
+.FAMILY $fontfamily$
+$endif$
+$if(pointsize)$
+.PT_SIZE $pointsize$
+$endif$
+$if(lineheight)$
+.LS $lineheight$
+$endif$
+$if(columns)$
+.COLUMNS $columns$ $if(column-gutter)$$column-gutter$$else$1.5P$endif$
+$endif$
+$if(numbersections)$
+.HEADING_STYLE 1 NUMBER
+.HEADING_STYLE 2 NUMBER
+.HEADING_STYLE 3 NUMBER
+.HEADING_STYLE 4 NUMBER
+.HEADING_STYLE 5 NUMBER
+.HEADING_STYLE 6 NUMBER
+$endif$
+$if(linkcolor)$
+.PDF_LINK_COLOR $linkcolor$
+$endif$
+.\" the colour for strikeout
+.defcolor strikecolor rgb 0.7 0.7 0.7
+.\" captions below images
+.CAPTION_AFTER_LABEL IMG
+$if(title-meta)$
+.PDF_TITLE "$title-meta$"
+$endif$
+$for(header-includes)$
+$header-includes$
+$endfor$
+$if(toc)$
+$if(toc-title)$
+.TOC_HEADER_STRING "$toc-title$"
+$endif$
+.AUTO_RELOCATE_TOC$if(covers)$$else$ TOP$endif$
+$endif$
+.START
+$if(abstract)$
+.BLOCKQUOTE
+$abstract$
+.BLOCKQUOTE OFF
+$endif$
+$for(include-before)$
+$include-before$
+$endfor$
+$body$
+$for(include-after)$
+$include-after$
+$endfor$
+$if(toc)$
+.\" groff 1.23 leaves vertical traps off after endnotes
+.if \n[.vpt]=0 .vpt
+.TOC
+$endif$

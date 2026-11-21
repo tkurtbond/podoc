@@ -1,0 +1,89 @@
+.\" Written by podoc's example statement template (statement.mom), for
+.\" groff 1.23 and later: statement paper (5.5 by 8.5 inches), narrow
+.\" margins, no page headers, Palatino 10 on 12, and the contents first.
+.\" Use it with podoc -s --template=statement.mom, and for PDF give
+.\" groff the directory Symbola is installed in, if it is not in
+.\" groff's font path: --pdf-engine-opt=-F/path/to/site-font.
+$if(title)$
+.TITLE "$title$"
+$endif$
+$if(subtitle)$
+.SUBTITLE "$subtitle$"
+$endif$
+$if(author)$
+.AUTHOR$for(author)$ "$author$"$endfor$
+$endif$
+$if(date)$
+.MISC "$date$"
+$endif$
+$if(covers)$
+.COVER$if(title)$ TITLE$endif$$if(subtitle)$ SUBTITLE$endif$$if(author)$ AUTHOR$endif$$if(date)$ MISC$endif$
+$endif$
+$if(doctype)$
+.DOCTYPE $doctype$
+$endif$
+.\" PAPER comes before PRINTSTYLE, which sets the page from it
+.PAPER $if(papersize)$$papersize/uppercase$$else$STATEMENT$endif$
+.PRINTSTYLE $if(printstyle)$$printstyle$$else$TYPESET$endif$
+.L_MARGIN $if(margin-left)$$margin-left$$else$0.5i$endif$
+.R_MARGIN $if(margin-right)$$margin-right$$else$0.5i$endif$
+.T_MARGIN $if(margin-top)$$margin-top$$else$0.4i$endif$
+.B_MARGIN $if(margin-bottom)$$margin-bottom$$else$0.75i$endif$
+.FAMILY $if(fontfamily)$$fontfamily$$else$P$endif$
+.PT_SIZE $if(pointsize)$$pointsize$$else$10$endif$
+.LS $if(lineheight)$$lineheight$$else$12$endif$
+.\" no page headers; the page number at the foot
+.HEADERS OFF
+.\" paragraphs not indented, with space between them
+.PARA_INDENT 0
+.PARA_SPACE 4p
+.\" symbols the text fonts lack, such as \[u2640] and \[u2642]
+.special S Symbola
+$if(columns)$
+.COLUMNS $columns$ $if(column-gutter)$$column-gutter$$else$1.5P$endif$
+$endif$
+$if(numbersections)$
+.HEADING_STYLE 1 NUMBER
+.HEADING_STYLE 2 NUMBER
+.HEADING_STYLE 3 NUMBER
+.HEADING_STYLE 4 NUMBER
+.HEADING_STYLE 5 NUMBER
+.HEADING_STYLE 6 NUMBER
+$endif$
+$if(linkcolor)$
+.PDF_LINK_COLOR $linkcolor$
+$endif$
+.\" the colour for strikeout
+.defcolor strikecolor rgb 0.7 0.7 0.7
+.\" captions below images
+.CAPTION_AFTER_LABEL IMG
+$if(title-meta)$
+.PDF_TITLE "$title-meta$"
+$endif$
+$for(header-includes)$
+$header-includes$
+$endfor$
+$if(toc)$
+$if(toc-title)$
+.TOC_HEADER_STRING "$toc-title$"
+$endif$
+.AUTO_RELOCATE_TOC$if(covers)$$else$ TOP$endif$
+$endif$
+.START
+$if(abstract)$
+.BLOCKQUOTE
+$abstract$
+.BLOCKQUOTE OFF
+$endif$
+$for(include-before)$
+$include-before$
+$endfor$
+$body$
+$for(include-after)$
+$include-after$
+$endfor$
+$if(toc)$
+.\" groff 1.23 leaves vertical traps off after endnotes
+.if \n[.vpt]=0 .vpt
+.TOC
+$endif$
