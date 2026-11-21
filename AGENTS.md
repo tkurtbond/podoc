@@ -172,21 +172,11 @@ not found, 64 parse error, 83 filter error, 97 data file not found, 98 metadata 
 resource not found. ArgParser ends
 with 2 on a bad option (pandoc: 6).
 
-`HALT` and `ASSERT` are for what should never happen. Checked
-2026-11-21 against poc 0.15.0 and the libraries under `~/Repos/Oberon`:
-
-- **poc's traps** end the program with exit statuses 2 to 14 (the
-  reference guide's table; 15 is planned, Peaseblossom's enhancement
-  15). The runtime's own `HALT` is 99 (`Files`, `Texts`).
-- **`ASSERT(x, n)`** always exits with status 10 and prints
-  `assertion failed (n)`, so its codes are not exit statuses; `HALT(n)`
-  exits with `n` and prints nothing. The libraries' `ASSERT` codes:
-  pounicode 20..22, poDateTime 20..24 (and `HALT(20)` for a method
-  with no body), polibfyaml 61..65, pofltk 70..78, polibtls 90..99.
-  Ropes and ArgParser have none.
-
-podoc's codes, for `HALT` and `ASSERT`, start at 100. None assigned
-yet. List each code here when it is.
+`HALT` and `ASSERT` are for what should never happen. podoc's codes
+for them start at 100; none is assigned yet. The codes poc's traps,
+its runtime and the po* libraries use, how `HALT` and `ASSERT` report
+them, and podoc's own, are in `docs/developer/halt-codes.md`. List
+each new code there.
 
 ## Conventions
 
