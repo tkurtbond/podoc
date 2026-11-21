@@ -47,7 +47,9 @@ TYPE
   CellText = POINTER TO CellTextDesc;
   CellTextDesc = RECORD
     lines: Lines;
-    n: LONGINT (* how many lines *)
+    n: LONGINT; (* how many lines *)
+    doc: L.Doc; (* the cell's blocks *)
+    full, min: LONGINT (* doclayout's offset and minOffset of doc *)
   END;
   RowCells = POINTER TO ARRAY OF CellText;
   RowArr = POINTER TO ARRAY OF RowCells;
@@ -77,6 +79,8 @@ VAR
   idPrefix: Rope;
   plain: BOOLEAN; (* plain text, not markdown *)
   gutenberg: BOOLEAN; (* plain text with Project Gutenberg's conventions *)
+  columns: LONGINT; (* --columns *)
+  wrapAuto: BOOLEAN; (* --wrap=auto: lines wrapped at columns *)
 
   (* the writer's state *)
   notes, lastNote: NoteList; (* stNotes, in order *)
@@ -319,16 +323,17 @@ END IsNullAttr;
 
 (* attrsToMarkdown *)
 PROCEDURE Attrs(a: A.Attr): L.Doc;
-  VAR r: Rope; c: A.StrList; kv: A.KeyVal;
+  VAR d: L.Doc; c: A.StrList; kv: A.KeyVal;
 
+  (* hsep: the parts separated by breaking spaces *)
   PROCEDURE Add(p: Rope);
   BEGIN
-    IF Len(r) > 1 THEN r := CatC(r, " ") END;
-    r := Cat(r, p)
+    IF d # NIL THEN d := L.Cat(d, L.Space()) END;
+    d := L.Cat(d, Lr(p))
   END Add;
 
 BEGIN
-  r := R("{");
+  d := NIL;
   IF a # NIL THEN
     IF Len(a.id) > 0 THEN Add(Cat(R("#"), EscAttr(Cat(idPrefix, a.id)))) END;
     c := a.classes;
@@ -342,7 +347,7 @@ BEGIN
       kv := kv.next
     END
   END;
-  RETURN Lr(CatC(r, "}"))
+  RETURN L.Cat3(Lit("{"), d, Lit("}"))
 END Attrs;
 
 (* classOrAttrsToMarkdown *)
@@ -713,6 +718,110 @@ BEGIN
   RETURN d
 END Inline;
 
+(* pandoc's isOrderedListMarker: whether t, ending in . or ), is all
+   one ordered list marker (anyOrderedListMarker) *)
+PROCEDURE IsOrderedListMarker(t: Rope): BOOLEAN;
+  VAR b: Buf; n, p, d, k: LONGINT; ok: BOOLEAN;
+
+  PROCEDURE IsAlnum(ch: CHAR): BOOLEAN;
+  BEGIN
+    RETURN (ch >= "0") & (ch <= "9") OR (CAP(ch) >= "A") & (CAP(ch) <= "Z")
+      OR (ch >= 80X)
+  END IsAlnum;
+
+  (* romanNumeral at q: whether there is one; q moves past it *)
+  PROCEDURE Roman(VAR q: LONGINT; upper: BOOLEAN): BOOLEAN;
+    VAR s: LONGINT;
+
+    PROCEDURE Is(ch: CHAR; at: LONGINT): BOOLEAN;
+    BEGIN
+      IF ~upper THEN ch := CHR(ORD(ch) + 32) END;
+      RETURN (at < n) & (b[at] = ch)
+    END Is;
+
+    PROCEDURE Many(ch: CHAR);
+    BEGIN WHILE Is(ch, q) DO INC(q) END
+    END Many;
+
+    PROCEDURE Opt(ch: CHAR);
+    BEGIN IF Is(ch, q) THEN INC(q) END
+    END Opt;
+
+    PROCEDURE Pair(a, c: CHAR);
+    BEGIN IF Is(a, q) & Is(c, q + 1) THEN INC(q, 2) END
+    END Pair;
+
+  BEGIN
+    s := q;
+    IF ~(Is("I", q) OR Is("V", q) OR Is("X", q) OR Is("L", q) OR Is("C", q)
+         OR Is("D", q) OR Is("M", q)) THEN RETURN FALSE END;
+    Many("M"); Pair("C", "M"); Opt("D"); Pair("C", "D"); Many("C");
+    Pair("X", "C"); Opt("L"); Pair("X", "L"); Many("X");
+    Pair("I", "X"); Opt("V"); Pair("I", "V"); Many("I");
+    RETURN q > s
+  END Roman;
+
+  (* number parser k at q *)
+  PROCEDURE Num(VAR q: LONGINT; k: LONGINT): BOOLEAN;
+    VAR ch: CHAR;
+  BEGIN
+    IF q >= n THEN RETURN FALSE END;
+    ch := b[q];
+    CASE k OF
+    | 0: (* decimal *)
+        IF (ch < "0") OR (ch > "9") THEN RETURN FALSE END;
+        WHILE (q < n) & (b[q] >= "0") & (b[q] <= "9") DO INC(q) END
+    | 1: (* exampleNum *)
+        IF ch # "@" THEN RETURN FALSE END;
+        INC(q);
+        LOOP
+          IF (q < n) & IsAlnum(b[q]) THEN
+            WHILE (q < n) & IsAlnum(b[q]) DO INC(q) END
+          ELSIF (q + 1 < n) & ((b[q] = "_") OR (b[q] = "-")) & IsAlnum(b[q + 1]) THEN
+            INC(q)
+          ELSE EXIT
+          END
+        END
+    | 2: (* defaultNum *)
+        IF ch # "#" THEN RETURN FALSE END;
+        INC(q)
+    | 3: (* romanOne *)
+        IF (ch # "i") & (ch # "I") THEN RETURN FALSE END;
+        INC(q)
+    | 4: (* lowerAlpha *)
+        IF (ch < "a") OR (ch > "z") THEN RETURN FALSE END;
+        INC(q)
+    | 5: RETURN Roman(q, FALSE)
+    | 6: (* upperAlpha *)
+        IF (ch < "A") OR (ch > "Z") THEN RETURN FALSE END;
+        INC(q)
+    | 7: RETURN Roman(q, TRUE)
+    END;
+    RETURN TRUE
+  END Num;
+
+BEGIN
+  n := Len(t);
+  IF n = 0 THEN RETURN FALSE END;
+  b := ToBuf(t);
+  IF (b[n - 1] # ".") & (b[n - 1] # ")") THEN RETURN FALSE END;
+  (* choice: the first delimiter and number that parse *)
+  FOR d := 0 TO 2 DO
+    FOR k := 0 TO 7 DO
+      p := 0; ok := TRUE;
+      IF d = 2 THEN ok := b[0] = "("; INC(p) END;
+      IF ok THEN ok := Num(p, k) END;
+      IF ok THEN
+        IF d = 0 THEN ok := (p < n) & (b[p] = ".")
+        ELSE ok := (p < n) & (b[p] = ")")
+        END
+      END;
+      IF ok THEN RETURN p + 1 = n END
+    END
+  END;
+  RETURN FALSE
+END IsOrderedListMarker;
+
 (* inlineListToMarkdown *)
 PROCEDURE Inlines(i: A.Inline): L.Doc;
   VAR d: L.Doc; s: Rope; n: LONGINT; nx: A.Inline;
@@ -736,7 +845,8 @@ BEGIN
     END;
     i := nx
   END;
-  RETURN d
+  IF inList THEN RETURN L.AvoidBadWraps(d, IsOrderedListMarker) END;
+  RETURN L.AvoidBadWraps(d, NIL)
 END Inlines;
 
 (* Blocks *)
@@ -1175,13 +1285,34 @@ END CheckRow;
 PROCEDURE RenderCell(c: A.Cell): CellText;
   VAR ct: CellText; r: Rope;
 BEGIN
-  NEW(ct);
+  NEW(ct); ct.doc := NIL; ct.full := 0; ct.min := 0;
   IF c = NIL THEN ct.lines := NIL; ct.n := 0; RETURN ct END;
-  r := L.Render(BlockList(c.blocks), 0);
+  ct.doc := BlockList(c.blocks);
+  ct.full := L.Offset(ct.doc); ct.min := L.MinOffset(ct.doc);
+  r := L.Render(ct.doc, 0);
   ct.lines := SplitLines(r, ct.n);
   WHILE (ct.n > 0) & (Len(ct.lines[ct.n - 1]) = 0) DO DEC(ct.n) END;
   RETURN ct
 END RenderCell;
+
+(* The cell's lines in a block of width w, as doclayout's block lays
+   them out: rendered at w, then chopped at w *)
+PROCEDURE LayCell(ct: CellText; w: LONGINT);
+  VAR r: Rope;
+BEGIN
+  IF L.IsEmpty(ct.doc) THEN RETURN END;
+  IF w < 1 THEN w := 1 END;
+  r := L.Chop(L.Render(ct.doc, w), w);
+  ct.lines := SplitLines(r, ct.n);
+  WHILE (ct.n > 0) & (Len(ct.lines[ct.n - 1]) = 0) DO DEC(ct.n) END
+END LayCell;
+
+(* Each cell of rc laid out at its column's width *)
+PROCEDURE LayRow(rc: RowCells; widths: IntArr; nc: LONGINT);
+  VAR k: LONGINT;
+BEGIN
+  FOR k := 0 TO nc - 1 DO LayCell(rc[k], widths[k]) END
+END LayRow;
 
 PROCEDURE RenderRow(row: A.Row; nc: LONGINT): RowCells;
   VAR rc: RowCells; c: A.Cell; k: LONGINT;
@@ -1215,7 +1346,7 @@ BEGIN
       ELSIF aligns[k] = A.AlignRight THEN pad := w - len
       ELSE pad := 0
       END;
-      IF pad < 0 THEN pad := 0 END;
+      IF (pad < 0) OR (li >= rc[k].n) THEN pad := 0 END; (* a missing line is empty *)
       line := Cat(Cat(line, Spaces(pad)), s);
       (* the last column is not padded on the right *)
       IF k < nc - 1 THEN line := Cat(line, Spaces(w - pad - len)) END
@@ -1231,30 +1362,32 @@ PROCEDURE PandocTable(multiline, headless: BOOLEAN; head: RowCells; rows: RowArr
                       aligns: IntArr; widths: RealArr; nc: LONGINT): L.Doc;
   VAR wc: IntArr; k, j, li, m, sum: LONGINT; allZero: BOOLEAN; underline, border, headD, body, d: L.Doc;
 
-  PROCEDURE Widen(rc: RowCells);
-    VAR k, li, w: LONGINT;
+  (* numChars, or, if min, minNumChars *)
+  PROCEDURE Widen(rc: RowCells; min: BOOLEAN; wc: IntArr);
+    VAR k, w: LONGINT;
   BEGIN
     FOR k := 0 TO nc - 1 DO
-      FOR li := 0 TO rc[k].n - 1 DO
-        w := L.Width(rc[k].lines[li]) + 2;
-        IF w > wc[k] THEN wc[k] := w END
-      END
+      IF min THEN w := rc[k].min + 2 ELSE w := rc[k].full + 2 END;
+      IF w > wc[k] THEN wc[k] := w END
     END
   END Widen;
 
 BEGIN
   NEW(wc, nc + 1);
   FOR k := 0 TO nc - 1 DO wc[k] := 2 END;
-  Widen(head);
-  FOR j := 0 TO nr - 1 DO Widen(rows[j]) END;
   allZero := TRUE;
   FOR k := 0 TO nc - 1 DO IF widths[k] # 0 THEN allZero := FALSE END END;
+  (* relWidth: minNumChars when wrapping *)
+  Widen(head, ~allZero & wrapAuto, wc);
+  FOR j := 0 TO nr - 1 DO Widen(rows[j], ~allZero & wrapAuto, wc) END;
   IF ~allZero THEN
     FOR k := 0 TO nc - 1 DO
-      m := ENTIER(71 * widths[k]);
+      m := ENTIER((columns - 1) * widths[k]);
       IF m > wc[k] THEN wc[k] := m END
     END
   END;
+  LayRow(head, wc, nc);
+  FOR j := 0 TO nr - 1 DO LayRow(rows[j], wc, nc) END;
   underline := NIL; sum := 0;
   FOR k := 0 TO nc - 1 DO
     IF k > 0 THEN underline := L.Cat(underline, Lit(" ")) END;
@@ -1317,7 +1450,7 @@ PROCEDURE GridSection(row: A.Row; rhc, nc: LONGINT; aligns: IntArr; widths: Real
         WHILE (k < lim) & (k - col < w) & (hang[k] = 1) DO sum := sum + widths[k]; INC(k) END;
         w := k - col;
         FOR k := col TO col + w - 1 DO hang[k] := h END;
-        k := ENTIER(sum * 72) - 3; IF k < 0 THEN k := 0 END;
+        k := ENTIER(sum * columns) - 3; IF k < 0 THEN k := 0 END;
         cells[n] := NewGCell(col, w, h, aligns[col], k, ct); INC(n);
         INC(col, w)
       END
@@ -1344,7 +1477,7 @@ PROCEDURE Dummy(d: GCell): GCell;
   VAR c: GCell;
 BEGIN
   NEW(c); c^ := d^; c.align := A.AlignDefault; DEC(c.rspan);
-  NEW(c.ct); c.ct.lines := NIL; c.ct.n := 0;
+  NEW(c.ct); c.ct.lines := NIL; c.ct.n := 0; c.ct.doc := NIL; c.ct.full := 0; c.ct.min := 0;
   c.top := NoLine; c.bottom := NoLine;
   RETURN c
 END Dummy;
@@ -1383,24 +1516,23 @@ END SetBorders;
 
 (* redoWidths: the columns' widths, then each cell's *)
 PROCEDURE RedoWidths(rows: GRow; nc: LONGINT);
-  VAR full, spec, used, new: IntArr; r: GRow; c: GCell;
-    k, j, o, s, numUn, unused, def, runs: LONGINT; final, same: BOOLEAN;
+  VAR full, min, spec, used, new: IntArr; r: GRow; c: GCell;
+    k, j, o, m, s, numUn, unused, def, runs: LONGINT; final, same: BOOLEAN;
 BEGIN
-  NEW(full, nc + 1); NEW(spec, nc + 1); NEW(used, nc + 1); NEW(new, nc + 1);
-  FOR k := 0 TO nc - 1 DO full[k] := 0; spec[k] := 0 END;
+  NEW(full, nc + 1); NEW(min, nc + 1); NEW(spec, nc + 1); NEW(used, nc + 1); NEW(new, nc + 1);
+  FOR k := 0 TO nc - 1 DO full[k] := 0; min[k] := 0; spec[k] := 0 END;
   r := rows;
   WHILE r # NIL DO
     FOR j := 0 TO r.n - 1 DO
       c := r.cells[j];
-      o := 0;
-      FOR k := 0 TO c.ct.n - 1 DO
-        IF L.Width(c.ct.lines[k]) > o THEN o := L.Width(c.ct.lines[k]) END
-      END;
-      IF o < 1 THEN o := 1 END;
+      o := c.ct.full; IF o < 1 THEN o := 1 END;
+      IF wrapAuto THEN m := c.ct.min ELSE m := o END;
       o := o DIV c.span + o MOD c.span;
+      m := m DIV c.span + m MOD c.span;
       s := c.width DIV c.span + c.width MOD c.span;
       FOR k := c.col TO c.col + c.span - 1 DO
         IF (k < nc) & (o > full[k]) THEN full[k] := o END;
+        IF (k < nc) & (m > min[k]) THEN min[k] := m END;
         IF (k < nc) & (s > spec[k]) THEN spec[k] := s END
       END
     END;
@@ -1408,14 +1540,14 @@ BEGIN
   END;
   FOR k := 0 TO nc - 1 DO
     IF spec[k] = 0 THEN used[k] := 0
-    ELSIF spec[k] > full[k] THEN used[k] := spec[k]
-    ELSE used[k] := full[k]
+    ELSIF spec[k] > min[k] THEN used[k] := spec[k]
+    ELSE used[k] := min[k]
     END
   END;
   (* recalculateWidths *)
   final := FALSE; runs := 1;
   LOOP
-    numUn := 0; unused := 72 - 3 * nc - 1;
+    numUn := 0; unused := columns - 3 * nc - 1;
     FOR k := 0 TO nc - 1 DO
       IF used[k] = 0 THEN INC(numUn) END;
       DEC(unused, used[k])
@@ -1429,7 +1561,7 @@ BEGIN
       new[k] := used[k];
       IF used[k] = 0 THEN
         IF final THEN
-          IF full[k] > def THEN new[k] := full[k] ELSE new[k] := def END
+          IF min[k] > def THEN new[k] := min[k] ELSE new[k] := def END
         ELSIF full[k] <= def THEN new[k] := full[k]
         END
       END;
@@ -1456,7 +1588,8 @@ BEGIN
           IF k + o < nc THEN INC(c.width, used[k + o] + 3) END
         END;
         INC(k, c.span)
-      END
+      END;
+      LayCell(c.ct, c.width)
     END;
     r := r.next
   END
@@ -1670,13 +1803,13 @@ BEGIN
   Widen(head); FOR j := 0 TO nr - 1 DO Widen(rows[j]) END;
   maxw := 0; allZero := TRUE;
   FOR k := 0 TO nc - 1 DO INC(maxw, cw[k]); IF widths[k] # 0 THEN allZero := FALSE END END;
-  pad := maxw <= 72;
+  pad := maxw <= columns;
   IF headless THEN out := ToRow(NIL) ELSE out := ToRow(head) END;
   B.InitBuf(b); B.PutChar(b, "|");
   FOR k := 0 TO nc - 1 DO
     IF k > 0 THEN B.PutChar(b, "|") END;
-    IF ~plain & ~allZero & (maxw + nc + 1 > 72) THEN
-      w := ENTIER(widths[k] * (72 - (nc + 1))); IF w < 0 THEN w := 0 END
+    IF ~plain & ~allZero & (maxw + nc + 1 > columns) THEN
+      w := ENTIER(widths[k] * (columns - (nc + 1))); IF w < 0 THEN w := 0 END
     ELSIF pad THEN w := cw[k]
     ELSE w := 2
     END;
@@ -1744,7 +1877,7 @@ BEGIN
   ELSE capD := L.Above(L.Above(L.BlankLine(), L.Cat(Lit(": "), capt)), L.BlankLine())
   END;
   IF (simple & ~hasFooter & allZero & ~spans) OR (plainCells & ~spans & ~hasFooter)
-     OR ~plain & simple & ~spans & ~hasFooter & ~(72 >= 8 * nc) THEN
+     OR ~plain & simple & ~spans & ~hasFooter & ~(columns >= 8 * nc) THEN
     headless := TRUE;
     IF headRow # NIL THEN
       c := headRow.cells;
@@ -1773,7 +1906,7 @@ BEGIN
     RETURN L.Above(L.Above(PipeTable(headless, head, rows, nr, aligns, widths, nc), capD),
       L.BlankLine())
   END;
-  IF spans OR (72 >= 8 * nc) OR hasFooter THEN
+  IF spans OR (columns >= 8 * nc) OR hasFooter THEN
     RETURN L.Above(L.Above(GridTable(t, ncs, aligns, widths), capD), L.BlankLine())
   END;
   IF plain THEN RETURN L.Above(L.Above(Lit("[TABLE]"), capD), L.BlankLine()) END;
@@ -1835,7 +1968,7 @@ BEGIN
   | A.DefinitionList: d := DefList(b(A.DefListBlk))
   | A.Header: d := Header(b(A.HeaderBlk))
   | A.HorizontalRule:
-    d := L.Cat3(L.BlankLine(), Lr(Ropes.Make(72, "-")), L.BlankLine())
+    d := L.Cat3(L.BlankLine(), Lr(Ropes.Make(columns, "-")), L.BlankLine())
   | A.Table: d := Table(b(A.TableBlk))
   | A.Figure: d := Figure(b(A.FigureBlk))
   | A.Div: d := Div(b(A.DivBlk))
@@ -2018,6 +2151,13 @@ BEGIN
   idPrefix := R(prefix); IF Len(idPrefix) = 0 THEN idPrefix := NIL END
 END SetOptions;
 
+(* Sets the line length (--columns), and whether lines are wrapped at
+   it (--wrap=auto) *)
+PROCEDURE SetWrapping*(auto: BOOLEAN; cols: LONGINT);
+BEGIN
+  wrapAuto := auto; columns := cols
+END SetWrapping;
+
 (* Sets whether the writer writes plain text (-t plain) rather than
    markdown *)
 PROCEDURE SetPlain*(on: BOOLEAN);
@@ -2076,6 +2216,12 @@ BEGIN
   RETURN L.Cat(L.Cat3(title, L.Cr(), authors), L.Cat3(L.Cr(), date, L.Cr()))
 END PlainTitleBlock;
 
+(* The width lines are wrapped at, 0 for none *)
+PROCEDURE LineLength(): LONGINT;
+BEGIN
+  IF wrapAuto THEN RETURN columns ELSE RETURN 0 END
+END LineLength;
+
 (* Writes the document doc as markdown: its body, or, if tmpl is not
    NIL, the template filled in *)
 PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
@@ -2103,7 +2249,7 @@ BEGIN
   main := L.Cat(BlockList(blocks), NotesAndRefs());
   IF last # NIL THEN last.next := b END;
   IF tmpl = NIL THEN
-    L.Write(L.Chomp(main), 0); PdIO.WriteLn;
+    L.Write(L.Chomp(main), LineLength()); PdIO.WriteLn;
     RETURN
   END;
   ctx := metadata;
@@ -2115,12 +2261,12 @@ BEGIN
   IF (doc.meta # NIL) & (doc.meta.entries # NIL) THEN
     C.DefField(ctx, "titleblock", T.NewSimple(titleblock))
   END;
-  L.Write(T.Render(tmpl, ctx), 0)
+  L.Write(T.Render(tmpl, ctx), LineLength())
 END WriteDoc;
 
 BEGIN
   preserve := FALSE; wantToc := FALSE; numberSections := FALSE; tocDepth := 3; idPrefix := NIL;
   notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ids := NIL;
   inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE;
-  plain := FALSE; gutenberg := FALSE; upper := FALSE; script := NoScript
+  plain := FALSE; gutenberg := FALSE; columns := 72; wrapAuto := FALSE; upper := FALSE; script := NoScript
 END PdMdWriter.

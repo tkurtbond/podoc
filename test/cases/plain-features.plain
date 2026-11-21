@@ -8,9 +8,11 @@ Second level
 
 Third level
 
-Some SMALL CAPS WITH A NOTE[1] and H₂O, x², ^(a b), ^(x), _(x), _(q), ^(Q), _(a q), x₁ ₂ and ~~gone~~.
+Some SMALL CAPS WITH A NOTE[1] and H₂O, x², ^(a b), ^(x), _(x), _(q),
+^(Q), _(a q), x₁ ₂ and ~~gone~~.
 
-Span and code and http://example.com and a link and [an image] and me@example.com and “quotes” and ‘single’.
+Span and code and http://example.com and a link and [an image] and
+me@example.com and “quotes” and ‘single’.
 
 line one
    line two indented

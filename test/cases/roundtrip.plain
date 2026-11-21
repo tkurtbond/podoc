@@ -1,8 +1,10 @@
 A header
 
-A paragraph with emphasis, strong, ~~strike~~, ^(sup), _(sub), SMALL CAPS, code, $x^2$ and
+A paragraph with emphasis, strong, ~~strike~~, ^(sup), _(sub), SMALL
+CAPS, code, $x^2$ and
 $$y$$
-, a link, http://example.com/auto, an [image], a footnote[1] and an inline note[2], “quotes” and ‘single’, a hard
+, a link, http://example.com/auto, an [image], a footnote[1] and an
+inline note[2], “quotes” and ‘single’, a hard
 break, and special characters: * _ ` # < > [ ] \ $ | ~ ^.
 
 Second level

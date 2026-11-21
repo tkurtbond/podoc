@@ -783,7 +783,7 @@ pandoc wraps `plain` at 72 columns by default (`--wrap=auto`,
 (`PdLayoutTest`), and `PdMdWriter` writes spaces as `L.Space()`;
 every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
 
-### Phase 17.1: `--wrap=auto` and `--columns` for plain
+### Phase 17.1: `--wrap=auto` and `--columns` for plain [done]
 
 - `--columns` in `PdOptions` (pandoc: 72 by default; 6 for a bad
   value); `--wrap=auto` passes it to `L.Write` for `plain`.
@@ -1467,3 +1467,42 @@ every writer passes 0 (no wrapping) to `L.Render` and `L.Write`.
   `gutenberg-markdown`, `gutenberg-html`, `opt-from-ext3`. `make test`
   passed under `-O2` and `-OC`: 232 case tests and 23 round trips.
   Phase 17.1 next.
+- 2026-11-20: Phase 17.1 done. `--columns` (`PdOptions`; 72 by
+  default; exit 6 with pandoc's message for a value that is not a
+  number greater than 0, spaces around it allowed). `-t plain` with
+  `--wrap=auto` wraps at it. `--columns` is also the reader's
+  `readerColumns`, as in pandoc: it sets the relative widths of
+  multiline, simple, pipe and grid tables, so the JSON changes with it
+  (checked against pandoc at 10, 30, 50 and 100 columns). In the
+  writer: table widths from `--columns`; cells laid out as doclayout's
+  `block` does (rendered at the column width, then chopped,
+  `PdLayout.Chop`); multiline and simple tables' widths from the
+  cells' minimal widths when wrapping (`PdLayout.Offset`, `MinOffset`)
+  and grid tables' as `gridTable` (`RedoWidths`); pandoc's
+  `avoidBadWraps` (`PdLayout.AvoidBadWraps`, with
+  `isOrderedListMarker` in list items); attributes' parts separated
+  by breaking spaces, as `attrsToMarkdown`'s `hsep`; a table row's
+  missing lines not padded. Checked against pandoc 3.10, byte for
+  byte, `-t plain` at 10, 20, 30, 72 and 100 columns, with
+  `--wrap=none` and `--wrap=preserve`, and `plain+gutenberg` at 72 and
+  30, on every case without format or wrap arguments and pandoc's
+  `testsuite.txt` and `tables.markdown`: the same but for math (as
+  recorded) and, in `testsuite.txt`, the `%` title block and raw TeX
+  the reader does not read. On the user's 54 markdown documents, at
+  40, 72 and 100 columns, under `-O2` and `-OC`: all the same. Long
+  words, URLs, East Asian text, nested lists and quotes, definition
+  lists, notes, pipe tables, line breaks and code at 72, 25 and 12
+  columns: the same. `PdLayoutTest` gained `Offset`, `MinOffset`,
+  `Chop` and `AvoidBadWraps` tests, their expected output computed
+  with pandoc's `pandoc.layout` (doclayout). The 17 `plain` cases
+  without `--wrap` now expect wrapped output, each checked against
+  pandoc with its arguments first; new cases `plain-wrap`,
+  `plain-columns` (12 columns) and `columns-error`. `-t markdown` is
+  not wrapped yet. `make test` passed under `-O2` and `-OC`: 235
+  case tests and 23 round trips. `tools/compare` now runs podoc with
+  `--wrap=none` too, as it runs pandoc, now that wrapping is podoc's
+  default. `make compare` (with an 8G memory cap: pandoc-include's
+  endless recursion on `inc-cycle` passes 4G within its 10 seconds,
+  and the scope is killed): 1374 of 1584 the same; with HEAD's podoc,
+  1352, its 22 extra differences all `--columns` cases; no new
+  difference. Phase 17.2 next.

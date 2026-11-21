@@ -1,6 +1,8 @@
 Escapes
 
-Braces {} backslash \ dollar $ bar | percent % tilde ~ hash # [brackets]. Dashes – and — and … and it’s “quoted” and ‘single’. Non-breaking space.
+Braces {} backslash \ dollar $ bar | percent % tilde ~ hash #
+[brackets]. Dashes – and — and … and it’s “quoted” and ‘single’.
+Non-breaking space.
 
 Unnumbered
 
@@ -10,13 +12,15 @@ Both
 
 Inlines
 
-em bf SC ul ~~strike~~ x² H₂O plain a{b} {"'\()-+=%,.:;}x}y$a+b$ and $$\int x$$ and{=context}{=tex}`{=html}
+em bf SC ul ~~strike~~ x² H₂O plain a{b}
+{"'\()-+=%,.:;}x}y$a+b$ and $$\int x$$ and{=context}{=tex}`{=html}
 
 Line
 after
 break.
 
-A https://example.com/a%20b#frag autolink and me@example.com. Text and internal and odd.
+A https://example.com/a%20b#frag autolink and me@example.com. Text and
+internal and odd.
 
 [Alt] [Inline] []
 
@@ -100,13 +104,14 @@ Term 2
 
   -----------------
 
-  -----------------------------------------------------------------------
-               Wide              Narrow
-  ------------------------------ ----------------------------------------
-   A multiline cell that wraps.  B
+  -------------------------------------------------------------
+          Wide         Narrow
+  -------------------- ----------------------------------------
+    A multiline cell   B
+      that wraps.      
 
-                C                D
-  -----------------------------------------------------------------------
+           C           D
+  -------------------------------------------------------------
 
   : Multiline with widths
 

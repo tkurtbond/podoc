@@ -41,8 +41,9 @@ is finished:
 Phase 16 (plain text, grid and pipe tables) and Phase 17 (wrapping)
 are under way: 16.1 (`-t plain`), 16.2 (grid tables in the reader,
 `PdGridTable`; character widths from doclayout's table, `PdWidth`)
-16.3 (grid and pipe tables in the markdown and plain writers) and
-16.4 (`-t plain+gutenberg`) are done. Further work is in PLAN.md's "Later". See PLAN.md's
+16.3 (grid and pipe tables in the markdown and plain writers),
+16.4 (`-t plain+gutenberg`) and 17.1 (`--wrap=auto` and `--columns`
+for plain) are done. Further work is in PLAN.md's "Later". See PLAN.md's
 State.
 
 ## Reference material

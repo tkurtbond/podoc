@@ -113,3 +113,30 @@ b|
 >
 > > b
 > > c|
+== no bad wraps
+aaa
+*
+bbb
+> c
+1. d|
+== avoid bad wraps
+aaa *
+bbb >
+c 1.
+d|
+== offsets
+9 4|
+== offsets of lines
+9 4|
+== offsets of prefixed
+7 5|
+== chop
+a
+bcd
+efg|
+== chop lines
+ab
+cd
+ef
+gh
+i|

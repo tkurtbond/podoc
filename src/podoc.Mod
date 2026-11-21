@@ -65,6 +65,7 @@ PROCEDURE ReadDoc(text: PdIO.Text; len: LONGINT): A.Doc;
   VAR m: A.MetaMapV; f: O.File; d: A.Doc;
 BEGIN
   PdMarkdown.gridTables := O.gridTables;
+  PdMarkdown.columns := O.columns;
   m := A.NewMetaMap();
   f := O.metaFiles;
   WHILE f # NIL DO
@@ -178,6 +179,7 @@ BEGIN
     PdMdWriter.SetOptions(O.wrap = "preserve", O.toc, O.tocDepth, O.numberSections, O.idPrefix);
     PdMdWriter.SetPlain(to = "plain");
     PdMdWriter.SetGutenberg(O.gutenberg);
+    PdMdWriter.SetWrapping((O.wrap = "auto") & (to = "plain"), O.columns);
     PdMdWriter.WriteDoc(Doc(text, len), tmpl)
   ELSIF len > 0 THEN
     PdIO.WriteChars(text^, 0, len)

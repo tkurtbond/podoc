@@ -63,13 +63,15 @@ Term 2
 
   : Simple table
 
-  ------------------------------------------------------------------
-   Centered Header  Default Aligned     Right Aligned Left Aligned
-  ----------------- ----------------- --------------- --------------
-        First       row                          12.0 Example long
+  ---------------------------------------------
+   Centered  Default           Right Left
+    Header   Aligned         Aligned Aligned
+  ---------- ------------ ---------- ----------
+    First    row                12.0 Example
+                                     long
 
-       Second       row                           5.0 Here
-  ------------------------------------------------------------------
+    Second   row                 5.0 Here
+  ---------------------------------------------
 
   : Multiline {#tbl .c}
 

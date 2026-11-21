@@ -90,6 +90,8 @@ TYPE
 VAR
   gridTables*: BOOLEAN; (* the grid_tables extension: grid tables are
     read; TRUE unless podoc is told otherwise *)
+  columns*: LONGINT; (* pandoc's readerColumns, from --columns: 72 unless
+    podoc is told otherwise; the widths of tables are relative to it *)
   ids: A.StrList; (* the header identifiers used so far *)
   keys: Key; (* the reference keys; the last defined first *)
   headerKeys: Key; (* the implicit header references *)
@@ -1541,7 +1543,7 @@ BEGIN
   RETURN q
 END RawTableLine;
 
-(* widthsFromIndices 72 *)
+(* widthsFromIndices columns *)
 PROCEDURE WidthsFromIndices(VAR c: Columns);
   VAR len: Longs; k, total, cols: LONGINT; q: LONGREAL;
 BEGIN
@@ -1552,7 +1554,7 @@ BEGIN
       & (len[c.n - 1] - len[c.n] <= 2) THEN
     len[c.n] := len[c.n - 1]
   END;
-  cols := 72;
+  cols := columns;
   IF c.index[c.n] > cols THEN cols := c.index[c.n] END;
   total := 0;
   FOR k := 0 TO c.n DO INC(total, len[k]) END;
@@ -1814,7 +1816,7 @@ BEGIN
   IF sum > max THEN max := sum END;
   NEW(c.width, c.n);
   FOR k := 0 TO c.n - 1 DO
-    IF max + c.n + 1 > 72 THEN c.width[k] := Ratio(c.len[k], sum)
+    IF max + c.n + 1 > columns THEN c.width[k] := Ratio(c.len[k], sum)
     ELSE c.width[k] := 0
     END
   END;
@@ -1933,11 +1935,11 @@ BEGIN
   q := G.Trace(p, q - p, g);
   IF q < 0 THEN RETURN -1 END;
   t := A.NewTable(NIL);
-  (* fractionalColumnWidths 72 *)
+  (* fractionalColumnWidths columns *)
   total := 0;
   FOR k := 0 TO g.cols - 1 DO INC(total, g.width[k] + 1) END;
   norm := total + g.cols - 2;
-  IF norm < 72 THEN norm := 72 END;
+  IF norm < columns THEN norm := columns END;
   last := NIL;
   FOR k := 0 TO g.cols - 1 DO
     NEW(cs); cs.next := NIL;
@@ -2331,5 +2333,5 @@ BEGIN
 END ReadMetaFile;
 
 BEGIN
-  ids := NIL; gridTables := TRUE
+  ids := NIL; gridTables := TRUE; columns := 72
 END PdMarkdown.

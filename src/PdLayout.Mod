@@ -14,7 +14,7 @@ MODULE PdLayout;
    blank line after a carriage return gives one blank line.
 
    Not yet: doclayout's blocks (lblock, cblock, rblock, vfill), styles
-   and links. Widths count East Asian wide and full-width characters as
+   and links; Chop breaks a rendered line as a block does. Widths count East Asian wide and full-width characters as
    two and combining marks as none, as doclayout's realLength does. *)
 
 IMPORT Ropes, Utf8, Unicode, W := PdWidth, PdIO;
@@ -44,6 +44,9 @@ TYPE
   END;
 
   Stack = POINTER TO ARRAY OF Doc;
+
+  (* Whether a text is an ordered list marker, for AvoidBadWraps *)
+  Marker* = PROCEDURE (t: Ropes.Rope): BOOLEAN;
 
 VAR
   (* the render state *)
@@ -93,6 +96,71 @@ BEGIN
   Ropes.Blit(r, 0, buf^, 0, n);
   RETURN CharsWidth(buf^, 0, n)
 END Width;
+
+(* The width of one character, r, as doclayout's charWidth *)
+PROCEDURE RuneWidth(r: Utf8.Rune): LONGINT;
+BEGIN
+  IF r < 80H THEN
+    IF (r >= 20H) & (r # 7FH) THEN RETURN 1 ELSE RETURN 0 END
+  END;
+  RETURN W.Width(r)
+END RuneWidth;
+
+(* The lines of r, rendered text, as doclayout's chop gives them to a
+   block of width n: a final empty line dropped, and each line wider
+   than n broken into pieces of at most n columns, counted from the
+   line's end, so that the first piece is the shortest *)
+PROCEDURE Chop*(r: Ropes.Rope; n: LONGINT): Ropes.Rope;
+  VAR s: PdIO.Text; len, i, j, start, q, w, k, np: LONGINT; res: Ropes.Rope;
+    starts, widths, cuts: POINTER TO ARRAY OF LONGINT; ru: Utf8.Rune;
+
+  PROCEDURE Add(a, b: LONGINT; first: BOOLEAN);
+  BEGIN
+    IF ~first THEN res := Ropes.Cat(res, Ropes.FromChar(0AX)) END;
+    IF b > a THEN res := Ropes.Cat(res, Ropes.FromSubchars(s^, a, b - a)) END
+  END Add;
+
+BEGIN
+  len := Ropes.Length(r);
+  IF len = 0 THEN RETURN NIL END;
+  NEW(s, len + 1); Ropes.Blit(r, 0, s^, 0, len); s[len] := 0X;
+  IF s[len - 1] = 0AX THEN DEC(len) END; (* the final empty line *)
+  res := NIL; start := 0; i := 0;
+  WHILE start <= len DO
+    j := start; WHILE (j < len) & (s[j] # 0AX) DO INC(j) END;
+    IF CharsWidth(s^, start, j) <= n THEN Add(start, j, start = 0)
+    ELSE
+      (* the characters' offsets and widths *)
+      NEW(starts, j - start + 1); NEW(widths, j - start + 1); NEW(cuts, j - start + 1);
+      k := 0; q := start;
+      WHILE q < j DO
+        starts[k] := q;
+        IF ORD(s[q]) < 80H THEN ru := ORD(s[q]); INC(q)
+        ELSE
+          i := q;
+          IF ~Utf8.Decode(s^, i, ru) OR (i <= q) OR (i > j) THEN ru := 0FFFDH; i := q + 1 END;
+          q := i
+        END;
+        widths[k] := RuneWidth(ru); INC(k)
+      END;
+      (* from the end: a piece starts where adding a character would
+         make it wider than n *)
+      np := 0; w := 0; i := k - 1;
+      WHILE i >= 0 DO
+        IF (i < k - 1) & (w + widths[i] > n) THEN cuts[np] := i + 1; INC(np); w := 0 END;
+        INC(w, widths[i]); DEC(i)
+      END;
+      (* the pieces, left to right *)
+      q := start;
+      WHILE np > 0 DO
+        DEC(np); Add(q, starts[cuts[np]], (q = start) & (start = 0)); q := starts[cuts[np]]
+      END;
+      Add(q, j, (q = start) & (start = 0))
+    END;
+    start := j + 1
+  END;
+  RETURN res
+END Chop;
 
 (* Making Docs *)
 
@@ -347,6 +415,38 @@ BEGIN
   RETURN Join(parts, 0, np)
 END NoWrap;
 
+(* pandoc's avoidBadWraps: in d, a breaking space before a text that
+   would start a block if it began a line (">...", a lone "-", "*" or
+   "+", "1." or "1)", or, if marker is not NIL, a text for which marker
+   is TRUE) becomes part of that text, so that the text cannot begin a
+   line. *)
+PROCEDURE AvoidBadWraps*(d: Doc; marker: Marker): Doc;
+  VAR parts: Stack; np, i: LONGINT; t: Ropes.Rope; n: LONGINT; c: CHAR;
+    bad: BOOLEAN; x: Doc;
+BEGIN
+  parts := NIL; Unfold(d, parts, np);
+  FOR i := 0 TO np - 3 DO
+    IF (parts[i] # NIL) & (parts[i].kind = breakingSpace) & (parts[i + 1].kind = text)
+       & (parts[i + 2].kind = breakingSpace) THEN
+      t := parts[i + 1].s; n := Ropes.Length(t);
+      c := Ropes.Fetch(t, 0);
+      bad := (c = ">")
+        OR ((c = "-") OR (c = "*") OR (c = "+")) & (n = 1)
+        OR (n = 2) & (c = "1") & ((Ropes.Fetch(t, 1) = ".") OR (Ropes.Fetch(t, 1) = ")"))
+        OR (marker # NIL) & marker(t);
+      IF bad THEN
+        x := New(text); x.s := Ropes.Cat(Ropes.FromChar(" "), t);
+        x.n := parts[i + 1].n + 1;
+        parts[i] := NIL; parts[i + 1] := x
+      END
+    END
+  END;
+  d := NIL;
+  i := np;
+  WHILE i > 0 DO DEC(i); d := Cat(parts[i], d) END;
+  RETURN d
+END AvoidBadWraps;
+
 (* d without the blank lines, new lines, carriage returns and breaking
    spaces at its end *)
 PROCEDURE Chomp*(d: Doc): Doc;
@@ -578,6 +678,69 @@ BEGIN
   END;
   RETURN c
 END UpdateColumn;
+
+(* doclayout's getOffset: l, the longest line so far, and c, the
+   current column, after d, laid out without wrapping or, if minimal,
+   breaking at every breaking space not at the start of a line *)
+PROCEDURE GetOffset(d: Doc; minimal: BOOLEAN; VAR l, c: LONGINT);
+  VAR stack, t: Stack; sp, i, l1, c1: LONGINT; rest: Doc;
+
+  PROCEDURE Push(x: Doc);
+  BEGIN
+    IF sp = LEN(stack^) THEN
+      NEW(t, 2 * sp);
+      FOR i := 0 TO sp - 1 DO t[i] := stack[i] END;
+      stack := t
+    END;
+    stack[sp] := x; INC(sp)
+  END Push;
+
+BEGIN
+  NEW(stack, 64); sp := 0;
+  Push(d);
+  WHILE sp > 0 DO
+    DEC(sp); d := stack[sp];
+    WHILE (d # NIL) & (d.kind = concat) DO Push(d.b); d := d.a END;
+    IF d # NIL THEN
+      CASE d.kind OF
+        text: INC(c, d.n)
+      | carriageReturn, newLine, blankLines: IF c > l THEN l := c END; c := 0
+      | prefixed:
+          l1 := 0; c1 := 0; GetOffset(d.a, minimal, l1, c1);
+          IF l1 + Width(d.s) > l THEN l := l1 + Width(d.s) END;
+          c := c1 + Width(d.s)
+      | beforeNonBlank:
+          IF sp > 0 THEN rest := stack[sp - 1] ELSE rest := NIL END;
+          IF IsNonBlank(rest) THEN Push(d.a) END
+      | flush: Push(d.a)
+      | breakingSpace:
+          IF minimal & (c > 0) THEN IF c > l THEN l := c END; c := 0
+          ELSE INC(c)
+          END
+      | afterBreak: IF c = 0 THEN INC(c, Width(d.s)) END
+      END
+    END
+  END
+END GetOffset;
+
+(* doclayout's offset: the width of d's widest line, unwrapped *)
+PROCEDURE Offset*(d: Doc): LONGINT;
+  VAR l, c: LONGINT;
+BEGIN
+  l := 0; c := 0; GetOffset(d, FALSE, l, c);
+  IF c > l THEN l := c END;
+  RETURN l
+END Offset;
+
+(* doclayout's minOffset: the width of d's widest line, broken at every
+   breaking space *)
+PROCEDURE MinOffset*(d: Doc): LONGINT;
+  VAR l, c: LONGINT;
+BEGIN
+  l := 0; c := 0; GetOffset(d, TRUE, l, c);
+  IF c > l THEN l := c END;
+  RETURN l
+END MinOffset;
 
 (* Flattening *)
 

@@ -9,7 +9,7 @@
 # each run in its own directory. For each format (json, html, ...),
 #
 #     pandoc --wrap=none --syntax-highlighting=none -f markdown -t FORMAT
-#     PODOC -t FORMAT
+#     PODOC --wrap=none -t FORMAT
 #
 # are run, and for the formats other than json also with -s. Outputs go in OUTDIR; a line
 # "DIFF <format> <input> (<pandoc status>/<podoc status>) <n>" is
@@ -67,7 +67,7 @@ one() {
   (cd "$dir" && $limit "$pandoc" --wrap=none --syntax-highlighting=none -f markdown \
     -t "$fmt" "$file" "$@" > "$out.pandoc" 2> "$out.pandoc.err")
   ps=$?
-  (cd "$dir" && "$podoc" -t "$fmt" "$file" "$@" > "$out.podoc" 2> "$out.podoc.err")
+  (cd "$dir" && "$podoc" --wrap=none -t "$fmt" "$file" "$@" > "$out.podoc" 2> "$out.podoc.err")
   os=$?
   if [ $ps -ne $os ] || ! cmp -s "$out.pandoc" "$out.podoc"; then
     n=$(diff "$out.pandoc" "$out.podoc" | grep -c '^[<>]')

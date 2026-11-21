@@ -41,6 +41,28 @@ BEGIN
   PdIO.WriteString("|"); PdIO.WriteLn
 END Show;
 
+PROCEDURE Num(n: LONGINT);
+BEGIN
+  IF n >= 10 THEN Num(n DIV 10) END;
+  PdIO.WriteChar(CHR(ORD("0") + n MOD 10))
+END Num;
+
+PROCEDURE Offsets(name: ARRAY OF CHAR; d: L.Doc);
+BEGIN
+  PdIO.WriteString("== "); PdIO.WriteString(name); PdIO.WriteLn;
+  Num(L.Offset(d)); PdIO.WriteString(" ");
+  Num(L.MinOffset(d)); PdIO.WriteString("|"); PdIO.WriteLn
+END Offsets;
+
+PROCEDURE Chop(name, s: ARRAY OF CHAR; n: LONGINT);
+  VAR i: LONGINT;
+BEGIN
+  i := 0; WHILE s[i] # 0X DO IF s[i] = "$" THEN s[i] := 0AX END; INC(i) END;
+  PdIO.WriteString("== "); PdIO.WriteString(name); PdIO.WriteLn;
+  PdIO.WriteRope(L.Chop(Ropes.FromString(s), n));
+  PdIO.WriteString("|"); PdIO.WriteLn
+END Chop;
+
 PROCEDURE Vcat(a, b, c, d: L.Doc): L.Doc;
 BEGIN
   RETURN L.Above(a, L.Above(b, L.Above(c, d)))
@@ -95,7 +117,14 @@ BEGIN
   Show("empty", 0, NIL);
   Show("prefix trimmed", 0, L.Prefixed("> ", L.Cat(T("a"), L.Cat3(T("$"), T("$"), T("b")))));
   Show("nested prefixes", 0,
-    L.Prefixed("> ", L.AboveBlank(T("a"), L.Prefixed("> ", L.Above(T("b"), T("c"))))))
+    L.Prefixed("> ", L.AboveBlank(T("a"), L.Prefixed("> ", L.Above(T("b"), T("c"))))));
+  Show("no bad wraps", 4, Words("aaa * bbb > c 1. d"));
+  Show("avoid bad wraps", 4, L.AvoidBadWraps(Words("aaa * bbb > c 1. d"), NIL));
+  Offsets("offsets", Words("aa bbbb c"));
+  Offsets("offsets of lines", L.Above(Words("a b c d e"), Words("ffff g")));
+  Offsets("offsets of prefixed", L.Cat(T("ab"), L.Prefixed("> ", Words("ccc d"))));
+  Chop("chop", "abcdefg", 3);
+  Chop("chop lines", "ab$cdefgh$i$", 2)
 END Run;
 
 BEGIN

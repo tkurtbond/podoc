@@ -66,6 +66,7 @@ VAR
   template*: String; (* --template; "" for the default *)
   before*, after*, header*: File; (* -B, -A, -H *)
   wrap*: String; (* --wrap: auto, none or preserve *)
+  columns*: LONGINT; (* --columns: the line length, 72 by default *)
   idPrefix*: String; (* --id-prefix *)
   numberSections*: BOOLEAN; (* -N *)
   toc*: BOOLEAN; (* --toc *)
@@ -438,6 +439,25 @@ BEGIN
   RETURN TRUE
 END SetWrap;
 
+(* --columns: a number greater than 0, perhaps between spaces, as
+   pandoc's safeStrRead reads it *)
+PROCEDURE SetColumns(VAR arg: ARRAY OF CHAR): BOOLEAN;
+  VAR i, n: LONGINT; ok: BOOLEAN;
+BEGIN
+  i := 0; n := 0; ok := FALSE;
+  WHILE (i < LEN(arg)) & ((arg[i] = " ") OR (arg[i] = 9X) OR (arg[i] = 0AX)) DO INC(i) END;
+  WHILE (i < LEN(arg)) & (arg[i] >= "0") & (arg[i] <= "9") & (n <= 99999999) DO
+    n := n * 10 + ORD(arg[i]) - ORD("0"); ok := TRUE; INC(i)
+  END;
+  WHILE (i < LEN(arg)) & ((arg[i] = " ") OR (arg[i] = 9X) OR (arg[i] = 0AX)) DO INC(i) END;
+  IF ~ok OR (n = 0) OR (i < LEN(arg)) & (arg[i] # 0X) THEN
+    PdIO.Message("Argument of --columns must be a number greater than 0");
+    PdIO.Exit(PdIO.OptionError)
+  END;
+  columns := n;
+  RETURN TRUE
+END SetColumns;
+
 PROCEDURE SetIdPrefix(VAR arg: ARRAY OF CHAR): BOOLEAN;
 BEGIN
   COPY(arg, idPrefix);
@@ -562,7 +582,9 @@ BEGIN
   parser.AddOption(ArgParser.MakeStringOption("F", "filter",
     "Run the built-in filter that replaces the filter PROGRAM.", AddJsonFilter));
   parser.AddOption(ArgParser.MakeStringOption(0X, "wrap",
-    "How to wrap lines: auto, none or preserve (podoc does not wrap).", SetWrap));
+    "How to wrap lines: auto, none or preserve.", SetWrap));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "columns",
+    "Wrap lines at N columns (72).", SetColumns));
   parser.AddOption(ArgParser.MakeIntOption(0X, "tab-stop",
     "Expand tabs to every N columns (4).", SetTabStop, 1, 1000));
   parser.AddOption(ArgParser.MakeOption("p", "preserve-tabs",
@@ -785,7 +807,7 @@ BEGIN
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;
   standalone := FALSE; template := "";
-  wrap := "auto"; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
+  wrap := "auto"; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
   before := NIL; lastBefore := NIL; after := NIL; lastAfter := NIL;
   header := NIL; lastHeader := NIL
 END PdOptions.
