@@ -15,6 +15,7 @@ IMPORT Ropes, Strings, Utf8, Unicode, A := PdAst, L := PdLayout, T := PdTemplate
 
 TYPE
   Rope = Ropes.Rope;
+  MathFinder = POINTER TO RECORD (A.WalkerDesc) found: BOOLEAN END;
   Buf = POINTER TO ARRAY OF CHAR;
 
   (* a list of Docs *)
@@ -1158,9 +1159,29 @@ END LitV;
 
 (* Writes the document doc as ms: its body, or, if tmpl is not NIL,
    the template filled in *)
-PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
+(* Finding inline math, as the writer would *)
+
+PROCEDURE (w: MathFinder) Inline*(i: A.Inline): A.Inline;
+BEGIN
+  IF (i.kind = A.Math) & (i(A.MathInl).math = A.InlineMath) THEN w.found := TRUE END;
+  RETURN i
+END Inline;
+
+(* Whether the metadata or the blocks of doc hold inline math: what
+   hasInlineMath is likely to be once the document is written. It is
+   checked after. *)
+PROCEDURE HasMath(doc: A.Doc): BOOLEAN;
+  VAR w: MathFinder;
+BEGIN
+  NEW(w); w.found := FALSE;
+  A.WalkMetaValue(w, doc.meta);
+  doc.blocks := A.WalkBlocks(w, doc.blocks);
+  RETURN w.found
+END HasMath;
+
+PROCEDURE Write(doc: A.Doc; tmpl: T.Template; stream: BOOLEAN): BOOLEAN;
   VAR ctx, v: T.Value; title, main: L.Doc; meta: A.MetaMapV; authors: A.InlineList;
-    s: Rope; b: A.Block;
+    s: Rope; b: A.Block; slot: T.Template; guess, ours: BOOLEAN;
 BEGIN
   firstPara := TRUE; smallCaps := FALSE; inHeader := FALSE; hasInlineMath := FALSE;
   fontI := FALSE; fontB := FALSE; fontC := FALSE; fontV := FALSE; notes := NIL;
@@ -1176,9 +1197,11 @@ BEGIN
     L.Open(width); b := doc.blocks;
     WHILE b # NIL DO L.PutAbove(Block(b)); b := b.next END;
     L.Close; PdIO.WriteLn;
-    RETURN
+    RETURN TRUE
   END;
-  main := Blocks(doc.blocks);
+  slot := NIL;
+  IF stream & ~T.Has(ctx, "body") THEN slot := T.Slot(tmpl, "body") END;
+  IF slot = NIL THEN main := Blocks(doc.blocks) END;
   C.ResetField(ctx, "title", T.NewSimple(title));
   s := NIL; authors := Sh.DocAuthors(meta);
   WHILE authors # NIL DO
@@ -1190,9 +1213,33 @@ BEGIN
   C.DefField(ctx, "title-meta", LitV(EscapeStr(Sh.Stringify(Sh.DocMeta(meta, "title")))));
   C.DefField(ctx, "toc", T.NewBool(wantToc));
   C.DefField(ctx, "hyphenate", T.NewBool(TRUE));
-  C.DefField(ctx, "has-inline-math", T.NewBool(hasInlineMath));
-  C.DefField(ctx, "body", T.NewSimple(main));
-  L.Write(T.Render(tmpl, ctx), width)
+  IF slot = NIL THEN
+    C.DefField(ctx, "has-inline-math", T.NewBool(hasInlineMath));
+    C.DefField(ctx, "body", T.NewSimple(main));
+    L.Write(T.Render(tmpl, ctx), width);
+    RETURN TRUE
+  END;
+  (* the body a block at a time, between the template's parts before
+     and after it. has-inline-math, if the template's part before the
+     body needs it, is guessed, and the output held until the guess is
+     known to be right. *)
+  ours := ~T.Has(ctx, "has-inline-math");
+  guess := hasInlineMath OR ours & HasMath(doc);
+  C.DefField(ctx, "has-inline-math", T.NewBool(guess));
+  L.OpenWhole(width, ours);
+  L.Put(T.RenderBefore(tmpl, slot, ctx));
+  L.BeginSlot; b := doc.blocks;
+  WHILE b # NIL DO L.PutAbove(Block(b)); b := b.next END;
+  L.EndSlot;
+  IF ours & (hasInlineMath # guess) THEN L.Finish(FALSE); RETURN FALSE END;
+  L.Put(T.RenderAfter(slot, ctx));
+  L.Close;
+  RETURN TRUE
+END Write;
+
+PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
+BEGIN
+  IF ~Write(doc, tmpl, TRUE) THEN IF Write(doc, tmpl, FALSE) THEN END END
 END WriteDoc;
 
 BEGIN

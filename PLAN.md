@@ -1217,8 +1217,6 @@ ConTeXt.
   "expecting ..." part of template error messages.
 - Memory use (found 2026-11-20; the layout writers' part fixed the
   same day, see docs/developer/memory-use-problem.md). Left:
-  - with a template (`-s`) the body is still built whole as a `Doc`
-    before it is laid out;
   - ConTeXt's sections are its top-level blocks, each built whole;
   - the AST itself: 30-45 times the input at 12 MB, for every writer;
   - running out of poc's heap ends in a NIL trap, not a message:
@@ -2066,3 +2064,47 @@ ConTeXt.
   `.eps` images was checked identical to pandoc 3.10's; neither
   converts images for ms. img2pdf, magick and gm compared on a JPEG
   and two PNGs (Phase 21).
+- 2026-11-20: With a template (`-s`), the ms, ConTeXt, markdown and
+  plain writers lay the body out a block at a time too.
+  - `PdTemplate.Slot` finds a template's one top-level `$body$`. It
+    must have no pipes, `body` must be used nowhere else, and nothing
+    after it may nest. `RenderBefore` and `RenderAfter` render the
+    parts either side of it.
+  - `PdLayout.OpenWhole` writes what `Write` writes, unchomped.
+    `BeginSlot` and `EndSlot` take the body's blocks as one value with
+    its final new line removed.
+  - Some fields depend on writing the body: ms `has-inline-math`, and
+    ConTeXt `csl-refs` and `csl-hanging-indent`. The writer guesses
+    them from a walk of the AST and holds the output in memory (text,
+    not a `Doc`). If a guess proves wrong, the output is discarded and
+    the body is built whole, as before: math in an image's alt text,
+    for one, is not math the ms writer writes.
+  - Any other case also builds the body whole, as before: no
+    top-level `$body$`, or `body` set by `-V` or the metadata.
+  - MANUAL ×10, `-s --wrap=none`, `-OC`, peak RSS from HEAD (1d71259)
+    to now:
+    - ms: 221 to 144 MB;
+    - ConTeXt: 196 to 149 MB;
+    - markdown: 255 to 140 MB;
+    - plain: 194 to 140 MB.
+    Each is also 0.1–0.2 s faster.
+  - Output unchanged: 1d71259 against the new build on 186,960 runs,
+    byte for byte (stdout, stderr and exit status); none differed.
+    - Inputs: test/cases, pandoc's testsuite, tables, `MANUAL.txt`
+      and test/command, Lost-Worlds and Galactic-Bounty-Hunters, and
+      edge cases (an empty file, math in metadata or alt text, a
+      `refs` Div, `body` in the metadata).
+    - Formats: ms, context, markdown, plain, gfm and commonmark.
+    - Templates: the default, at four wrap settings; nine edge-case
+      templates (`$body$` first, inline, in a conditional, with a
+      pipe, before a nested part, before and after blank lines, and
+      around the guessed fields); `-V body=`; the user's ms and
+      ConTeXt templates.
+  - Both fallbacks were checked to run and to give the same output.
+  - `make test` passed under `-O2` and `-OC`: 247 case tests and 23
+    round trips under each.
+  - `tools/bench convert build` and `pdf` were rerun, and
+    docs/developer/performance.md updated from them. With `-s` on
+    MANUAL, podoc now takes 18.8–23.3 MiB, at most 1.4 MiB more than
+    without it. The Lost-Worlds ConTeXt build went from 12.5 to
+    8.2 MiB, and the digest from 20.6 to 13.5 MiB.

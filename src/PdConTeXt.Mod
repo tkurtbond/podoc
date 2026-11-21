@@ -15,6 +15,7 @@ IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
 TYPE
   Rope = Ropes.Rope;
   Buf = PdIO.Text;
+  RefsFinder = POINTER TO RECORD (A.WalkerDesc) refs, hanging: BOOLEAN END;
 
 VAR
   (* options *)
@@ -915,24 +916,51 @@ END MetaString;
 
 (* Writes the document doc as ConTeXt: its body, or, if tmpl is not
    NIL, the template filled in *)
-PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
+PROCEDURE (w: RefsFinder) Block*(b: A.Block): A.Block;
+  VAR attr: A.Attr;
+BEGIN
+  IF b.kind = A.Div THEN
+    attr := b(A.DivBlk).attr;
+    IF (attr # NIL) & Eq(attr.id, "refs") THEN
+      w.refs := TRUE; w.hanging := A.HasClass(attr, "hanging-indent")
+    END
+  END;
+  RETURN b
+END Block;
+
+PROCEDURE Write(doc: A.Doc; blocks: A.Block; tmpl: T.Template; stream: BOOLEAN): BOOLEAN;
   VAR ctx: T.Value; main, placelist: L.Doc; meta: A.MetaMapV; s, lang: Rope; found: BOOLEAN;
-    blocks: A.Block;
     k: INTEGER; b: Buf; n, i: LONGINT;
     levels: ARRAY 6, 20 OF CHAR;
+    slot: T.Template; w: RefsFinder; ours, refs0, hanging0, refs1, hanging1: BOOLEAN;
+    bl: A.Block;
 BEGIN
   nextRef := 1; listLevel := 0; cslRefs := FALSE; cslHanging := FALSE;
   meta := doc.meta;
   ctx := C.Build(meta, BlockDoc, InlineDoc);
-  blocks := Sh.MakeSections(FALSE, -1, doc.blocks);
   IF tmpl = NIL THEN
     (* a block at a time, so the whole body is never built *)
     L.Open(width);
     WHILE blocks # NIL DO L.PutAbove(Block(blocks)); blocks := blocks.next END;
     L.Close; PdIO.WriteLn;
-    RETURN
+    RETURN TRUE
   END;
-  main := Blocks(blocks);
+  slot := NIL;
+  IF stream & ~T.Has(ctx, "body") THEN slot := T.Slot(tmpl, "body") END;
+  ours := FALSE;
+  IF slot = NIL THEN main := Blocks(blocks)
+  ELSE
+    (* csl-refs and csl-hanging-indent, if the template's part before
+       the body needs them, are guessed, and the output held until the
+       guess is known to be right *)
+    ours := ~T.Has(ctx, "csl-refs") OR ~T.Has(ctx, "csl-hanging-indent");
+    refs0 := cslRefs; hanging0 := cslHanging;
+    IF ours THEN
+      NEW(w); w.refs := cslRefs; w.hanging := cslHanging;
+      blocks := A.WalkBlocks(w, blocks);
+      cslRefs := w.refs; cslHanging := w.hanging
+    END
+  END;
   C.DefField(ctx, "toc", T.NewBool(wantToc));
   C.DefField(ctx, "lof", T.NewBool(FALSE));
   C.DefField(ctx, "lot", T.NewBool(FALSE));
@@ -946,7 +974,7 @@ BEGIN
     END
   END;
   C.DefField(ctx, "placelist", T.NewSimple(placelist));
-  C.DefField(ctx, "body", T.NewSimple(main));
+  IF slot = NIL THEN C.DefField(ctx, "body", T.NewSimple(main)) END;
   C.DefField(ctx, "layout", T.NewSimple(Layout(ctx)));
   C.DefField(ctx, "tagging", T.NewBool(FALSE));
   C.DefField(ctx, "number-sections", T.NewBool(numberSections));
@@ -980,7 +1008,27 @@ BEGIN
     C.DefField(ctx, "context-dir", T.NewSimple(L.Literal(s)))
   ELSE C.DefField(ctx, "context-dir", T.NewSimple(NIL))
   END;
-  L.Write(T.Render(tmpl, ctx), width)
+  IF slot = NIL THEN L.Write(T.Render(tmpl, ctx), width); RETURN TRUE END;
+  (* the body a block at a time, between the template's parts before
+     and after it *)
+  refs1 := cslRefs; hanging1 := cslHanging;
+  cslRefs := refs0; cslHanging := hanging0;
+  L.OpenWhole(width, ours);
+  L.Put(T.RenderBefore(tmpl, slot, ctx));
+  L.BeginSlot; bl := blocks;
+  WHILE bl # NIL DO L.PutAbove(Block(bl)); bl := bl.next END;
+  L.EndSlot;
+  IF ours & ((cslRefs # refs1) OR (cslHanging # hanging1)) THEN L.Finish(FALSE); RETURN FALSE END;
+  L.Put(T.RenderAfter(slot, ctx));
+  L.Close;
+  RETURN TRUE
+END Write;
+
+PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
+  VAR blocks: A.Block;
+BEGIN
+  blocks := Sh.MakeSections(FALSE, -1, doc.blocks);
+  IF ~Write(doc, blocks, tmpl, TRUE) THEN IF Write(doc, blocks, tmpl, FALSE) THEN END END
 END WriteDoc;
 
 BEGIN

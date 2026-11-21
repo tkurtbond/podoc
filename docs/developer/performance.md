@@ -1,7 +1,8 @@
 # Performance: podoc and pandoc
 
 Measured 2026-11-20 with `tools/bench`, after the performance fixes of
-b725290 and the memory fixes made later that day (see
+b725290 and the memory fixes made later that day, the last of which
+lays the body out a block at a time with a template too (see
 `docs/developer/memory-use-problem.md`).
 
 **podoc is faster than pandoc on every input and output measured, and
@@ -11,9 +12,9 @@ RSS.
 
 | | podoc is faster by | podoc's memory | pandoc's memory | pandoc uses more by |
 |---|---:|---:|---:|---:|
-| Small and medium inputs (up to 300 KB) | 1.4–10× | 4–25 MiB | 23–234 MiB | 6–30× |
-| 3 MB input | 4.4–7.7× | 99–139 MiB | 309–611 MiB | 3.0–4.5× |
-| The user's Lost-Worlds builds | 7–66× | 8–21 MiB | 134–139 MiB | 7–17× |
+| Small and medium inputs (up to 300 KB) | 1.9–11× | 4–23 MiB | 23–234 MiB | 6–29× |
+| 3 MB input | 4.5–7.7× | 99–141 MiB | 309–610 MiB | 3.0–4.5× |
+| The user's Lost-Worlds builds | 8–68× | 8–14 MiB | 135–140 MiB | 10–17× |
 
 The Lost-Worlds builds that use `pandoc-include` are about 65× faster,
 mostly because pandoc runs that Python filter.
@@ -72,29 +73,29 @@ peak RSS ÷ podoc's.
 
 | Input | Output | pandoc | podoc | Time ratio | Memory ratio |
 |---|---|---:|---:|---:|---:|
-| empty | all | 6–10 ms, 23–27 MiB | 4.5–4.9 ms, 3.8 MiB | 1.4–2.1× | 6–7× |
-| testsuite (9 KB) | all | 48–55 ms, 121–122 MiB | 8–10 ms, 4–5 MiB | 5.2–6.2× | 24–30× |
-| breakout (50 KB) | json | 63 ms, 122 MiB | 15 ms, 5.2 MiB | 4.2× | 23× |
-| | html | 78 ms, 123 MiB | 17 ms, 7.2 MiB | 4.5× | 17× |
-| | ms | 78 ms, 124 MiB | 16 ms, 7.2 MiB | 4.9× | 17× |
-| | context | 75 ms, 122 MiB | 19 ms, 7.9 MiB | 3.9× | 15× |
-| | markdown | 87 ms, 133 MiB | 21 ms, 7.0 MiB | 4.2× | 19× |
-| | plain | 86 ms, 133 MiB | 19 ms, 7.2 MiB | 4.5× | 18× |
-| MANUAL (300 KB) | json | 255 ms, 139 MiB | 29 ms, 11.6 MiB | 8.8× | 12× |
-| | html | 305 ms, 144 MiB | 56 ms, 19.2 MiB | 5.4× | 7.5× |
-| | ms | 523 ms, 230 MiB | 51 ms, 18.1 MiB | 10.2× | 12.7× |
-| | context | 492 ms, 224 MiB | 49 ms, 19.9 MiB | 10.0× | 11.3× |
-| | markdown | 351 ms, 175 MiB | 66 ms, 18.0 MiB | 5.3× | 9.7× |
-| | plain | 339 ms, 175 MiB | 45 ms, 17.7 MiB | 7.5× | 9.9× |
-| MANUAL ×10 (3 MB) | json | 2.24 s, 309 MiB | 0.29 s, 99 MiB | 7.7× | 3.1× |
-| | html | 2.76 s, 415 MiB | 0.63 s, 138 MiB | 4.4× | 3.0× |
-| | ms | 3.18 s, 510 MiB | 0.62 s, 137 MiB | 5.1× | 3.7× |
-| | context | 2.97 s, 437 MiB | 0.56 s, 139 MiB | 5.3× | 3.1× |
-| | markdown | 3.22 s, 611 MiB | 0.68 s, 137 MiB | 4.8× | 4.5× |
-| | plain | 3.01 s, 599 MiB | 0.54 s, 137 MiB | 5.5× | 4.4× |
+| empty | all | 9–12 ms, 23–27 MiB | 2.5–4.9 ms, 3.8 MiB | 1.9–3.7× | 6–7× |
+| testsuite (9 KB) | all | 49–55 ms, 120–122 MiB | 4–10 ms, 4–5 MiB | 5.4–11.4× | 25–29× |
+| breakout (50 KB) | json | 68 ms, 122 MiB | 12 ms, 5.6 MiB | 5.7× | 22× |
+| | html | 74 ms, 123 MiB | 20 ms, 7.3 MiB | 3.7× | 17× |
+| | ms | 76 ms, 123 MiB | 21 ms, 7.3 MiB | 3.7× | 17× |
+| | context | 74 ms, 122 MiB | 22 ms, 8.0 MiB | 3.4× | 15× |
+| | markdown | 89 ms, 133 MiB | 19 ms, 7.1 MiB | 4.6× | 19× |
+| | plain | 85 ms, 133 MiB | 20 ms, 7.3 MiB | 4.4× | 18× |
+| MANUAL (300 KB) | json | 257 ms, 138 MiB | 29 ms, 11.6 MiB | 8.9× | 12× |
+| | html | 310 ms, 144 MiB | 56 ms, 19.1 MiB | 5.6× | 7.5× |
+| | ms | 507 ms, 230 MiB | 50 ms, 18.3 MiB | 10.1× | 12.6× |
+| | context | 489 ms, 224 MiB | 48 ms, 21.9 MiB | 10.2× | 10.2× |
+| | markdown | 356 ms, 175 MiB | 52 ms, 18.0 MiB | 6.8× | 9.7× |
+| | plain | 336 ms, 175 MiB | 44 ms, 17.7 MiB | 7.6× | 9.9× |
+| MANUAL ×10 (3 MB) | json | 2.21 s, 309 MiB | 0.29 s, 99 MiB | 7.7× | 3.1× |
+| | html | 2.75 s, 415 MiB | 0.61 s, 138 MiB | 4.5× | 3.0× |
+| | ms | 3.24 s, 510 MiB | 0.59 s, 137 MiB | 5.5× | 3.7× |
+| | context | 2.96 s, 436 MiB | 0.56 s, 141 MiB | 5.3× | 3.1× |
+| | markdown | 3.18 s, 610 MiB | 0.65 s, 137 MiB | 4.9× | 4.5× |
+| | plain | 2.98 s, 599 MiB | 0.53 s, 137 MiB | 5.6× | 4.4× |
 
-- **Startup:** pandoc takes about 7 ms and 23 MiB before reading
-  anything; podoc takes about 4 ms and 3.7 MiB. Of podoc's 4 ms, about
+- **Startup:** pandoc takes about 9 ms and 23 MiB before reading
+  anything; podoc takes about 4 ms and 3.8 MiB. Of podoc's 4 ms, about
   1.5 ms is GNU time's own startup, which the empty-file and testsuite
   times include. Without it, podoc takes about 3 ms. Above 50 KB, this
   overhead doesn't matter.
@@ -111,7 +112,8 @@ peak RSS ÷ podoc's.
 
 `-O2` is as fast as `-OC`, to within noise. It uses less memory on
 large inputs, presumably because its integers and `LONGINT`s are
-smaller:
+smaller. These figures are from the run before the template change,
+which doesn't touch conversions without `-s`:
 
 | MANUAL ×10 | json | html | ms | context | markdown | plain |
 |---|---:|---:|---:|---:|---:|---:|
@@ -122,13 +124,16 @@ smaller:
 
 | Case | Input | pandoc | podoc | Ratio |
 |---|---|---:|---:|---:|
-| `-s` html / ms / context | breakout | 85 / 80 / 74 ms | 22 / 23 / 21 ms | 3.5–3.9× |
-| `-s` html / ms / context | MANUAL | 333 / 514 / 485 ms | 69 / 60 / 56 ms | 4.8–8.7× |
-| wrapped plain / markdown / ms / context | MANUAL | 330 / 348 / 502 / 482 ms | 45 / 68 / 56 / 51 ms | 5.1–9.4× |
+| `-s` html / ms / context | breakout | 85 / 81 / 75 ms | 21 / 18 / 20 ms | 3.8–4.6× |
+| `-s` html / ms / context | MANUAL | 330 / 521 / 484 ms | 65 / 52 / 56 ms | 5.1–10.1× |
+| `-s` html / ms / context, memory | MANUAL | 147 / 234 / 219 MiB | 18.9 / 18.8 / 23.3 MiB | 7.8–12.4× |
+| wrapped plain / markdown / ms / context | MANUAL | 334 / 350 / 500 / 480 ms | 44 / 55 / 50 / 51 ms | 6.4–9.9× |
 
-With `-s`, podoc's ms and ConTeXt take 5–7 MiB more on MANUAL than
-without it: with a template, the body is still built whole before it
-is laid out. pandoc's memory is within a few MiB either way.
+With `-s`, podoc takes at most 1.4 MiB more than without it. Before
+the template change (see `docs/developer/memory-use-problem.md`), the
+body was built whole before it was laid out, and ms and ConTeXt took
+5–7 MiB more with `-s` on MANUAL: ms 25.7 MiB, ConTeXt 24.1 MiB.
+pandoc's memory is within a few MiB either way.
 
 ## The Lost-Worlds builds
 
@@ -144,12 +149,14 @@ its built-in versions and gets the substitutions with
 
 | Build | pandoc | podoc | Time ratio | Memory ratio |
 |---|---:|---:|---:|---:|
-| HTML | 1,902 ms, 135 MiB | 29 ms, 8.0 MiB | 66× | 17× |
-| ConTeXt | 1,888 ms, 134 MiB | 29 ms, 12.5 MiB | 65× | 10.7× |
-| Digest, 10 files | 301 ms, 139 MiB | 41 ms, 20.6 MiB | 7.4× | 6.7× |
-| PDF through `context` | 2.93 s | 1.13 s | 2.6× | |
-| PDF through `pdfroff` | 2.01 s | 0.20 s | 9.9× | |
+| HTML | 1,883 ms, 135 MiB | 28 ms, 8.0 MiB | 68× | 17× |
+| ConTeXt | 1,898 ms, 135 MiB | 30 ms, 8.2 MiB | 64× | 16× |
+| Digest, 10 files | 300 ms, 140 MiB | 37 ms, 13.5 MiB | 8.1× | 10.4× |
+| PDF through `context` | 2.96 s | 1.13 s | 2.6× | |
+| PDF through `pdfroff` | 2.02 s | 0.21 s | 9.6× | |
 
+- **The ConTeXt build and the digest use templates.** Before the
+  template change, podoc took 12.5 and 20.6 MiB for them.
 - **Most of pandoc's time on the first two builds goes to
   `pandoc-include`**, a Python filter. The digest doesn't use it, so it
   is closer to a plain conversion.
@@ -182,11 +189,11 @@ Results:
 | MANUAL ×10 | before | after b725290 | now |
 |---|---:|---:|---:|
 | json | 2.42 s | 0.28 s | 0.29 s |
-| html | 2.74 s | 0.60 s | 0.63 s |
-| ms | 4.1 s, crashed (signal 11) | 1.27 s, 445 MiB | 0.62 s, 137 MiB |
-| context | 3.9 s, crashed (signal 11) | 1.21 s, 333 MiB | 0.56 s, 139 MiB |
-| markdown | 6.6 s, crashed (signal 11) | 1.40 s, 359 MiB | 0.68 s, 137 MiB |
-| plain | 6.2 s, crashed (signal 11) | 1.21 s, 355 MiB | 0.54 s, 137 MiB |
+| html | 2.74 s | 0.60 s | 0.61 s |
+| ms | 4.1 s, crashed (signal 11) | 1.27 s, 445 MiB | 0.59 s, 137 MiB |
+| context | 3.9 s, crashed (signal 11) | 1.21 s, 333 MiB | 0.56 s, 141 MiB |
+| markdown | 6.6 s, crashed (signal 11) | 1.40 s, 359 MiB | 0.65 s, 137 MiB |
+| plain | 6.2 s, crashed (signal 11) | 1.21 s, 355 MiB | 0.53 s, 137 MiB |
 
 ## The changes that improved performance
 
@@ -232,11 +239,11 @@ All were made on 2026-11-20.
    - **The fix:** `Chomp` keeps the nodes it doesn't change; `Doc`
      nodes are smaller and the breaks shared; `PdLayout` renders as it
      walks the tree, without a flattened copy; the ms writer no longer
-     copies words that need no escaping; and, without a template, the
-     body is laid out a block at a time (`PdLayout.Open`, `Put`,
-     `PutAbove`, `Close`). The details, with what each step saved, are
+     copies words that need no escaping; and the body is laid out a
+     block at a time (`PdLayout.Open`, `Put`, `PutAbove`, `Close`),
+     with a template too (`PdTemplate.Slot`, `PdLayout.OpenWhole`). The details, with what each step saved, are
      in `docs/developer/memory-use-problem.md`.
-   - **What it does:** 137–139 MiB on MANUAL ×10, as the HTML writer,
+   - **What it does:** 137–141 MiB on MANUAL ×10, as the HTML writer,
      and about twice as fast.
 5. **The markdown writer hashes header identifiers.**
    - **The problem:** `PdMdWriter.Used` searched a linear list, so

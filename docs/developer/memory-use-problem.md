@@ -98,9 +98,29 @@ and `-s`), byte for byte.
    state and uses a buffer of its own. The output is written out every
    64 KB.
 
+6. **With a template too.** A template used to interpolate the whole
+   body as one `Doc`. Now `PdTemplate.Slot` finds the template's one
+   top-level `$body$`. It must have no pipes, `body` must be used
+   nowhere else, and nothing after it may nest, since the column after
+   the body would matter. The writer then calls `PdLayout.OpenWhole`,
+   which writes what `Write` writes, unchomped. It puts the part of the
+   template before the body, then the body's blocks between `BeginSlot`
+   and `EndSlot`, then the part after it. `EndSlot` removes the body's
+   final new line, as interpolation does.
+
+   A few fields depend on writing the body: ms `has-inline-math`, and
+   ConTeXt `csl-refs` and `csl-hanging-indent`. Those are guessed from
+   a walk of the AST. The output, as text, is then held in memory until
+   the body is written and the guess is checked. If the guess was
+   wrong (math in an image's alt text is not math the ms writer
+   writes), the output is discarded and the document is written again
+   with the body built whole. 186,960 runs, byte for byte against the
+   build before, included both fallbacks.
+
 Measured after each step, ms at ×10, peak RSS: 453 MB before, 329 MB
 after 1, 317 MB after 2, 255 MB after 3, 217 MB after 4 and 140 MB
-after 5.
+after 5. With `-s`, 221 MB before 6 and 144 MB after it; ConTeXt 196
+to 149 MB, markdown 255 to 140 MB, plain 194 to 140 MB.
 
 **A quadratic lookup, found along the way.** At ×40, markdown and
 plain took 15 s, against 3 s for ms. The markdown writer's `Used`
@@ -110,10 +130,9 @@ buckets keyed by `Ropes.Hash`, and plain takes 2.8 s at ×40.
 
 ## What is left
 
-- **With a template (`-s`), the body is still built whole.** The
-  template interpolates it as a `Doc`. At ×10, `-s -t ms` takes
-  221 MB and `-s -t markdown` 278 MB. The user's documents, all far
-  smaller, are built with `-s`.
+- **Some templates still have the body built whole**: those without
+  a top-level `$body$`, and those where `body` is set by `-V` or the
+  metadata. So does a wrong guess at a field (fix 6).
 - **ConTeXt's top-level blocks are its sections.** The writer wraps
   each section in a `Div` (`MakeSections`), so one level-one section
   is built whole at a time.

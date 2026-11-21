@@ -878,6 +878,9 @@ VAR
 
   (* the document being written a part at a time *)
   open: Level; isOpen, putAny: BOOLEAN; pending: Doc;
+  chompEnd: BOOLEAN; (* Close chomps the end *)
+  keep: BOOLEAN; (* the output is held until Finish *)
+  inSlot: BOOLEAN; held: Doc; (* between BeginSlot and EndSlot: the last part put *)
   rout: PdIO.Text; (* Render's buffer *)
 
 PROCEDURE IsBreak(kind: INTEGER): BOOLEAN;
@@ -1139,7 +1142,11 @@ END Write;
    what Write(Chomp(d), width) writes, d being the parts joined with Cat
    or Above, but without the whole of d ever being built. Each part is
    laid out when the next one, not chomped to nothing, is put; the last
-   such part, with any after it, is chomped and laid out by Close. *)
+   such part, with any after it, is chomped and laid out by Close.
+
+   OpenWhole, the parts, then Close or Finish, writes what Write(d,
+   width) writes, unchomped: a template rendered with a variable's value
+   given a part at a time, between BeginSlot and EndSlot. *)
 
 (* d's parts laid out through the open level *)
 PROCEDURE Feed(d: Doc);
@@ -1153,12 +1160,10 @@ BEGIN
     END;
     Drain(open, FALSE)
   END;
-  IF outLen >= 10000H THEN PdIO.WriteChars(out^, 0, outLen); outLen := 0 END
+  IF ~keep & (outLen >= 10000H) THEN PdIO.WriteChars(out^, 0, outLen); outLen := 0 END
 END Feed;
 
-(* Starts writing a document laid out at width columns, or not wrapped
-   if width is 0 *)
-PROCEDURE Open*(width: LONGINT);
+PROCEDURE Start(width: LONGINT);
 BEGIN
   ASSERT(~isOpen);
   outLen := 0;
@@ -1166,16 +1171,39 @@ BEGIN
   usePrefix := TRUE; lineLength := width;
   column := 0; newlines := 2;
   StartLevel(open, NIL, TRUE);
-  pending := NIL; putAny := FALSE; isOpen := TRUE
+  pending := NIL; putAny := FALSE; inSlot := FALSE; held := NIL; isOpen := TRUE
+END Start;
+
+(* Starts writing a document laid out at width columns, or not wrapped
+   if width is 0 *)
+PROCEDURE Open*(width: LONGINT);
+BEGIN
+  Start(width); chompEnd := TRUE; keep := FALSE
 END Open;
+
+(* Starts writing a document, as Open does, but not chomped at the
+   end. If hold, nothing is written until Finish. *)
+PROCEDURE OpenWhole*(width: LONGINT; hold: BOOLEAN);
+BEGIN
+  Start(width); chompEnd := FALSE; keep := hold
+END OpenWhole;
+
+PROCEDURE Put1(x: Doc);
+BEGIN
+  IF Chomp(x) = NIL THEN pending := Cat(pending, x)
+  ELSE Feed(pending); pending := x
+  END
+END Put1;
 
 (* x, the next part of the document Open started, as Cat joins it *)
 PROCEDURE Put*(x: Doc);
 BEGIN
   ASSERT(isOpen);
   IF x = NIL THEN RETURN END;
-  IF Chomp(x) = NIL THEN pending := Cat(pending, x)
-  ELSE Feed(pending); pending := x
+  IF inSlot THEN
+    IF held # NIL THEN Put1(held) END;
+    held := x
+  ELSE Put1(x)
   END
 END Put;
 
@@ -1188,11 +1216,31 @@ BEGIN
   Put(x); putAny := TRUE
 END PutAbove;
 
-(* Ends the document Open started, written to PdIO's output *)
-PROCEDURE Close*;
+(* Starts a variable's value, as a template interpolates it: the parts
+   put until EndSlot, joined as Put and PutAbove join them, as one
+   value, its final new line removed (RemoveFinalNl) *)
+PROCEDURE BeginSlot*;
 BEGIN
-  ASSERT(isOpen);
-  Feed(Chomp(pending)); pending := NIL;
+  ASSERT(isOpen & ~inSlot);
+  inSlot := TRUE; held := NIL; putAny := FALSE
+END BeginSlot;
+
+(* Ends the value BeginSlot started *)
+PROCEDURE EndSlot*;
+BEGIN
+  ASSERT(inSlot);
+  inSlot := FALSE;
+  IF held # NIL THEN Put1(RemoveFinalNl(held)); held := NIL END;
+  putAny := FALSE
+END EndSlot;
+
+(* Ends the document Open or OpenWhole started, written to PdIO's
+   output if write, else, if OpenWhole held it, discarded *)
+PROCEDURE Finish*(write: BOOLEAN);
+BEGIN
+  ASSERT(isOpen & ~inSlot);
+  IF chompEnd THEN Feed(Chomp(pending)) ELSE Feed(pending) END;
+  pending := NIL;
   IF open.hasP THEN
     IF (open.p.kind = newLine) OR (open.p.kind = blankLines) THEN
       open.p.kind := carriageReturn; open.p.n := 0; Keep(open, open.p)
@@ -1202,12 +1250,20 @@ BEGIN
   END;
   Drain(open, TRUE);
   EndLevel(open); isOpen := FALSE;
-  IF outLen > 0 THEN PdIO.WriteChars(out^, 0, outLen); outLen := 0 END
+  IF write & (outLen > 0) THEN PdIO.WriteChars(out^, 0, outLen) END;
+  outLen := 0; keep := FALSE
+END Finish;
+
+(* Ends the document Open started, written to PdIO's output *)
+PROCEDURE Close*;
+BEGIN
+  Finish(TRUE)
 END Close;
 
 BEGIN
   out := NIL; outLen := 0; buf := NIL; rout := NIL;
   isOpen := FALSE; pending := NIL; depth := 0;
+  chompEnd := TRUE; keep := FALSE; inSlot := FALSE; held := NIL;
   space := New(breakingSpace); cr := New(carriageReturn); nl := New(newLine);
   blank1 := New(blankLines); blank1.n := 1
 END PdLayout.

@@ -2254,7 +2254,7 @@ END LineLength;
    NIL, the template filled in *)
 PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
   VAR metadata, ctx: T.Value; titleblock, toc, main: L.Doc; e: T.Entry; blocks, b, last: A.Block;
-    tb: A.Block;
+    tb: A.Block; slot: T.Template;
 BEGIN
   notes := NIL; lastNote := NIL; noteCount := 0; noteNum := 1; ClearIds;
   inList := FALSE; escapeSpaces := FALSE; noBreaks := FALSE; upper := FALSE; script := NoScript;
@@ -2282,18 +2282,32 @@ BEGIN
     L.Close; PdIO.WriteLn;
     RETURN
   END;
-  main := L.Cat(BlockList(blocks), NotesAndRefs());
-  IF last # NIL THEN last.next := b END;
   ctx := metadata;
   e := C.variables.items;
   WHILE e # NIL DO T.PutRope(ctx, e.key, e.value); e := e.next END;
+  slot := NIL;
+  IF ~T.Has(ctx, "body") THEN slot := T.Slot(tmpl, "body") END;
+  IF slot = NIL THEN
+    main := L.Cat(BlockList(blocks), NotesAndRefs());
+    IF last # NIL THEN last.next := b END
+  END;
   C.DefField(ctx, "toc", T.NewSimple(toc));
   C.DefField(ctx, "table-of-contents", T.NewSimple(toc));
-  C.DefField(ctx, "body", T.NewSimple(main));
+  IF slot = NIL THEN C.DefField(ctx, "body", T.NewSimple(main)) END;
   IF (doc.meta # NIL) & (doc.meta.entries # NIL) THEN
     C.DefField(ctx, "titleblock", T.NewSimple(titleblock))
   END;
-  L.Write(T.Render(tmpl, ctx), LineLength())
+  IF slot = NIL THEN L.Write(T.Render(tmpl, ctx), LineLength()); RETURN END;
+  (* the body a block at a time, between the template's parts before
+     and after it *)
+  L.OpenWhole(LineLength(), FALSE);
+  L.Put(T.RenderBefore(tmpl, slot, ctx));
+  L.BeginSlot;
+  main := BlocksTo(blocks, TRUE); L.Put(NotesAndRefs());
+  IF last # NIL THEN last.next := b END;
+  L.EndSlot;
+  L.Put(T.RenderAfter(slot, ctx));
+  L.Close
 END WriteDoc;
 
 BEGIN

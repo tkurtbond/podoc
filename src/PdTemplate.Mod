@@ -1462,6 +1462,69 @@ BEGIN
   RETURN found
 END HasVariable;
 
+(* Whether t, or a template within it, nests *)
+PROCEDURE HasNested(t: Template): BOOLEAN;
+BEGIN
+  WHILE t # NIL DO
+    IF t.kind = nested THEN RETURN TRUE END;
+    IF (t.kind # literal) & (HasNested(t.a) OR HasNested(t.b)) THEN RETURN TRUE END;
+    t := t.next
+  END;
+  RETURN FALSE
+END HasNested;
+
+(* Whether the node t, alone, uses the variable name *)
+PROCEDURE NodeHasVariable(t: Template; name: ARRAY OF CHAR): BOOLEAN;
+  VAR nx: Template; found: BOOLEAN;
+BEGIN
+  nx := t.next; t.next := NIL;
+  found := HasVariable(t, name);
+  t.next := nx;
+  RETURN found
+END NodeHasVariable;
+
+(* The node of t, at its top level, that interpolates the variable name,
+   a single name, with no pipes, if t uses name nowhere else and nothing
+   after the node nests (its column would depend on the variable's
+   value); else NIL. Then t renders as RenderBefore, the variable's
+   value with its final new line removed, and RenderAfter. *)
+PROCEDURE Slot*(t: Template; name: ARRAY OF CHAR): Template;
+  VAR u: Template;
+BEGIN
+  u := t;
+  WHILE (u # NIL)
+     & ~((u.kind = interpolate) & (u.var.pipes = NIL) & (u.var.parts # NIL)
+         & (u.var.parts.next = NIL) & Ropes.EqualString(u.var.parts.name, name)) DO
+    IF NodeHasVariable(u, name) THEN RETURN NIL END;
+    u := u.next
+  END;
+  IF (u = NIL) OR HasVariable(u.next, name) OR HasNested(u.next) THEN RETURN NIL END;
+  RETURN u
+END Slot;
+
+(* The template t, up to its node slot (from Slot), rendered with the
+   context ctx, a map *)
+PROCEDURE RenderBefore*(t, slot: Template; ctx: Value): L.Doc;
+  VAR u: Template; d: L.Doc;
+BEGIN
+  column := 0;
+  IF ctx = NIL THEN ctx := NewMap() END;
+  IF t = slot THEN RETURN NIL END;
+  u := t; WHILE u.next # slot DO u := u.next END;
+  u.next := NIL;
+  d := RenderT(t, ctx);
+  u.next := slot;
+  RETURN d
+END RenderBefore;
+
+(* The template after its node slot (from Slot), rendered with the
+   context ctx, a map *)
+PROCEDURE RenderAfter*(slot: Template; ctx: Value): L.Doc;
+BEGIN
+  IF ctx = NIL THEN ctx := NewMap() END;
+  RETURN RenderT(slot.next, ctx)
+END RenderAfter;
+
 (* The template t rendered with the context ctx, a map *)
 PROCEDURE Render*(t: Template; ctx: Value): L.Doc;
 BEGIN
