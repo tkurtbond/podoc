@@ -1062,6 +1062,57 @@ All of this runs under `-O2` and `-OC`, as every phase does.
 - docs/user/podoc.md: the translation advice for rST is replaced by
   `-f rst`.
 
+## Phase 20: The `%` title block
+
+pandoc markdown's `pandoc_title_block` extension, on by default:
+up to three lines starting with `%` at the top of a document give
+the title, the authors and the date (`pandocTitleBlock`,
+`Readers/Markdown.hs`). The user's documents use YAML instead, but
+pandoc's `test/testsuite.txt` starts with one. It is the one
+difference left between podoc's and pandoc's reading of the test
+inputs. This phase does not depend on Phase 19 and can be done
+before it.
+
+- **The lines** (`rawTitleBlockLine`):
+  - `%`, spaces, then the rest of the line;
+  - continuation lines, which start with a space and are not blank,
+    joined to it;
+  - the whole trimmed.
+- **What each line gives:**
+  - the first line is the title, read as inlines and trimmed;
+  - the second gives the authors, split on `;` (and spaces after it)
+    and on line ends, each one read as inlines and trimmed;
+  - the third is the date.
+- **Empty fields:** each line is optional in turn, and an empty one
+  sets nothing. For example, `%` and then `% Only Author` give only
+  an `author`.
+- **What follows:** blank lines after the block are skipped. The
+  block must be at the very start of the input.
+- **Metadata:** the result is `title`, `author` (a `MetaList`) and
+  `date`. A YAML metadata block in the same document wins over the
+  title block for the same key (pandoc 3.10, checked 2026-11-20:
+  `% Block Title` and YAML `title: YAML Title` give `YAML Title`).
+- **The extension:** `-f markdown-pandoc_title_block` turns it off,
+  and the `%` lines are read as a paragraph. Today any reader
+  extension but `grid_tables` exits with status 23.
+- **Tests:**
+  - case tests with expected JSON from pandoc for:
+    - all three lines;
+    - empty lines;
+    - several authors;
+    - continuation lines;
+    - inline markup in the lines;
+    - a title block with a YAML block;
+    - the extension off;
+    - `-s` and the `ms`, ConTeXt, HTML and markdown writers through
+      the templates' `title`, `author` and `date`;
+  - `testsuite.txt` reading as pandoc reads it, byte for byte, and
+    the testsuite entries in `make compare` the same.
+- **Not part of this phase:** writing a `%` title block. pandoc's
+  markdown writer does that only under
+  `-t markdown-yaml_metadata_block`, a writer extension, already in
+  "Later".
+
 ## Later, not scheduled
 
 - An rST writer, `-t rst` (decision 19).
@@ -1073,7 +1124,7 @@ All of this runs under `-O2` and `-OC`, as every phase does.
 - Output wrapping at `--columns` for the HTML writer (Phases 17 and
   18 cover plain, markdown, ms and ConTeXt; decision 16).
 - The markdown reader, not needed by the user's documents so far:
-  the `%` title block; raw TeX blocks, environments, macros and the
+  raw TeX blocks, environments, macros and the
   commands pandoc's LaTeX reader reads specially; citations and
   example references; wikilinks and base64 data URIs; table cells
   that hold blank lines.
