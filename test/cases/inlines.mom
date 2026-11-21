@@ -1,0 +1,19 @@
+.PP
+\f[I]emph\f[R] \f[B]strong\f[R] \f[B]\f[BI]both\f[B]\f[R] \f[I]u\f[R]
+\f[B]uu\f[R] \m[strikecolor]strike\m[] H\v'.3m'\s[-2]2\s[+2]\v'-.3m'O
+x\*[SUP]2\*[SUPX] \f[CR]code\f[R] \(lqdouble\(rq and \(oqsingle\(cq
+quotes \(en dashes \(em and\&...
+ellipses, it\(cqs.
+$x + y$ and
+.BR
+$$\(rsint f$$
+.BR and $5 and *not* and a
+.BR
+hard break, raw html, and .
+\f[CR]a \(ga b\f[R] and and \s-2SMALLCAPS\s0 and an emoji-free line with
+intraword_under_scores and 3\f[I]4\f[R]5.
+.LIST BULLET
+.ITEM
+.ITEM
+item after an empty one
+.LIST OFF

@@ -1,0 +1,35 @@
+.PP
+A
+.PDF_WWW_LINK http://example.com "link"
+and
+.PDF_WWW_LINK http://example.com/ref "ref"
+and
+.PDF_WWW_LINK http://example.com/ref "r1"
+and
+.PDF_WWW_LINK http://example.com/ref SUFFIX "." "r1"
+An image [IMAGE: alt text] inline, an autolink
+.PDF_WWW_LINK http://a.b/c "http://a.b/c"
+and
+.PDF_WWW_LINK mailto:me%40example.com SUFFIX "," "me\(atexample.com"
+and a span.
+.PDF_TARGET fig:one
+[IMAGE: A figure caption]
+A figure caption
+.PP
+Text with a note\c
+.FOOTNOTE
+The note\(cqs text,
+.PP
+with a second paragraph.
+.FOOTNOTE OFF
+\& and an inline note\c
+.FOOTNOTE
+Inline \f[I]note\f[R].
+.FOOTNOTE OFF
+\& and the same note again.\c
+.FOOTNOTE
+The note\(cqs text,
+.PP
+with a second paragraph.
+.FOOTNOTE OFF
+\&

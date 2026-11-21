@@ -3,8 +3,8 @@
 #
 # Runs the case tests: for each CASEDIR/<name>.md or <name>.rst
 # (test/cases by default) and each expected output beside it,
-# <name>.<ext>, where <ext> is a format (json, html, ms, context,
-# markdown, plain, source), runs
+# <name>.<ext>, where <ext> is a format (json, html, ms, mom,
+# context, markdown, plain, source), runs
 #
 #     PODOC -t <ext> <name>.md [the words of <name>.args]
 #
@@ -36,7 +36,7 @@ for md in *.md *.rst; do
   name=${md%.*}
   args=
   [ -f "$name.args" ] && args=$(cat "$name.args")
-  for ext in json html ms context markdown plain source; do
+  for ext in json html ms mom context markdown plain source; do
     [ -f "$name.$ext" ] || continue
     total=$((total + 1))
     # $args is split into words on purpose

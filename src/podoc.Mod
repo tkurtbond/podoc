@@ -22,7 +22,7 @@ MODULE podoc;
    megabytes PODOC_HEAP_LIMIT gives. *)
 
 IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdRst, PdJson,
-  T := PdTemplate, C := PdContext, PdHtml, PdMs, PdConTeXt, PdMdWriter,
+  T := PdTemplate, C := PdContext, PdHtml, PdMs, PdMom, PdConTeXt, PdMdWriter,
   PdInclude, PdFilters, PdPdf, PdImages, O := PdOptions;
 
 CONST
@@ -217,6 +217,10 @@ BEGIN
     PdMs.SetOptions(O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth);
     IF O.wrap = "auto" THEN PdMs.SetWidth(O.columns) ELSE PdMs.SetWidth(0) END;
     PdMs.WriteDoc(Doc(text, len), tmpl)
+  ELSIF to = "mom" THEN
+    PdMom.SetOptions(O.wrap = "preserve", O.toc, O.referenceLocation = "document");
+    IF O.wrap = "auto" THEN PdMom.SetWidth(O.columns) ELSE PdMom.SetWidth(0) END;
+    PdMom.WriteDoc(Doc(text, len), tmpl)
   ELSIF to = "context" THEN
     PdConTeXt.SetOptions(O.numberSections, O.wrap = "preserve", O.toc, O.tocDepth);
     IF O.wrap = "auto" THEN PdConTeXt.SetWidth(O.columns) ELSE PdConTeXt.SetWidth(0) END;

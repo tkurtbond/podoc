@@ -72,6 +72,8 @@ VAR
   template*: String; (* --template; "" for the default *)
   before*, after*, header*: File; (* -B, -A, -H *)
   wrap*: String; (* --wrap: auto, none or preserve *)
+  (* --reference-location: block, section or document; "" if not given *)
+  referenceLocation*: String;
   unknown*: String; (* --unknown: "", warn or error *)
   columns*: LONGINT; (* --columns: the line length, 72 by default *)
   idPrefix*: String; (* --id-prefix *)
@@ -196,6 +198,7 @@ BEGIN
      OR (e = ".mdwn") OR (e = ".mkd") OR (e = ".mkdn") OR (e = ".text")
      OR (e = ".txt") THEN COPY("markdown", fmt)
   ELSIF e = ".markua" THEN COPY("markua", fmt)
+  ELSIF e = ".mom" THEN COPY("mom", fmt) (* podoc's; pandoc has no mom *)
   ELSIF (e = ".ms") OR (e = ".roff") THEN COPY("ms", fmt)
   ELSIF e = ".muse" THEN COPY("muse", fmt)
   ELSIF e = ".native" THEN COPY("native", fmt)
@@ -464,6 +467,17 @@ BEGIN
   RETURN TRUE
 END SetWrap;
 
+(* --reference-location: block, section or document *)
+PROCEDURE SetReferenceLocation(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  IF (arg # "block") & (arg # "section") & (arg # "document") THEN
+    PdIO.Message("Argument of --reference-location must be block, section, or document");
+    PdIO.Exit(PdIO.OptionError)
+  END;
+  COPY(arg, referenceLocation);
+  RETURN TRUE
+END SetReferenceLocation;
+
 (* --columns: a number greater than 0, perhaps between spaces, as
    pandoc's safeStrRead reads it *)
 PROCEDURE SetColumns(VAR arg: ARRAY OF CHAR): BOOLEAN;
@@ -618,6 +632,8 @@ BEGIN
     "How to wrap lines: auto, none or preserve.", SetWrap));
   parser.AddOption(ArgParser.MakeStringOption(0X, "columns",
     "Wrap lines at N columns (72).", SetColumns));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "reference-location",
+    "Where notes go: block, section or document (mom: endnotes).", SetReferenceLocation));
   parser.AddOption(ArgParser.MakeIntOption(0X, "tab-stop",
     "Expand tabs to every N columns (4).", SetTabStop, 1, 1000));
   parser.AddOption(ArgParser.MakeOption("p", "preserve-tabs",
@@ -882,7 +898,7 @@ BEGIN
   COPY(to, filterFormat);
   IF to = "html5" THEN to := "html" END;
   IF (to # "source") & (to # "json") & (to # "html") & (to # "ms")
-     & (to # "context") & (to # "markdown") & (to # "plain") THEN
+     & (to # "mom") & (to # "context") & (to # "markdown") & (to # "plain") THEN
     PdIO.Message3("Unknown output format '", to, "'");
     PdIO.Exit(PdIO.UnknownWriter)
   END;
@@ -898,7 +914,7 @@ BEGIN
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;
   standalone := FALSE; template := "";
-  wrap := "auto"; unknown := ""; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
+  wrap := "auto"; referenceLocation := ""; unknown := ""; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
   before := NIL; lastBefore := NIL; after := NIL; lastAfter := NIL;
   header := NIL; lastHeader := NIL
 END PdOptions.

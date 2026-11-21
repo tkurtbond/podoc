@@ -112,6 +112,7 @@ def main(tmp):
      ("Shared writer code", pd("PdShared"), hs("Shared", "Writers/Shared")),
      ("HTML writer", pd("PdHtml"), hs("Writers/HTML")),
      ("ms writer", pd("PdMs", "PdRoff"), hs("Writers/Ms", "Writers/Roff", "RoffChar")),
+     ("mom writer", pd("PdMom"), []),
      ("ConTeXt writer", pd("PdConTeXt"), hs("Writers/ConTeXt")),
      ("Markdown and plain writers", pd("PdMdWriter"),
       hs("Writers/Markdown", "Writers/Markdown/Inline", "Writers/Markdown/Table",

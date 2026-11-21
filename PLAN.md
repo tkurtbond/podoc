@@ -1365,7 +1365,9 @@ the body.
 - **To try in groff first:** the elements marked "to check" in the
   research's §5.2 (code blocks, line blocks, list start numbers).
 - **Tests:** case tests `test/cases/<name>.mom`. Each expected file
-  is also checked once with `groff -mom -z -ww`.
+  is also checked once with `groff -mom -t -z` (mom itself warns
+  under `-ww`, so with groff's default warnings), after a
+  `.PRINTSTYLE TYPESET` and `.START`.
 
 ### Phase 23.3: Tables and figures
 
@@ -1397,7 +1399,11 @@ the body.
   and covers (decision 27).
 - **Example:** a statement template like the user's `statement.ms`
   (`.PAGE 5.5i 8.5i`, its margins, `fontfamily`, the contents first),
-  shipped with podoc and installed beside the docs.
+  shipped with podoc and installed beside the docs. Like
+  `statement.ms` it has `.special S Symbola`, for ♀, ♂ and other
+  symbols the text fonts lack; groff finds Symbola through `-F`,
+  given with `--pdf-engine-opt` (checked by hand on 2026-11-21 with
+  the scenario: no missing glyphs).
 - **The usual three:** `header-includes`, `include-before` and
   `include-after`.
 - **Options:** `--number-sections` as `HEADING_STYLE n NUMBER`, and
@@ -2760,3 +2766,29 @@ the body.
   under `-O2` and `-OC` (288 case tests, 23 round trips, 7 image
   tests), every ms case byte for byte; the 005-merchant scenario's
   `-s -t ms --toc` output is the same as the installed podoc's.
+- 2026-11-21: Phase 23.2 done. `PdMom`, the mom writer, with `-t mom`
+  (and `.mom` for `-o`) and `--reference-location`. What was tried in
+  groff 1.23 first, and what came of it:
+  - definition lists: mom's paragraph indent is saved in `pd:pi`, set
+    to 0, and the definitions indented with `.IL 2m`;
+  - a rule is `.DRH` then `.SP 1v`, since mom draws it at the next
+    line's baseline;
+  - block quotes do not nest in mom (the inner one's text is lost), so
+    a quote directly in a quote ends the outer one and the outer one
+    resumes after it; one further in is written as its blocks;
+  - groff 1.23's tbl restores the hyphenation margin and space in ems
+    that it saved in basic units, so mom's values grow with each table
+    until the second gives "numeric overflow" (fixed in 1.24); the
+    writer saves and restores them around each table;
+  - `.ENDNOTES` then `.TOC` needs `.if \n[.vpt]=0 .vpt` between them on
+    1.23 (for the template, 23.4);
+  - subscripts are `\v'.3m'\s[-2]`...: mom 2.5_d has no SUB, and
+    `\s-22` is size −22.
+  `make test` passed under `-O2` and `-OC` (298 case tests, 10 of them
+  `.mom`: the general blocks, edges, inlines, links, lists, tables and
+  grid tables cases, and `mom-features` and `mom-endnotes`); each
+  `.mom` file checked with `groff -mom -t -z` gives only missing-glyph
+  and "cannot adjust line" warnings in narrow table cells, as ms
+  does. `mom-features` with footnotes and with endnotes, and the
+  merchant scenario on statement paper with a contents page, were made
+  into PDFs with `pdfmom` and looked at. Phase 23.3 next.

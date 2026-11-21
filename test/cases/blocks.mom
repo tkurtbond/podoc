@@ -1,0 +1,40 @@
+.HEADING 1 NAMED a-heading "A heading"
+.PP
+Some text here over two lines.
+.HEADING 2 NAMED own "Another heading"
+.HEADING 1 NAMED a-heading-1 "A heading"
+.HEADING 2 NAMED a-heading-2 "A heading"
+.QUOTE
+.CODE
+indented code
+  more
+
+after blank
+.CODE OFF
+.QUOTE OFF
+.QUOTE
+.CODE
+main = print 1
+.CODE OFF
+.QUOTE OFF
+.QUOTE
+.CODE
+x = 1
+.CODE OFF
+.QUOTE OFF
+.BLOCKQUOTE
+.PP
+A quote continued lazily and more
+.PP
+second para
+.BLOCKQUOTE OFF
+.PP
+line one
+.BR
+\ \ \ indented line
+.BR
+continued here
+.DRH
+.SP 1v
+.PP
+plain para

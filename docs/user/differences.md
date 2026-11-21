@@ -27,8 +27,8 @@ in PLAN.md) is listed by the writer.
   extension names one (`.tex`, ...) when there is no `-f`, with 21. Inputs
   and `-o` imply formats as in pandoc, with pandoc's warnings when an
   extension names none.
-- podoc writes `html` (`html5`), `ms`, `context`, `markdown`,
-  `plain`, `json` and PDF; `-t latex`, or `-o x.tex` with no `-t`, ends it with exit
+- podoc writes `html` (`html5`), `ms`, `mom`, `context`, `markdown`,
+  `plain`, `json` and PDF; pandoc has no `mom` (see The mom writer); `-t latex`, or `-o x.tex` with no `-t`, ends it with exit
   status 22. The one writer extension podoc takes is `gutenberg`,
   for `plain` (and for `markdown`, where it does nothing, as in
   pandoc); any other, such as `-t markdown-raw_html`, ends podoc with
@@ -52,6 +52,10 @@ in PLAN.md) is listed by the writer.
   pandoc's message and status, 6.
 - `--unknown=warn|error` is podoc's own (see The reStructuredText
   reader). A value other than `warn` or `error` ends podoc with status 6.
+- `--reference-location` is used only by the mom writer, where
+  `document` makes notes endnotes; the other writers ignore it. A
+  value other than `block`, `section` or `document` gives pandoc's
+  message and status, 6.
 - `--quiet` and `--log` are not taken. `--verbose` gives only the
   reStructuredText reader's `[INFO]` lines, not pandoc's others
   (the files it reads, the template it uses, ...).
@@ -251,6 +255,27 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
   line holding highlighted inline code or math can wrap at a
   different place, since pandoc's text for them is not podoc's.
 - Raw blocks and inlines are passed through for the format `ms`
+  only.
+
+## The mom writer
+
+pandoc has no mom writer; `-t mom` (or `-o x.mom`) is podoc's own,
+for groff 1.23 and later.
+
+- Notes are footnotes, or endnotes, after the body, with
+  `--reference-location=document`. A note in a heading or in a link's
+  text is left out, with a warning.
+- Links in a heading or in another link's text are written as their
+  text.
+- mom's block quotes do not nest: a block quote directly inside
+  another is written as a quote of its own between the outer one's
+  parts, and one further in (in a list in a quote) as its blocks.
+- Strikeout is drawn in the colour `strikecolor`, which the template
+  defines; subscript is lowered and smaller text.
+- TeX math is written as its TeX, as in the ms writer.
+- Around each table the hyphenation margin and space are saved and
+  restored, as groff 1.23's tbl sets them wrongly after a table.
+- Raw blocks and inlines are passed through for the format `mom`
   only.
 
 ## The ConTeXt writer

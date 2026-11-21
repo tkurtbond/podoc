@@ -1,0 +1,67 @@
+.HEADING 1 NAMED h1 "Head \f[BI]ital\f[B] rest"
+.PP
+Some \f[I]emph\f[R] and \f[B]strong\f[R] text.\c
+.ENDNOTE
+A note.
+.PP
+Second para.
+.ENDNOTE OFF
+\& See (\c
+.PDF_LINK h1 SUFFIX ")." "the \f[I]head\f[R]"
+And
+.PDF_WWW_LINK https://example.com SUFFIX "," "a site"
+more.
+.LIST BULLET
+.ITEM
+one
+.ITEM
+two
+.PP
+second para
+.LIST DIGIT .
+.ITEM
+inner
+.ITEM
+inner2
+.LIST OFF
+.LIST OFF
+.LIST DIGIT ) (
+.RESET_LIST 3
+.ITEM
+three
+.ITEM
+four
+.LIST OFF
+.nr pd:pi \n[#PP_INDENT]
+.PARA_INDENT 0
+.PP
+\f[B]Term\f[R]
+.IL 2m
+.PP
+Definition one.
+.PP
+More def.
+.IL -2m
+.PARA_INDENT \n[pd:pi]u
+.BLOCKQUOTE
+.PP
+Quote one.
+.PP
+Quote two.
+.BLOCKQUOTE OFF
+.QUOTE
+.CODE
+\&.code line
+  indented \(dqq\(dq
+.CODE OFF
+.QUOTE OFF
+.PP
+line one
+.BR
+line two
+.DRH
+.SP 1v
+.PP
+H\v'.3m'\s[-2]2\s[+2]\v'-.3m'O and x\*[SUP]2\*[SUPX] and
+\m[strikecolor]struck\m[] and \f[CR]code\f[R] and \(lqquoted\(rq.
+.ENDNOTES

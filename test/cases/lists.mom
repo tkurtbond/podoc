@@ -1,0 +1,98 @@
+.LIST BULLET
+.ITEM
+one
+.ITEM
+two
+.ITEM
+three
+.ITEM
+loose one
+.ITEM
+loose two
+.ITEM
+item
+.PP
+continued para
+.QUOTE
+.CODE
+code in item
+.CODE OFF
+.QUOTE OFF
+.ITEM
+☐ todo
+.ITEM
+☒ done
+.LIST OFF
+.LIST DIGIT .
+.ITEM
+first
+.ITEM
+second
+.LIST BULLET
+.ITEM
+nested
+.ITEM
+nested two
+.LIST OFF
+.ITEM
+third
+.LIST OFF
+.LIST alpha ) (
+.ITEM
+alpha
+.ITEM
+beta
+.LIST OFF
+.LIST roman7 .
+.RESET_LIST 4
+.ITEM
+roman
+.ITEM
+five
+.ITEM
+default
+.ITEM
+again
+.LIST OFF
+.LIST DIGIT .
+.ITEM
+example one
+.ITEM
+example two
+.LIST OFF
+.nr pd:pi \n[#PP_INDENT]
+.PARA_INDENT 0
+.PP
+\f[B]Term one\f[R]
+.IL 2m
+.PP
+Definition one
+.IL -2m
+.PP
+\f[B]Term two\f[R]
+.IL 2m
+.PP
+Definition two
+.PP
+more of it
+.IL -2m
+.PP
+\f[B]Term three\f[R]
+.IL 2m
+.PP
+tight a
+.PP
+tight b
+.IL -2m
+.PARA_INDENT \n[pd:pi]u
+.PP
+Inside a div.
+.PDF_TARGET inner
+.PP
+nested
+.PDF_TARGET d
+.PP
+Html div text.
+Section text.
+.PP
+end

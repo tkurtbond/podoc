@@ -1,0 +1,57 @@
+.HEADING 1 NAMED same "Same"
+.HEADING 1 NAMED same-1 "Same"
+.HEADING 1 NAMED same-2 "Same"
+.HEADING 1 NAMED section ""
+.PP
+#5 not a heading ####### seven # closing hashes ### ## Trailing # in
+text #
+.PP
+Text - not a list after para
+.PP
+Para before code not code
+.LIST DIGIT .
+.ITEM
+one
+.PP
+para in item
+.ITEM
+two
+.ITEM
+ten
+.LIST OFF
+.LIST BULLET
+.ITEM
+a
+.ITEM
+b
+.ITEM
+c
+.LIST OFF
+.BLOCKQUOTE
+.LIST BULLET
+.ITEM
+quoted list
+.ITEM
+two
+.LIST OFF
+.BLOCKQUOTE OFF
+.BLOCKQUOTE
+.PP
+nested quote
+.BLOCKQUOTE OFF
+.QUOTE
+.CODE
+tab code
+line two
+.CODE OFF
+.QUOTE OFF
+.HEADING 1 NAMED unicode-unicode-heading "Unicode Ünïcode héading"
+.HEADING 2 NAMED numbers-first "123 Numbers first"
+.PP
+indented para
+.PP
+word
+.BR
+next line
+.BR
+hard break
