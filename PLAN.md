@@ -2522,3 +2522,7 @@ ConTeXt.
     JSON and messages byte for byte, with and without `-s`, under both
     models (292 runs); `make test` passed under `-O2` and `-OC` on
     atla (288 case tests, 23 round trips, 6 image tests).
+  - The six BSD VMs then built 3a97233 and passed `make test` under
+    `-O2` and `-OC`, as at 5e2f6e4 (288 case tests, 23 round trips,
+    5 image tests; the conversion test skipped, with no converters
+    installed).
