@@ -567,7 +567,9 @@ The table is kept in AGENTS.md as codes are assigned.
 - Bullet and ordered lists, with pandoc's rules: the four-space rule
   for continuation, lazy continuation, tight and loose lists, list
   styles and delimiters (`1.`, `1)`, `(1)`, `#.`, `a.`, `i.`), starting
-  numbers, nesting.
+  numbers, nesting. Inside a list item or definition a new ordered list
+  must start at 1, or its marker is text (`* a\n  (12) b` is two Plain
+  blocks, not a nested list), as pandoc does.
 - Cases for each rule, taken from pandoc's `testsuite.txt` and the
   user's `Includes/` stat blocks.
 

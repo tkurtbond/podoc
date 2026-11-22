@@ -961,6 +961,9 @@ BEGIN
     B.nextExample := save; RETURN FALSE
   END;
   B.nextExample := save;
+  (* Inside a list item or definition, as in pandoc, a new ordered list
+     must start at 1: "* text\n  (12) more" keeps "(12) more" as text. *)
+  IF (B.context = B.ListItemState) & (start # 1) THEN RETURN FALSE END;
   items := ListItems(OrderedItem, style, delim);
   IF items = NIL THEN B.nextExample := save; RETURN FALSE END;
   Compactify(items);
