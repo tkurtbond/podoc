@@ -72,7 +72,8 @@ Not asked, and left out of this study:
 
 - colour;
 - comments or strings in their own style;
-- HTML output;
+- HTML output (added later, 2026-11-22: PLAN.md decision 46 and
+  Phase 24.5);
 - line numbers;
 - languages beyond these.
 
@@ -645,9 +646,17 @@ Each phase is small enough to finish and commit alone.
   - Is it also a metadata variable?
   - Is a per-block class to override it wanted?
   - Default `none`?
+  - *Decided in part 2026-11-22* (PLAN.md decision 35):
+    `--code-style=none|mono|proportional`, and `code-style` in the
+    metadata. The default and the per-block override are open.
+  - *Completed 2026-11-22* (decision 35): default `none`; a block
+    overrides it with the class `.mono`, `.proportional` or `.plain`.
 - **Q2. Inline code.** Highlight inline code that has a language
   class, or only code blocks? In the proportional style, is inline
   code also set in the text font?
+  *Decided 2026-11-22* (decision 38): bold, yes; always in the code
+  font, as in the text font it would be hard to tell from the
+  running text.
 - **Q3. Words that are not reserved.** Should any of these be bold
   by default, or left to the user's lists?
   - Oberon's predeclared identifiers;
@@ -655,15 +664,192 @@ Each phase is small enough to finish and commit alone.
   - C++'s contextual `final`, `override`, `import`, `module`;
   - C's preprocessor directives;
   - sh's builtins.
+  *Decided 2026-11-22: reserved words only; the rest from users'
+  lists* (decision 45).
 - **Q4. Pascal modes.** One superset list, a list per mode chosen by
   class name, the `{$mode ...}` directive, or a combination?
+  *Decided 2026-11-22* (decision 39): a list per mode, chosen by
+  class; plain `pascal` means `fpc`.
 - **Q5. User lists.**
   - From files, metadata or both?
   - Replace, add, or both, and in what syntax?
+  - *Decided in part 2026-11-22* (decision 40): both files
+    (`--keywords=pascal:words.txt`) and metadata. *Completed
+    2026-11-22:* both: a list adds, a file's first line `#!replace`
+    replaces, a `-word` line removes; in metadata, a list adds and
+    `{replace: true, words: [...]}` replaces.
 - **Q6. The ms `\f[C]` bug.** Fix it now, as a change of its own,
   writing `\f[CR]` for code blocks? The fix is a difference from
   pandoc, to be listed in differences.md.
+  *Decided 2026-11-22: yes, as a change of its own* (decision 36).
 - **Q7. mom's proportional style.** `.QUOTE` set to roman, or another
-  mom block?
+  mom block? *Decided 2026-11-22: `.QUOTE` with `.QUOTE_FONT R`*
+  (decision 37).
 - **Q8. Oberon variants.** Is `oberon` only Oberon-2, or should the
   built-in lists also know Oberon-07 and Component Pascal?
+  *Decided 2026-11-22* (decision 41): original Oberon, Oberon-2,
+  Oberon-07 and Component Pascal, each a class; `oberon` means
+  Oberon-2. Classes: `oberon`/`oberon2`, `oberon1`/`oberon87`,
+  `oberon07`, `cp`/`componentpascal`.
+
+## 12. With vgrind's lessons
+
+Added 2026-11-22, after docs/research/vgrind.md and PLAN.md's
+decisions 30 to 34. It changes §7 and §8 where they differ; the rest
+of this study stands. The user decided to implement it, as PLAN.md's
+Phase 24. Nothing here is code yet. Decision 32's template lines have
+not been run.
+
+### 12.1 Three steps
+
+§8 had two steps: scan, then write. The proportional style gets a
+third step between them:
+
+1. **Scan** (`PdCode`): the code becomes spans: plain, reserved word,
+   or comment. Comments are new: they are needed for italic comments
+   (decision 30).
+2. **Lay out** (new, `PdCodeAlign`, proportional style only): each
+   line is cut into its indentation and its segments; groups of lines
+   whose segments share a column are found; positions are chosen as
+   `--code-align` says (decision 33).
+3. **Write** (`PdMs`, `PdMom`, `PdConTeXt`): the text goes through
+   each writer's escaping, with font changes and positions added.
+
+§8's rule still holds: **the text is never changed, only font changes
+and positions are added.** A wrong scan or a wrong layout misplaces
+bold, italic or a column. It cannot lose or garble code.
+
+### 12.2 The scanner, with comments
+
+- The language records and hooks are as in §5.8. The scanner already
+  finds comments, to skip reserved words in them; it now returns them
+  as spans as well.
+- vgrind.md §6.2's "mistakes to avoid" become cases in `PdCodeTest`:
+  - nested comments (Oberon, Modula-2, FreePascal);
+  - braces inside strings;
+  - C's `//`;
+  - Modula-2's case rule;
+  - sh's reserved words only in command position.
+- Reserved-word lists are in podoc's own format only (decision 31).
+
+### 12.3 Layout
+
+`PdCodeAlign` takes a block's lines, as spans, and gives a list of
+lines. Each line holds an indentation column and its segments. Each
+segment holds a source column and pieces of text, and each piece has
+its kind: plain, reserved or comment.
+
+- **Cutting a line**, as in vgrind.md §8.1:
+  - leading spaces give the indentation;
+  - a run of two or more spaces ends a segment, and the next segment
+    starts at its source column;
+  - a single space stays a space;
+  - trailing spaces are dropped.
+- **A boundary inside a comment** (`(* a  b *)`): the italic is closed
+  at the end of the segment and reopened at the start of the next.
+  ConTeXt needs this, since each segment is a box (vgrind.md §8.2).
+  roff does the same, so that the writers stay alike.
+- **Groups**, for `elastic` and `hybrid`: consecutive lines with a
+  segment at the same column. Their positions are worked out in
+  column order, since a group's prefix refers only to groups to its
+  left. This needs the whole block, which `L.Literal` already holds.
+- **`--code-align`** (decision 33):
+  - `none`: segments are joined again with their spaces (§4.4's
+    proportional style, unaligned);
+  - `fixed`: each segment at its column, with the guard against
+    overlap;
+  - `elastic` and `hybrid`: as `fixed`, plus the measured group
+    positions.
+- **Columns, not lengths:** the writer writes column numbers. The
+  template turns them into lengths with `code-column` and `code-gap`
+  (decision 32).
+- It is plain data in and out, tested without groff or ConTeXt.
+
+### 12.4 The writers
+
+**mono** needs no alignment: a monospaced font keeps the columns. It
+stays as §4 has it:
+
+- ms: `\f[CR]`, with `\f[CB]` for bold; this needs the `\f[C]` fix
+  first (Q6);
+- mom: `.QUOTE`/`.CODE`, with `\*[BD]`;
+- ConTeXt: `\starttyping[escape=yes]`, with `/BTEX\bf .../ETEX`.
+
+**proportional**, with vgrind's lessons:
+
+- **ms:**
+  - `.nf` in the text font: bold `\f[B]`, comments `\f[I]`, back to
+    `\f[R]`;
+  - indentation `\h'|N*\n[PdCodeCol]u'`;
+  - `fixed`: `\h'(N*\n[PdCodeCol]u-\n[.k]u)>?\n[PdCodeGap]u'`;
+  - `hybrid`: measuring lines before the block,
+    `.nr PdGn \n[PdGn]>?(\w'prefix'u+\n[PdCodeGap]u)`, then
+    `\h'|\n[PdGn]u'` before the segment;
+  - the group registers are reset at each block.
+- **mom:**
+  - the same escapes, inside `.QUOTE` without `.CODE`, at the margin
+    by default (`code-indent`, decision 34);
+  - `.QUOTE` is italic by default, so the block needs a roman font:
+    `.QUOTE_FONT R` before it is the proposed answer to Q7;
+  - mom makes `"` into curly quotes, so the writer writes `\[dq]`
+    (vgrind.md §8.4).
+- **ConTeXt:**
+  - `\startlines[space=on]`, each line
+    `\PdLine\PdSeg{pos}{text}...`;
+  - `hybrid`: `\setvalue{PdGn}{...}` and one `\PdMeasure` per line
+    before the block;
+  - the text goes through the normal ConTeXt escaping, since it is
+    not verbatim;
+  - `-` is written `-\kern0pt`, against ligatures;
+  - fonts are reopened in each segment;
+  - the three macros of vgrind.md §8.2 go in the template.
+
+**Inline code** gets bold and italic only. Alignment means nothing
+inside a line of running text (Q2).
+
+### 12.5 Templates unchanged unless used
+
+Decision 32's lines and the ConTeXt macros are needed only when a
+document uses the proportional style with alignment. `default.ms`
+and `default.context` are pandoc's templates, so the new lines go
+inside `$if(...)$`, on a variable the writer sets when it needs them.
+With the style `none`, podoc's output stays byte for byte as it is,
+and the case tests and `make compare` are unaffected.
+
+### 12.6 Phases and size
+
+§8's phases, with layout added; they are PLAN.md's Phase 24:
+
+1. `PdCode`, with comments as spans, for Oberon-2, Modula-2 and C;
+   `PdCodeTest`.
+2. The ms `\f[CR]` fix, as a change of its own.
+3. The writers in both styles, behind the style option, with
+   alignment `none`.
+4. `PdCodeAlign` and its tests; `fixed` in the three writers, then
+   `elastic` and `hybrid`; the template variables and the ConTeXt
+   macros. This first checks decision 32's template lines.
+5. Pascal with its modes, Ada, C++.
+6. sh and bash.
+7. Users' lists of reserved words.
+8. Documentation (podoc.md, differences.md) and the BSD tests.
+
+Step 4 adds about 400 to 600 lines to §8's estimate: about 2,000 to
+2,900 lines in all.
+
+### 12.7 Questions before coding
+
+Q1 to Q11 are all decided (2026-11-22, PLAN.md decisions 35 to 45). Phases 24.1 to 24.3 need Q1 (the style option), Q6 (the
+ms fix) and Q7 (mom's roman), all decided. Integrating
+vgrind raises three more:
+
+- **Q9. Proportional code with no known language.** Is it still set
+  in the text font, and aligned, without bold? vgrind.md §8.3 found
+  that alignment helps with highlighting off.
+  *Decided 2026-11-22: yes* (decision 42).
+- **Q10. Comments in mono.** Does mono set comments in italic too?
+  Decision 30 covers only the proportional style.
+  *Decided 2026-11-22: yes* (decision 43).
+- **Q11. Runs of spaces in strings.** Does a run of two or more
+  spaces inside a string literal start a segment, as it does
+  elsewhere?
+  *Decided 2026-11-22: no, strings are left whole* (decision 44).

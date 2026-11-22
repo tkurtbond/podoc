@@ -314,6 +314,93 @@ Made by the user on 2026-11-20, on the questions of §15.
     `.QUOTE OFF`, which mom's documentation calls unneeded, was kept:
     removing it moved nothing, on one page or across eight.
 
+35. **The code style option** (2026-11-22). On
+    syntax-highlighting-small.md's Q1: the option is
+    `--code-style=none|mono|proportional`, and `code-style` in the
+    metadata sets it too. The default is `none`. A single code block
+    overrides it with a class: `.mono`, `.proportional` or `.plain`
+    (for `none`), as ```` ```{.oberon .proportional} ```` in markdown
+    or `:class: proportional` in rST. The block's class wins, then the
+    command line, then the metadata.
+
+36. **The ms code font** (2026-11-22). On the study's Q6: ms code
+    blocks are written with `\f[CR]`, not `\f[C]`, which groff 1.25
+    cannot open; a change of its own (Phase 24.2), and a difference
+    from pandoc for docs/user/differences.md.
+
+37. **mom's proportional code in roman** (2026-11-22). On the
+    study's Q7: the proportional style keeps `.QUOTE`, set in roman
+    with `.QUOTE_FONT R` before the block.
+
+38. **Inline code is highlighted, in the code font** (2026-11-22). On
+    the study's Q2: inline code with a language class gets its
+    reserved words in bold, in either style, and stays in the code
+    font even in the proportional style, since in the text font it
+    would be hard to tell from the running text.
+
+39. **Pascal: a list per mode** (2026-11-22). On the study's Q4: each
+    FreePascal mode has its own list, chosen by the class (`objfpc`,
+    `delphi`, `fpc`, `tp`, `macpas`, `iso`; study §5.4). Plain
+    `pascal` means `fpc`, FreePascal's default mode (decided
+    2026-11-22).
+
+40. **Users' lists from files and metadata** (2026-11-22). On the
+    study's Q5: both `--keywords=pascal:words.txt` and the metadata
+    field `keywords` (study §6). A list adds to the built-in one
+    unless it says otherwise; both forms are accepted (decided
+    2026-11-22):
+    - in a file, a first line `#!replace` makes the file replace the
+      built-in list, and a line `-word` removes that word from it;
+    - in the metadata, a plain list adds, and
+      `keywords: {pascal: {replace: true, words: [...]}}` replaces;
+      `-word` in a list removes.
+
+41. **Oberon variants** (2026-11-22). On the study's Q8: the built-in
+    lists know original Oberon, Oberon-2, Oberon-07 and Component
+    Pascal, each as a class; `oberon` means Oberon-2. The classes
+    (decided 2026-11-22): `oberon` and `oberon2` for Oberon-2,
+    `oberon1` and `oberon87` for the original, `oberon07` for
+    Oberon-07, `cp` and `componentpascal` for Component Pascal.
+
+42. **Code with no known language** (2026-11-22). On the study's Q9:
+    in the proportional style, a code block with no class or an
+    unknown one is still set in the text font and aligned, with
+    nothing in bold.
+
+43. **Comments in italic in mono too** (2026-11-22). On the study's
+    Q10: the mono style sets comments in italic monospace, as the
+    proportional style does (decision 30).
+
+44. **Strings are left whole** (2026-11-22). On the study's Q11: a run
+    of two or more spaces inside a string literal does not start an
+    alignment segment; the spaces are part of the string's value, not
+    layout.
+
+45. **Built-in lists hold reserved words only** (2026-11-22). On the
+    study's Q3: words a language reserves, and nothing else. Oberon's
+    predeclared identifiers, FreePascal's modifiers, C++'s contextual
+    words, C's preprocessor names and sh's builtins can all be names,
+    so bolding them would sometimes be wrong; a user who wants them
+    adds them with a list (decision 40).
+
+46. **HTML output too** (2026-11-22). The study left HTML out (its
+    §2); the user added it, as Phase 24.5. The scanner and the lists
+    are shared; only the writing differs:
+    - *mono*: reserved words in `<b>`, comments in `<i>`, inside the
+      `<pre><code>` written now;
+    - *proportional*: `pre` in the body font, and only the `fixed`
+      alignment: each segment a `<span>` placed at `left:` its
+      column times `code-column`, in a line that is
+      `position:relative`. `elastic` and `hybrid` need the text
+      measured, which HTML cannot do without JavaScript; with HTML
+      they fall back to `fixed`.
+    - The CSS goes in the template inside `$if(...)$`, so the output
+      with the style `none` stays byte for byte as it is now.
+    - The text inside `<pre>` is unchanged, so copying it from a
+      browser gives the code exactly.
+    - It does not imitate pandoc's skylighting markup (a `<span>`
+      per token, numbered lines, colour).
+
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
 JSON AST compared byte for byte.
@@ -1521,6 +1608,108 @@ the body.
   - AGENTS.md and the module list.
 - **Other systems:** `make test` on the six BSD VMs; the PDF tests
   skip where groff has no pdfmom.
+
+## Phase 24: Small syntax highlighting [planned]
+
+Scheduled 2026-11-22 at the user's request: the small highlighting
+of docs/research/syntax-highlighting-small.md, with vgrind's lessons
+(its §12; docs/research/vgrind.md; decisions 30 to 34), for ms, mom
+and ConTeXt, and for HTML (decision 46). Code blocks,
+and inline code (decision 38), with a known language class get their
+reserved words in bold, in two styles:
+
+- *mono*: the monospaced font, reserved words in bold monospace;
+- *proportional*: the text font, reserved words in bold, comments in
+  italic (decision 30), columns aligned as `--code-align` says
+  (decisions 32 and 33).
+
+It is podoc's own: pandoc has nothing like it. With the style `none`,
+the default, the output stays byte for byte as it is now.
+
+**Before coding:** the study's questions Q1 to Q11 (§11 and §12.7)
+are all decided, as decisions 35 to 45 (2026-11-22).
+
+Each subphase passes `make test` under `-O2` and `-OC`.
+
+### Phase 24.1: `PdCode`, the scanner [planned]
+
+- **Change:** a new module `PdCode` scans a code rope into spans:
+  plain, reserved word, comment. Language records (case, comments and
+  their nesting, line comments, strings and their escapes) with hooks
+  (study §5.8, §8). The Oberon family (original, Oberon-2, Oberon-07,
+  Component Pascal; decision 41), Modula-2 and C first; built-in
+  lists of reserved words only (decision 45), compiled in.
+- **Check:** `PdCodeTest`, with vgrind.md §6.2's mistakes as cases:
+  nested comments, braces in strings, C's `//`, Modula-2's case rule.
+
+### Phase 24.2: The ms code font [planned]
+
+- **Change:** code blocks in ms written with `\f[CR]`, not `\f[C]`,
+  which groff 1.25 cannot open (study §4.1; Q6). A change of its own,
+  and a difference from pandoc.
+- **Check:** ms case tests updated; `pdffonts` shows Courier.
+
+### Phase 24.3: The writers, both styles, unaligned [planned]
+
+- **Change:** the style option (Q1) and its metadata form; ms, mom
+  and ConTeXt in *mono* and *proportional* (study §4, §12.4), with
+  alignment `none`; mom's proportional block in roman (Q7) and `"`
+  as `\[dq]`; ConTeXt's escaping and `-\kern0pt`.
+- **Check:** case tests per writer and style; PDFs from groff and
+  ConTeXt looked at; the style `none` leaves every existing case
+  test unchanged.
+
+### Phase 24.4: Alignment [planned]
+
+- **Change:** a new module `PdCodeAlign` (study §12.3): lines into
+  indentation and segments, groups, positions for `fixed`, `elastic`
+  and `hybrid`. `--code-align` and `code-align` (decision 33). The
+  writers write column numbers; the templates set `PdCodeCol` and
+  `PdCodeGap` from `code-column` and `code-gap` (decision 32), and
+  ConTeXt's template gets `\PdLine`, `\PdSeg` and `\PdMeasure`, all
+  inside `$if(...)$` so that unused templates do not change (§12.5).
+- **Check:** `PdCodeAlignTest`; the two samples of vgrind.md §8 as
+  case tests, rendered in all three formats and compared with the
+  experiment's PDFs; decision 32's template lines verified.
+
+### Phase 24.5: HTML [planned]
+
+- **Change:** `PdHtml` writes code with a style as decision 46 says:
+  `<b>` and `<i>` for mono; for proportional, the lines and segments
+  from `PdCodeAlign` as positioned `<span>`s, `fixed` only.
+  `data/templates/styles.html`, the CSS partial, gets both styles, with
+  `code-column`, inside `$if(...)$`; `tools/mktemplates` re-run.
+- **Check:** case tests in both styles, inline code among them; the
+  case tests without a style unchanged; the vgrind samples viewed in
+  a browser, and their text copied out matching the source.
+
+### Phase 24.6: Pascal, Ada, C++ [planned]
+
+- **Change:** Pascal with a list per mode, plain `pascal` as `fpc`
+  (decision 39), Ada's tick, C++'s raw
+  strings and digit separators (study §5.3 to §5.6).
+- **Check:** `PdCodeTest` cases from each language's corner cases.
+
+### Phase 24.7: sh and bash [planned]
+
+- **Change:** command position, here-documents, `case` (study §5.7).
+- **Check:** `PdCodeTest` cases, with vgrind.md §6.2's sh mistake.
+
+### Phase 24.8: Users' lists [planned]
+
+- **Change:** reserved-word lists in podoc's own format (decision
+  31), from `--keywords=lang:file` and the metadata `keywords`:
+  adding, replacing with `#!replace` or `replace: true`, removing
+  with `-word` (decision 40).
+- **Check:** case tests with a list of each kind; a missing file
+  gives pandoc's exit status.
+
+### Phase 24.9: Documentation and other systems [planned]
+
+- **Docs:** docs/user/podoc.md (the options, the variables, the
+  languages); docs/user/differences.md (the code font, the styles,
+  `--code-align`, HTML's `fixed` only); AGENTS.md and its module list.
+- **Other systems:** `make test` on the six BSD VMs.
 
 ## Later, not scheduled
 
@@ -3050,3 +3239,24 @@ the body.
   updated (two lines each). Checked: code at the margin by default and
   at 2m with `-V code-indent=2m`, through `--pdf-engine=pdfmom`, and
   with statement.mom; `make test` passes under -O2 and -OC.
+- 2026-11-22: Phase 24 planned at the user's request: the small
+  syntax highlighting with vgrind's lessons, recorded as
+  docs/research/syntax-highlighting-small.md §12 (three steps: scan,
+  lay out, write; templates unchanged unless used) and as Phases 24.1
+  to 24.8 above. Three new questions, Q9 to Q11, join Q1 to Q8; all
+  are open. No code.
+- 2026-11-22: Decisions 35 to 37, on the small highlighting study's
+  Q1 (in part: `--code-style` and `code-style`), Q6 (`\f[CR]` for ms
+  code) and Q7 (mom's `.QUOTE_FONT R`). No code.
+- 2026-11-22: Decision 35 completed (default `none`, a class overrides
+  it per block) and decisions 38 to 44, on the small highlighting
+  study's Q2, Q4, Q5 (in part), Q8, Q9, Q10 and Q11. Open: Q3, plain
+  `pascal`'s mode, replace or add for users' lists, the Oberon class
+  names. No code.
+- 2026-11-22: Decision 45 (Q3: reserved words only), and the open
+  points of 39 to 41 settled: plain `pascal` is `fpc`; users' lists
+  add, or replace with `#!replace`, and `-word` removes; the Oberon
+  classes. All of the study's questions are decided. No code.
+- 2026-11-22: Decision 46, HTML output for the small highlighting,
+  scheduled as Phase 24.5; the later subphases renumbered 24.6 to
+  24.9. No code.
