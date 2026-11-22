@@ -1,0 +1,34 @@
+\startsectionlevel[title={Head
+\type[escape=yes]{/BTEX\bf IF/ETEX x /BTEX{\it (*~c~*)}/ETEX /BTEX\bf END/ETEX}},reference={head-if-x-c-end}]
+
+Inline
+\type[escape=yes]{/BTEX\bf IF/ETEX x /BTEX\bf THEN/ETEX /BTEX{\it (*~c~*)}/ETEX /BTEX\bf END/ETEX},
+\type[escape=yes]{/BTEX\bf int/ETEX x; /BTEX{\it //~c~\{\}}/ETEX},
+\type{IF x} and \type{plain}.
+
+\starttyping[escape=yes]
+/BTEX\bf MODULE/ETEX M; /BTEX{\it (*~a~\{comment\}}/ETEX
+/BTEX{\it ~~over~two~lines~*)}/ETEX
+  /BTEX\bf VAR/ETEX s: /BTEX\bf ARRAY/ETEX 8 /BTEX\bf OF/ETEX CHAR; /BTEX{\it (*~it's~--~50\letterpercent{}~*)}/ETEX
+/BTEX\bf BEGIN/ETEX s := "(* a\b *)"; t := 'END'
+/BTEX\bf END/ETEX M.
+\stoptyping
+
+\starttyping[escape=yes]
+.dot at start
+/BTEX\bf static/ETEX /BTEX\bf int/ETEX f(/BTEX\bf void/ETEX) { /BTEX\bf return/ETEX '\''; } /BTEX{\it //~x--y~``z''}/ETEX
+\stoptyping
+
+\starttyping[escape=yes]
+/BTEX\bf FROM/ETEX InOut /BTEX\bf IMPORT/ETEX WriteString; /BTEX{\it (*~end~END~*)}/ETEX
+\stoptyping
+
+\starttyping
+no language # $ { } -- x
+\stoptyping
+
+\starttyping
+MODULE Plain;
+\stoptyping
+
+\stopsectionlevel

@@ -1,0 +1,22 @@
+.PP
+The metadata\(cqs style, \f[CR]\f[CB]BEGIN\f[CR] \f[CB]END\f[CR]\f[R]:
+.ds pd:qft \*[$QUOTE_FT]
+.QUOTE_FONT R
+.QUOTE
+\*[BD]BEGIN\*[PREV] x := 1 \*[BD]END\*[PREV]
+.QUOTE OFF
+.QUOTE_FONT \*[pd:qft]
+.PP
+A block\(cqs class wins:
+.QUOTE
+.CODE
+\*[BD]BEGIN\*[PREV] x := 2 \*[BD]END\*[PREV]
+.CODE OFF
+.QUOTE OFF
+.QUOTE
+.CODE
+int x = 3;
+.CODE OFF
+.QUOTE OFF
+.PP
+\f[CR]\f[CB]int\f[CR] x\f[R] and \f[CR]int y\f[R].

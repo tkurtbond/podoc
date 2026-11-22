@@ -77,7 +77,7 @@ $endfor$
 \definefontfamily[mainface][rm][$if(mainfont)$$mainfont/nowrap$$else$Latin Modern Roman$endif$]
 \definefontfamily[mainface][mm][$if(mathfont)$$mathfont/nowrap$$else$Latin Modern Math$endif$]
 \definefontfamily[mainface][ss][$if(sansfont)$$sansfont/nowrap$$else$Latin Modern Sans$endif$]
-\definefontfamily[mainface][tt][$if(monofont)$$monofont/nowrap$$else$Latin Modern Typewriter$endif$][features=none]
+\definefontfamily[mainface][tt][$if(monofont)$$monofont/nowrap$$else$Latin Modern Typewriter$endif$][features=none$if(code-highlight)$$if(monofont)$$else$, bf=file:lmmonolt10-bold, it=file:lmmono10-italic, bi=file:lmmonolt10-boldoblique$endif$$endif$]
 \setupbodyfont[mainface$if(fontsize)$,$fontsize$$endif$]
 
 \setupwhitespace[$if(whitespace)$$whitespace$$else$medium$endif$]

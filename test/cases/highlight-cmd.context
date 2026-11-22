@@ -1,0 +1,17 @@
+The metadata's style, \type{BEGIN END}:
+
+\starttyping
+BEGIN x := 1 END
+\stoptyping
+
+A block's class wins:
+
+\starttyping[escape=yes]
+/BTEX\bf BEGIN/ETEX x := 2 /BTEX\bf END/ETEX
+\stoptyping
+
+\starttyping
+int x = 3;
+\stoptyping
+
+\type[escape=yes]{/BTEX\bf int/ETEX x} and \type{int y}.

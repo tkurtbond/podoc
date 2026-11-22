@@ -12,7 +12,7 @@ MODULE PdMom;
    warning. *)
 
 IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
-  Sh := PdShared, Ro := PdRoff, PdIO, PdImages, Run := PdRun;
+  Sh := PdShared, Ro := PdRoff, PdIO, PdImages, Run := PdRun, PdCode;
 
 TYPE
   Rope = Ropes.Rope;
@@ -311,7 +311,7 @@ BEGIN
 END Image;
 
 PROCEDURE Inline(i, prev: A.Inline): L.Doc;
-  VAR d, begin: L.Doc; m: A.MathInl;
+  VAR d: L.Doc; m: A.MathInl;
 BEGIN
   CASE i.kind OF
     A.Str: RETURN StrDoc(i(A.StrInl).text)
@@ -337,9 +337,7 @@ BEGIN
     RETURN L.Cat3(Lit("\(lq"), d, Lit("\(rq"))
   | A.Cite: RETURN Inlines(i(A.ContInl).content)
   | A.Span: RETURN Span(i(A.SpanInl), prev)
-  | A.Code:
-    Ro.Toggle(fonts, "C"); begin := Ro.FontChange(fonts, inHeader); Ro.Toggle(fonts, "C");
-    RETURN L.Cat3(begin, L.Literal(Ro.EscapeStr(i(A.CodeInl).text)), Ro.FontChange(fonts, inHeader))
+  | A.Code: RETURN Ro.InlineCode(fonts, inHeader, i(A.CodeInl).attr, i(A.CodeInl).text)
   | A.Space: RETURN L.Space()
   | A.SoftBreak:
     IF ~inArg & preserve THEN RETURN L.Cr() END;
@@ -412,12 +410,20 @@ BEGIN
   RETURN d
 END Header;
 
+(* A code block: in .CODE, its reserved words in bold and comments in
+   italic in the mono style; in the proportional style, without .CODE
+   and in roman, the quote font saved before and restored after
+   (decision 37) *)
 PROCEDURE CodeBlock(c: A.CodeBlk): L.Doc;
-  VAR d: L.Doc;
+  VAR d: L.Doc; lang: PdCode.Language; style: INTEGER;
 BEGIN
-  d := NIL;
-  IF StartsWithChar(c.text, ".") THEN d := Lit("\&") END;
-  d := L.Cat(d, L.Literal(Ro.EscapeStr(c.text)));
+  style := Sh.CodeStyle(c.attr, lang);
+  IF style = Sh.CodeNone THEN lang := NIL END;
+  d := L.Literal(Ro.Highlight(c.text, lang, TRUE, "\*[BD]", "\*[IT]", "\*[PREV]"));
+  IF style = Sh.CodeProportional THEN
+    RETURN Above3(Above3(Lit(".ds pd:qft \*[$QUOTE_FT]"), Lit(".QUOTE_FONT R"), Lit(".QUOTE")), d,
+      Above(Lit(".QUOTE OFF"), Lit(".QUOTE_FONT \*[pd:qft]")))
+  END;
   RETURN Above3(Above(Lit(".QUOTE"), Lit(".CODE")), d, Above(Lit(".CODE OFF"), Lit(".QUOTE OFF")))
 END CodeBlock;
 
@@ -683,7 +689,7 @@ PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
 BEGIN
   smallCaps := FALSE; inHeader := FALSE; inArg := FALSE; hadEndnote := FALSE;
   quoteDepth := 0;
-  Ro.ResetFonts(fonts);
+  Ro.ResetFonts(fonts); Sh.SetCodeStyle(doc.meta);
   meta := doc.meta;
   IF tmpl = NIL THEN
     L.Open(width); b := doc.blocks;

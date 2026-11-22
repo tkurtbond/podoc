@@ -4,7 +4,7 @@ MODULE PdRoff;
    RoffChar), small caps, PDF anchors and strings, the font state, the
    plain text of inlines for PDF bookmarks, and tbl tables. *)
 
-IMPORT Ropes, Strings, Utf8, Unicode, A := PdAst, L := PdLayout, Sh := PdShared, PdAscii;
+IMPORT Ropes, Strings, Utf8, Unicode, A := PdAst, L := PdLayout, Sh := PdShared, PdAscii, PdCode;
 
 TYPE
   Rope = Ropes.Rope;
@@ -347,21 +347,82 @@ BEGIN
   f.i := FALSE; f.b := FALSE; f.c := FALSE; f.v := FALSE
 END ResetFonts;
 
-(* fontChange: \f[...] for the features of f on, bold also if bold *)
-PROCEDURE FontChange*(VAR f: Fonts; bold: BOOLEAN): L.Doc;
-  VAR s: ARRAY 10 OF CHAR; k: INTEGER;
+(* s := fontChange's escape: \f[...] for the features of f on, bold
+   also if bold *)
+PROCEDURE FontString*(VAR f: Fonts; bold: BOOLEAN; VAR s: ARRAY OF CHAR);
+  VAR k: INTEGER;
 BEGIN
-  s := "\f["; k := 3;
+  COPY("\f[", s); k := 3;
   IF f.c THEN s[k] := "C"; INC(k) END;
   IF f.v THEN s[k] := "V"; INC(k) END;
   IF bold OR f.b THEN s[k] := "B"; INC(k) END;
   IF f.i THEN s[k] := "I"; INC(k) END;
-  IF k = 3 THEN RETURN L.Text("\f[R]")
-  ELSIF (k = 4) & f.c THEN RETURN L.Text("\f[CR]")
-  END;
-  s[k] := "]"; s[k + 1] := 0X;
+  IF k = 3 THEN COPY("\f[R]", s)
+  ELSIF (k = 4) & f.c THEN COPY("\f[CR]", s)
+  ELSE s[k] := "]"; s[k + 1] := 0X
+  END
+END FontString;
+
+(* fontChange: \f[...] for the features of f on, bold also if bold *)
+PROCEDURE FontChange*(VAR f: Fonts; bold: BOOLEAN): L.Doc;
+  VAR s: ARRAY 10 OF CHAR;
+BEGIN
+  FontString(f, bold, s);
   RETURN L.Text(s)
 END FontChange;
+
+(* Highlighted code (Phase 24) *)
+
+(* The code text escaped as EscapeStr escapes it, with its reserved
+   words between bold and back and its comments between italic and
+   back, as lang's scanner finds them; all plain if lang is NIL. In a
+   block, a line that starts with "." is preceded by "\&", the first
+   one too. *)
+PROCEDURE Highlight*(text: Rope; lang: PdCode.Language; block: BOOLEAN; bold, italic, back: ARRAY OF CHAR): Rope;
+  VAR sp: PdCode.Span; out, piece: Rope;
+BEGIN
+  IF lang = NIL THEN sp := NIL ELSE sp := PdCode.Scan(lang, text) END;
+  IF sp = NIL THEN
+    out := EscapeStr(text);
+    IF block & (Len(text) > 0) & (Ropes.Fetch(text, 0) = ".") THEN out := Cat(Ropes.FromString("\&"), out) END;
+    RETURN out
+  END;
+  out := NIL;
+  WHILE sp # NIL DO
+    piece := Ropes.Substring(text, sp.start, sp.len);
+    IF block & (Ropes.Fetch(piece, 0) = ".")
+       & ((sp.start = 0) OR (Ropes.Fetch(text, sp.start - 1) = 0AX)) THEN
+      out := Cat(out, Ropes.FromString("\&"))
+    END;
+    piece := EscapeStr(piece);
+    CASE sp.kind OF
+      PdCode.Reserved: out := Cat(Cat(Cat(out, Ropes.FromString(bold)), piece), Ropes.FromString(back))
+    | PdCode.Comment: out := Cat(Cat(Cat(out, Ropes.FromString(italic)), piece), Ropes.FromString(back))
+    ELSE out := Cat(out, piece)
+    END;
+    sp := sp.next
+  END;
+  RETURN out
+END Highlight;
+
+(* Inline code, text with the attributes attr, in the fonts f (and
+   bold if bold) with the code font added; with a language class and
+   a code style other than none, its reserved words in bold and its
+   comments in italic, in the code font (decision 38) *)
+PROCEDURE InlineCode*(VAR f: Fonts; bold: BOOLEAN; attr: A.Attr; text: Rope): L.Doc;
+  VAR begin, b, it: ARRAY 10 OF CHAR; lang: PdCode.Language; r: Rope; c, i: BOOLEAN;
+BEGIN
+  c := f.c; f.c := TRUE; FontString(f, bold, begin);
+  IF Sh.CodeStyle(attr, lang) = Sh.CodeNone THEN lang := NIL END;
+  IF lang # NIL THEN
+    FontString(f, TRUE, b);
+    i := f.i; f.i := TRUE; FontString(f, bold, it); f.i := i;
+    r := Highlight(text, lang, FALSE, b, it, begin)
+  ELSE r := EscapeStr(text)
+  END;
+  f.c := c;
+  RETURN L.Cat3(L.Text(begin), L.Literal(r), FontChange(f, bold))
+END InlineCode;
 
 (* The plain text of inlines, for PDF bookmarks: an approximation of
    pandoc's plain writer *)

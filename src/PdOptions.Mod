@@ -72,6 +72,7 @@ VAR
   template*: String; (* --template; "" for the default *)
   before*, after*, header*: File; (* -B, -A, -H *)
   wrap*: String; (* --wrap: auto, none or preserve *)
+  codeStyle*: String; (* --code-style: none, mono or proportional; "" if not given *)
   (* --reference-location: block, section or document; "" if not given *)
   referenceLocation*: String;
   unknown*: String; (* --unknown: "", warn or error *)
@@ -470,6 +471,17 @@ BEGIN
   RETURN TRUE
 END SetWrap;
 
+(* --code-style: none, mono or proportional *)
+PROCEDURE SetCodeStyle(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  IF (arg # "none") & (arg # "mono") & (arg # "proportional") THEN
+    PdIO.Message("--code-style must be none, mono or proportional");
+    PdIO.Exit(PdIO.OptionError)
+  END;
+  COPY(arg, codeStyle);
+  RETURN TRUE
+END SetCodeStyle;
+
 (* --reference-location: block, section or document *)
 PROCEDURE SetReferenceLocation(VAR arg: ARRAY OF CHAR): BOOLEAN;
 BEGIN
@@ -634,6 +646,8 @@ BEGIN
     "Run the built-in filter that replaces the filter PROGRAM.", AddJsonFilter));
   parser.AddOption(ArgParser.MakeStringOption(0X, "wrap",
     "How to wrap lines: auto, none or preserve.", SetWrap));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "code-style",
+    "Highlight code: none, mono or proportional.", SetCodeStyle));
   parser.AddOption(ArgParser.MakeStringOption(0X, "columns",
     "Wrap lines at N columns (72).", SetColumns));
   parser.AddOption(ArgParser.MakeStringOption(0X, "reference-location",
@@ -918,7 +932,7 @@ BEGIN
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;
   standalone := FALSE; template := "";
-  wrap := "auto"; referenceLocation := ""; unknown := ""; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
+  wrap := "auto"; codeStyle := ""; referenceLocation := ""; unknown := ""; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
   before := NIL; lastBefore := NIL; after := NIL; lastAfter := NIL;
   header := NIL; lastHeader := NIL
 END PdOptions.

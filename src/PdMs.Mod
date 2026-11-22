@@ -11,7 +11,7 @@ MODULE PdMs;
    same order. *)
 
 IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
-  Sh := PdShared, Ro := PdRoff, PdIO;
+  Sh := PdShared, Ro := PdRoff, PdIO, PdCode;
 
 TYPE
   Rope = Ropes.Rope;
@@ -214,7 +214,7 @@ BEGIN
 END Image;
 
 PROCEDURE Inline(i: A.Inline; bts: BOOLEAN): L.Doc;
-  VAR d, begin: L.Doc; n: A.BlockList; m: A.MathInl;
+  VAR d: L.Doc; n: A.BlockList; m: A.MathInl;
 BEGIN
   CASE i.kind OF
     A.Str: RETURN StrDoc(i(A.StrInl).text)
@@ -239,9 +239,7 @@ BEGIN
     IF i(A.QuotedInl).quote = A.SingleQuote THEN RETURN L.Cat3(L.Char("`"), d, L.Char("'")) END;
     RETURN L.Cat3(Lit("\(lq"), d, Lit("\(rq"))
   | A.Cite, A.Span: RETURN Inlines(i(A.ContInl).content, FALSE)
-  | A.Code:
-    Ro.Toggle(fonts, "C"); begin := Ro.FontChange(fonts, inHeader); Ro.Toggle(fonts, "C");
-    RETURN L.Cat3(begin, L.Literal(Ro.EscapeStr(i(A.CodeInl).text)), Ro.FontChange(fonts, inHeader))
+  | A.Code: RETURN Ro.InlineCode(fonts, inHeader, i(A.CodeInl).attr, i(A.CodeInl).text)
   | A.Space: RETURN HandleNotes(L.Space())
   | A.SoftBreak:
     IF ~bts & preserve THEN RETURN HandleNotes(L.Cr()) END;
@@ -426,13 +424,20 @@ BEGIN
   RETURN d
 END Header;
 
+(* A code block: in the code font, its reserved words in bold and
+   comments in italic in the mono style; in the text font, with them in
+   bold and italic, in the proportional style (decisions 35 and 36) *)
 PROCEDURE CodeBlock(c: A.CodeBlk): L.Doc;
-  VAR d: L.Doc;
+  VAR d: L.Doc; lang: PdCode.Language; style: INTEGER;
 BEGIN
   firstPara := TRUE;
-  d := NIL;
-  IF StartsWithChar(c.text, ".") THEN d := Lit("\&") END;
-  d := L.Cat(d, L.Literal(Ro.EscapeStr(c.text)));
+  style := Sh.CodeStyle(c.attr, lang);
+  IF style = Sh.CodeProportional THEN
+    d := L.Literal(Ro.Highlight(c.text, lang, TRUE, "\f[B]", "\f[I]", "\f[R]"));
+    RETURN Above3(Above(Lit(".IP"), Lit(".nf")), d, Lit(".fi"))
+  END;
+  IF style = Sh.CodeNone THEN lang := NIL END;
+  d := L.Literal(Ro.Highlight(c.text, lang, TRUE, "\f[CB]", "\f[CI]", "\f[CR]"));
   RETURN Above3(Above3(Lit(".IP"), Lit(".nf"), Lit("\f[CR]")), d, Above(Lit("\f[]"), Lit(".fi")))
 END CodeBlock;
 
@@ -697,7 +702,7 @@ PROCEDURE Write(doc: A.Doc; tmpl: T.Template; stream: BOOLEAN): BOOLEAN;
     s: Rope; b: A.Block; slot: T.Template; guess, ours: BOOLEAN;
 BEGIN
   firstPara := TRUE; smallCaps := FALSE; inHeader := FALSE; hasInlineMath := FALSE;
-  Ro.ResetFonts(fonts); notes := NIL;
+  Ro.ResetFonts(fonts); notes := NIL; Sh.SetCodeStyle(doc.meta);
   v := T.Get(C.variables, "pdf-engine");
   hasEngine := v # NIL;
   groff := (v # NIL) & (v.kind = T.SimpleV) & Eq(L.Render(v.doc, 0), "groff");

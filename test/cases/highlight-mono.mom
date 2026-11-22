@@ -1,0 +1,36 @@
+.HEADING 1 NAMED head-if-x-c-end "Head \f[CB]\f[CB]IF\f[CB] x \f[CBI](* c *)\f[CB] \f[CB]END\f[CB]\f[B]"
+.PP
+Inline
+\f[CR]\f[CB]IF\f[CR] x \f[CB]THEN\f[CR] \f[CI](* c *)\f[CR] \f[CB]END\f[CR]\f[R],
+\f[CR]\f[CB]int\f[CR] x; \f[CI]// c {}\f[CR]\f[R], \f[CR]IF x\f[R] and
+\f[CR]plain\f[R].
+.QUOTE
+.CODE
+\*[BD]MODULE\*[PREV] M; \*[IT](* a {comment}
+  over two lines *)\*[PREV]
+  \*[BD]VAR\*[PREV] s: \*[BD]ARRAY\*[PREV] 8 \*[BD]OF\*[PREV] CHAR; \*[IT](* it\(aqs -- 50% *)\*[PREV]
+\*[BD]BEGIN\*[PREV] s := \(dq(* a\(rsb *)\(dq; t := \(aqEND\(aq
+\*[BD]END\*[PREV] M.
+.CODE OFF
+.QUOTE OFF
+.QUOTE
+.CODE
+\&.dot at start
+\*[BD]static\*[PREV] \*[BD]int\*[PREV] f(\*[BD]void\*[PREV]) { \*[BD]return\*[PREV] \(aq\(rs\(aq\(aq; } \*[IT]// x--y \(ga\(gaz\(aq\(aq\*[PREV]
+.CODE OFF
+.QUOTE OFF
+.QUOTE
+.CODE
+\*[BD]FROM\*[PREV] InOut \*[BD]IMPORT\*[PREV] WriteString; \*[IT](* end END *)\*[PREV]
+.CODE OFF
+.QUOTE OFF
+.QUOTE
+.CODE
+no language # $ { } -- x
+.CODE OFF
+.QUOTE OFF
+.QUOTE
+.CODE
+MODULE Plain;
+.CODE OFF
+.QUOTE OFF

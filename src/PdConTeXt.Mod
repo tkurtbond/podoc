@@ -10,12 +10,13 @@ MODULE PdConTeXt;
    metadata first, then the body. *)
 
 IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
-  Sh := PdShared, PdWords, PdIO;
+  Sh := PdShared, PdWords, PdIO, PdCode;
 
 TYPE
   Rope = Ropes.Rope;
   Buf = PdIO.Text;
   RefsFinder = POINTER TO RECORD (A.WalkerDesc) refs, hanging: BOOLEAN END;
+  CodeFinder = POINTER TO RECORD (A.WalkerDesc) found: BOOLEAN END;
 
 VAR
   (* options *)
@@ -276,6 +277,135 @@ BEGIN
   RETURN L.Literal(r)
 END Code;
 
+(* Highlighted code (Phase 24) *)
+
+(* Whether ch begins or ends one of the font's TeX ligatures: -- ---
+   `` '' !` ?` ,, << >> *)
+PROCEDURE Lig(ch: CHAR): BOOLEAN;
+BEGIN
+  RETURN (ch = "-") OR (ch = "'") OR (ch = "`") OR (ch = ",") OR (ch = "<") OR (ch = ">")
+    OR (ch = "!") OR (ch = "?")
+END Lig;
+
+(* r as TeX: escaped as text, each space as "~" if tilde, and, if kern,
+   "\kern0pt" between two characters that would make a ligature, as
+   "--" or "''" *)
+PROCEDURE CodeText(r: Rope; tilde, kern: BOOLEAN): Rope;
+  VAR n, i, start: LONGINT; out: Rope; ch: CHAR;
+BEGIN
+  n := Len(r); out := NIL; start := 0;
+  FOR i := 0 TO n - 1 DO
+    ch := Ropes.Fetch(r, i);
+    IF tilde & (ch = " ") OR kern & Lig(ch) & (i + 1 < n) & Lig(Ropes.Fetch(r, i + 1)) THEN
+      IF ch = " " THEN
+        IF i > start THEN out := Cat(out, Escape(Ropes.Substring(r, start, i - start))) END;
+        out := CatC(out, "~")
+      ELSE
+        out := CatS(Cat(out, Escape(Ropes.Substring(r, start, i + 1 - start))), "\kern0pt")
+      END;
+      start := i + 1
+    END
+  END;
+  IF n > start THEN out := Cat(out, Escape(Ropes.Substring(r, start, n - start))) END;
+  RETURN out
+END CodeText;
+
+(* out with the comment c added, each of its lines' text between open
+   and close, written by CodeText(tilde, kern) *)
+PROCEDURE CodeComment(out, c: Rope; open, close: ARRAY OF CHAR; tilde, kern: BOOLEAN): Rope;
+  VAR n, i, start: LONGINT;
+BEGIN
+  n := Len(c); start := 0;
+  FOR i := 0 TO n DO
+    IF (i = n) OR (Ropes.Fetch(c, i) = 0AX) THEN
+      IF i > start THEN
+        out := CatS(Cat(CatS(out, open), CodeText(Ropes.Substring(c, start, i - start), tilde, kern)), close)
+      END;
+      IF i < n THEN out := CatC(out, 0AX) END;
+      start := i + 1
+    END
+  END;
+  RETURN out
+END CodeComment;
+
+(* The text of a code block with lang's reserved words in bold and
+   comments in italic: verbatim inside \starttyping[escape=yes] if
+   ~proportional, else as TeX for \startlines[space=on]; all plain if
+   lang is NIL *)
+PROCEDURE CodeLines(text: Rope; lang: PdCode.Language; proportional: BOOLEAN): Rope;
+  VAR sp: PdCode.Span; out, piece: Rope;
+BEGIN
+  IF lang = NIL THEN sp := NIL ELSE sp := PdCode.Scan(lang, text) END;
+  IF sp = NIL THEN
+    IF proportional THEN RETURN CodeText(text, FALSE, TRUE) END;
+    RETURN text
+  END;
+  out := NIL;
+  WHILE sp # NIL DO
+    piece := Ropes.Substring(text, sp.start, sp.len);
+    CASE sp.kind OF
+      PdCode.Reserved:
+      IF proportional THEN out := CatC(Cat(CatS(out, "{\bf{}"), Escape(piece)), "}")
+      ELSE out := CatS(Cat(CatS(out, "/BTEX\bf "), Escape(piece)), "/ETEX")
+      END
+    | PdCode.Comment:
+      IF proportional THEN out := CodeComment(out, piece, "{\it{}", "}", FALSE, TRUE)
+      ELSE out := CodeComment(out, piece, "/BTEX{\it ", "}/ETEX", TRUE, FALSE)
+      END
+    ELSE
+      IF proportional THEN out := Cat(out, CodeText(piece, FALSE, TRUE)) ELSE out := Cat(out, piece) END
+    END;
+    sp := sp.next
+  END;
+  RETURN out
+END CodeLines;
+
+(* A code block, as \starttyping, or in the mono style with a language
+   \starttyping[escape=yes], or in the proportional style
+   \startlines[space=on] (decision 35) *)
+PROCEDURE CodeBlock(c: A.CodeBlk): L.Doc;
+  VAR d: L.Doc; lang: PdCode.Language; style: INTEGER;
+BEGIN
+  style := Sh.CodeStyle(c.attr, lang);
+  IF style = Sh.CodeProportional THEN
+    d := Above3(Lit("\startlines[space=on]"), L.Literal(CodeLines(c.text, lang, TRUE)), Lit("\stoplines"))
+  ELSIF (style = Sh.CodeMono) & (lang # NIL) THEN
+    d := Above3(Lit("\starttyping[escape=yes]"), L.Literal(CodeLines(c.text, lang, FALSE)), Lit("\stoptyping"))
+  ELSE d := Above3(Lit("\starttyping"), L.Literal(c.text), Lit("\stoptyping"))
+  END;
+  RETURN Above(L.Flush(d), L.BlankLine())
+END CodeBlock;
+
+(* Inline code with the attributes attr: as Code, or with a language
+   class and a code style other than none, \type[escape=yes] with its
+   reserved words in bold and comments in italic (decision 38) *)
+PROCEDURE InlineCode(attr: A.Attr; s: Rope): L.Doc;
+  VAR lang: PdCode.Language; sp: PdCode.Span; r, piece: Rope; i: LONGINT; c: CHAR;
+BEGIN
+  IF Sh.CodeStyle(attr, lang) = Sh.CodeNone THEN lang := NIL END;
+  IF lang = NIL THEN RETURN Code(s) END;
+  sp := PdCode.Scan(lang, s);
+  IF sp = NIL THEN RETURN Code(s) END;
+  r := R("\type[escape=yes]{");
+  WHILE sp # NIL DO
+    piece := Ropes.Substring(s, sp.start, sp.len);
+    CASE sp.kind OF
+      PdCode.Reserved: r := CatS(Cat(CatS(r, "/BTEX\bf "), Escape(piece)), "/ETEX")
+    | PdCode.Comment: r := CodeComment(r, piece, "/BTEX{\it ", "}/ETEX", TRUE, FALSE)
+    ELSE
+      FOR i := 0 TO sp.len - 1 DO
+        c := Ropes.Fetch(piece, i);
+        IF c = "{" THEN r := CatS(r, "/BTEX\letteropenbrace /ETEX")
+        ELSIF c = "}" THEN r := CatS(r, "/BTEX\letterclosebrace /ETEX")
+        ELSE r := CatC(r, c)
+        END
+      END
+    END;
+    sp := sp.next
+  END;
+  RETURN L.Literal(CatC(r, "}"))
+END InlineCode;
+
 (* A dimension of an image, as the writer's showDim shows it; NIL if
    the attribute name is not there or is not a dimension *)
 PROCEDURE Dim(attr: A.Attr; name: ARRAY OF CHAR): L.Doc;
@@ -484,7 +614,7 @@ BEGIN
   | A.Strikeout: c := Inlines(i(A.ContInl).content); RETURN L.Cat(Lit("\overstrikes"), Braces(c))
   | A.Superscript: c := Inlines(i(A.ContInl).content); RETURN L.Cat(Lit("\high"), Braces(c))
   | A.Subscript: c := Inlines(i(A.ContInl).content); RETURN L.Cat(Lit("\low"), Braces(c))
-  | A.Code: RETURN Code(i(A.CodeInl).text)
+  | A.Code: RETURN InlineCode(i(A.CodeInl).attr, i(A.CodeInl).text)
   | A.Quoted:
     c := Inlines(i(A.ContInl).content);
     IF i(A.QuotedInl).quote = A.SingleQuote THEN RETURN L.Cat(Lit("\quote"), Braces(c)) END;
@@ -798,9 +928,7 @@ BEGIN
     A.Plain: RETURN Inlines(b(A.InlinesBlk).inlines)
   | A.Para: d := Inlines(b(A.InlinesBlk).inlines); RETURN L.Cat(d, L.BlankLine())
   | A.LineBlock: RETURN LineBlock(b(A.LineBlk).lines)
-  | A.CodeBlock:
-    d := Above3(Lit("\starttyping"), L.Literal(b(A.CodeBlk).text), Lit("\stoptyping"));
-    RETURN Above(L.Flush(d), L.BlankLine())
+  | A.CodeBlock: RETURN CodeBlock(b(A.CodeBlk))
   | A.RawBlock:
     s := b(A.RawBlk).format;
     IF Eq(s, "context") OR Eq(s, "tex") THEN RETURN L.Cat(L.Literal(b(A.RawBlk).text), L.BlankLine()) END;
@@ -928,6 +1056,35 @@ BEGIN
   RETURN b
 END Block;
 
+PROCEDURE (w: CodeFinder) Block*(b: A.Block): A.Block;
+  VAR lang: PdCode.Language;
+BEGIN
+  IF (b.kind = A.CodeBlock) & (Sh.CodeStyle(b(A.CodeBlk).attr, lang) # Sh.CodeNone) & (lang # NIL) THEN
+    w.found := TRUE
+  END;
+  RETURN b
+END Block;
+
+PROCEDURE (w: CodeFinder) Inline*(i: A.Inline): A.Inline;
+  VAR lang: PdCode.Language;
+BEGIN
+  IF (i.kind = A.Code) & (Sh.CodeStyle(i(A.CodeInl).attr, lang) # Sh.CodeNone) & (lang # NIL) THEN
+    w.found := TRUE
+  END;
+  RETURN i
+END Inline;
+
+(* Whether any code in the document is highlighted: the template then
+   gives the default monospaced font a bold and an italic *)
+PROCEDURE Highlighted(meta: A.MetaMapV; blocks: A.Block): BOOLEAN;
+  VAR w: CodeFinder;
+BEGIN
+  NEW(w); w.found := FALSE;
+  A.WalkMetaValue(w, meta);
+  blocks := A.WalkBlocks(w, blocks);
+  RETURN w.found
+END Highlighted;
+
 PROCEDURE Write(doc: A.Doc; blocks: A.Block; tmpl: T.Template; stream: BOOLEAN): BOOLEAN;
   VAR ctx: T.Value; main, placelist: L.Doc; meta: A.MetaMapV; s, lang: Rope; found: BOOLEAN;
     k: INTEGER; b: Buf; n, i: LONGINT;
@@ -936,7 +1093,7 @@ PROCEDURE Write(doc: A.Doc; blocks: A.Block; tmpl: T.Template; stream: BOOLEAN):
     bl: A.Block;
 BEGIN
   nextRef := 1; listLevel := 0; cslRefs := FALSE; cslHanging := FALSE;
-  meta := doc.meta;
+  meta := doc.meta; Sh.SetCodeStyle(meta);
   ctx := C.Build(meta, BlockDoc, InlineDoc);
   IF tmpl = NIL THEN
     (* a block at a time, so the whole body is never built *)
@@ -980,6 +1137,7 @@ BEGIN
   C.DefField(ctx, "number-sections", T.NewBool(numberSections));
   C.DefField(ctx, "csl-refs", T.NewBool(cslRefs));
   C.DefField(ctx, "csl-hanging-indent", T.NewBool(cslHanging));
+  IF Highlighted(meta, blocks) THEN C.DefField(ctx, "code-highlight", T.NewBool(TRUE)) END;
   (* getLang: the variable lang, else the metadata's *)
   lang := Field(ctx, "lang", found);
   IF ~found THEN lang := MetaString(meta, "lang") END;

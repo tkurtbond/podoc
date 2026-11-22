@@ -1665,7 +1665,7 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   why. A code block's PDF (`podoc -s -t ms -o x.pdf`, groff 1.25.0)
   now has Courier beside Times-Roman, and groff no longer warns.
 
-### Phase 24.3: The writers, both styles, unaligned [planned]
+### Phase 24.3: The writers, both styles, unaligned [done]
 
 - **Change:** the style option (Q1) and its metadata form; ms, mom
   and ConTeXt in *mono* and *proportional* (study §4, §12.4), with
@@ -1674,6 +1674,42 @@ Each subphase passes `make test` under `-O2` and `-OC`.
 - **Check:** case tests per writer and style; PDFs from groff and
   ConTeXt looked at; the style `none` leaves every existing case
   test unchanged.
+- **Done** 2026-11-22: `--code-style` and the metadata's
+  `code-style` (`PdOptions`, `PdShared.SetCodeStyle` and `CodeStyle`;
+  a bad value in the metadata is a warning and ignored, on the
+  command line an option error, 6). The roff writers share
+  `PdRoff.Highlight` and `InlineCode`: ms mono in `\f[CB]`/`\f[CI]`
+  inside `\f[CR]`, proportional in `\f[B]`/`\f[I]`; mom with
+  `\*[BD]`/`\*[IT]`/`\*[PREV]`, proportional as `.QUOTE` with the
+  quote font saved, set to `R` and restored. `"` was already `\(dq`
+  in every roff writer. ConTeXt mono as `\starttyping[escape=yes]`
+  and `\type[escape=yes]`, proportional as `\startlines[space=on]`
+  with `{\bf{}WORD}` (the `{}` because `space=on` makes the space
+  after `\bf` count) and `\kern0pt` between any two characters that
+  make a TeX ligature (`--`, `''`, ``` `` ```, `,,`, `<<` ...).
+  - **A template change, under `$if(code-highlight)$`:** the
+    default monospaced family, Latin Modern Typewriter, has no bold
+    or italic, so in a PDF `\bf` and `\it` did nothing in code.
+    The writer sets `code-highlight` when any code is highlighted,
+    and `default.context` then adds Latin Modern Mono's
+    `lmmonolt10-bold`, `lmmono10-italic` and `lmmonolt10-boldoblique`
+    to the family, unless `monofont` is set. Output without
+    highlighting is unchanged. The bold is the light one the study
+    (§4.3) found weak, but it is visible.
+  - **Left for 24.4:** ConTeXt's proportional style turns `'` into
+    ’ (the font's `textcontrol`); only a font defined with a feature
+    set without it avoided that in the experiment, which is template
+    work. A user's own template gets no bold monospace unless its
+    `tt` family has one.
+  - **Checked:** 15 case tests (`test/cases/highlight-*`): each
+    writer in each style, the metadata's style, a class over the
+    command line over the metadata, inline code and a heading, the
+    ConTeXt template's font line, and the bad values. PDFs of a
+    sample with Oberon, C, no language and `.plain` blocks made with
+    `groff -Tpdf` (ms), `pdfmom` and `context`, in both styles, and
+    looked at: bold words, italic comments, indentation, `.` at a
+    line's start, `--` and `\` as written. `make test` passes under
+    `-O2` and `-OC`; no existing case test changed.
 
 ### Phase 24.4: Alignment [planned]
 
@@ -3287,3 +3323,10 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   `-O2`) and passed when run again without `-j`: the unit tests share
   `build/<model>/test/` and its module files, so parallel builds may
   race. Not yet looked into.
+- 2026-11-22: Phase 24.3 done: `--code-style` and `code-style`, ms,
+  mom and ConTeXt in the mono and proportional styles, and
+  `default.context`'s monospaced bold and italic under
+  `$if(code-highlight)$`. `make test` passes under `-O2` and `-OC`
+  (318 case tests, 15 of them new, the round trips, the image tests,
+  the unit tests). ConTeXt's `'` as ’ in the proportional style is
+  left for 24.4.

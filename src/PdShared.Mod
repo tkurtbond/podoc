@@ -4,10 +4,12 @@ MODULE PdShared;
    (stringify), the division of a document into sections
    (makeSections), and the metadata that writers look up. *)
 
-IMPORT Ropes, PdJson, A := PdAst;
+IMPORT Ropes, PdJson, PdIO, A := PdAst, PdCode;
 
 CONST
   MaxLevels = 100; (* the most levels a section number has *)
+  (* the code styles, decision 35 *)
+  CodeNone* = 0; CodeMono* = 1; CodeProportional* = 2;
 
 TYPE
   Rope = Ropes.Rope;
@@ -28,6 +30,8 @@ TYPE
   Longs = POINTER TO ARRAY OF LONGINT;
 
 VAR
+  cmdCodeStyle*: INTEGER; (* --code-style's code style; -1 if not given *)
+  docCodeStyle: INTEGER; (* the document's code style, from SetCodeStyle *)
   numbering: BOOLEAN; (* MakeSections: whether sections are numbered *)
   baseLevel: INTEGER; (* MakeSections: the level of the top sections; < 0 if they keep theirs *)
   minLevel: INTEGER; (* the lowest header level in the document *)
@@ -779,4 +783,60 @@ BEGIN
   END
 END PlaceRows;
 
+(* Code styles (decision 35) *)
+
+(* The code style named s: CodeNone, CodeMono or CodeProportional;
+   -1 if s names none *)
+PROCEDURE CodeStyleOf*(s: ARRAY OF CHAR): INTEGER;
+BEGIN
+  IF s = "none" THEN RETURN CodeNone
+  ELSIF s = "mono" THEN RETURN CodeMono
+  ELSIF s = "proportional" THEN RETURN CodeProportional
+  END;
+  RETURN -1
+END CodeStyleOf;
+
+(* Sets the document's code style: the command line's (cmdCodeStyle)
+   if it gave one, else the metadata field code-style's, else none. A
+   field that names no style is warned about and ignored. *)
+PROCEDURE SetCodeStyle*(meta: A.MetaMapV);
+  VAR s: ARRAY 32 OF CHAR; r: Rope; k: INTEGER;
+BEGIN
+  docCodeStyle := CodeNone;
+  IF cmdCodeStyle >= 0 THEN docCodeStyle := cmdCodeStyle
+  ELSIF A.GetMeta(meta, "code-style") # NIL THEN
+    r := Stringify(DocMeta(meta, "code-style"));
+    s := "";
+    IF Ropes.Length(r) < LEN(s) THEN Ropes.ToString(r, s) END;
+    k := CodeStyleOf(s);
+    IF k >= 0 THEN docCodeStyle := k
+    ELSE PdIO.Warn("code-style must be none, mono or proportional; ignored")
+    END
+  END
+END SetCodeStyle;
+
+(* The code style of a code block or inline code with the attributes
+   attr: a class .plain, .mono or .proportional, else the document's;
+   lang := the language of its first class that names one, or NIL *)
+PROCEDURE CodeStyle*(attr: A.Attr; VAR lang: PdCode.Language): INTEGER;
+  VAR p: A.StrList; s: ARRAY 32 OF CHAR; style: INTEGER;
+BEGIN
+  lang := NIL; style := docCodeStyle;
+  IF attr # NIL THEN p := attr.classes ELSE p := NIL END;
+  WHILE p # NIL DO
+    IF Ropes.Length(p.s) < LEN(s) THEN
+      Ropes.ToString(p.s, s);
+      IF s = "plain" THEN style := CodeNone
+      ELSIF s = "mono" THEN style := CodeMono
+      ELSIF s = "proportional" THEN style := CodeProportional
+      ELSIF lang = NIL THEN lang := PdCode.Find(s)
+      END
+    END;
+    p := p.next
+  END;
+  RETURN style
+END CodeStyle;
+
+BEGIN
+  cmdCodeStyle := -1; docCodeStyle := CodeNone
 END PdShared.

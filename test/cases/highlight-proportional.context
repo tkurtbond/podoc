@@ -1,0 +1,34 @@
+\startsectionlevel[title={Head
+\type[escape=yes]{/BTEX\bf IF/ETEX x /BTEX{\it (*~c~*)}/ETEX /BTEX\bf END/ETEX}},reference={head-if-x-c-end}]
+
+Inline
+\type[escape=yes]{/BTEX\bf IF/ETEX x /BTEX\bf THEN/ETEX /BTEX{\it (*~c~*)}/ETEX /BTEX\bf END/ETEX},
+\type[escape=yes]{/BTEX\bf int/ETEX x; /BTEX{\it //~c~\{\}}/ETEX},
+\type{IF x} and \type{plain}.
+
+\startlines[space=on]
+{\bf{}MODULE} M; {\it{}(* a \{comment\}}
+{\it{}  over two lines *)}
+  {\bf{}VAR} s: {\bf{}ARRAY} 8 {\bf{}OF} CHAR; {\it{}(* it's -\kern0pt- 50\letterpercent{} *)}
+{\bf{}BEGIN} s := "(* a\letterbackslash{}b *)"; t := 'END'
+{\bf{}END} M.
+\stoplines
+
+\startlines[space=on]
+.dot at start
+{\bf{}static} {\bf{}int} f({\bf{}void}) \{ {\bf{}return} '\letterbackslash{}'\kern0pt'; \} {\it{}// x-\kern0pt-y `\kern0pt`z'\kern0pt'}
+\stoplines
+
+\startlines[space=on]
+{\bf{}FROM} InOut {\bf{}IMPORT} WriteString; {\it{}(* end END *)}
+\stoplines
+
+\startlines[space=on]
+no language \# \$ \{ \} -\kern0pt- x
+\stoplines
+
+\starttyping
+MODULE Plain;
+\stoptyping
+
+\stopsectionlevel
