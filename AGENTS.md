@@ -69,6 +69,12 @@ pandoc has none: 23.1 (`PdRoff`, the roff writers' shared code, from
 images), 23.4 (`data/templates/default.mom`, podoc's own, and the
 example `data/examples/statement.mom`) and 23.5 (`--pdf-engine=pdfmom`
 in `PdPdf`). Read `docs/research/pdfmom-backend.md` first.
+Phase 24, podoc's own code highlighting (decisions 30 to 47), is
+done: `PdCode` (the scanner and the languages' reserved words),
+`PdCodeAlign` (the layout of aligned code), `PdKeywords` (users'
+lists, `--code-keywords`), and `--code-style` and `--code-align` in
+the HTML, ms, mom and ConTeXt writers. Read
+`docs/research/syntax-highlighting-small.md` first.
 See PLAN.md's State.
 
 ## Reference material

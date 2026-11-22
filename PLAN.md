@@ -1618,7 +1618,7 @@ the body.
 - **Other systems:** `make test` on the six BSD VMs; the PDF tests
   skip where groff has no pdfmom.
 
-## Phase 24: Small syntax highlighting [planned]
+## Phase 24: Small syntax highlighting [done]
 
 Scheduled 2026-11-22 at the user's request: the small highlighting
 of docs/research/syntax-highlighting-small.md, with vgrind's lessons
@@ -1970,12 +1970,24 @@ Each subphase passes `make test` under `-O2` and `-OC`.
     each with its exit status. The user documentation is left for
     Phase 24.9.
 
-### Phase 24.9: Documentation and other systems [planned]
+### Phase 24.9: Documentation and other systems [done]
 
 - **Docs:** docs/user/podoc.md (the options, the variables, the
   languages); docs/user/differences.md (the code font, the styles,
   `--code-align`, HTML's `fixed` only); AGENTS.md and its module list.
 - **Other systems:** `make test` on the six BSD VMs.
+- **Done** 2026-11-22: docs/user/podoc.md has the three options and a
+  section "Code highlighting" (styles and their precedence, the
+  languages, the alignments, `code-column` and `code-gap`, users'
+  lists, each writer's fonts); docs/user/differences.md a section of
+  the same name, the HTML, ms and ConTeXt entries changed, the
+  options not taken (`--syntax-highlighting`, `--highlight-style`),
+  the templates' additions, and `pdfmom` among the engines; AGENTS.md
+  the status with `PdCode`, `PdCodeAlign` and `PdKeywords`. `-t`'s
+  help now names `mom` and `plain`. `make test` passes on alerik,
+  rackhir, artos, yishana, jherek and cymoril under `-O2` and `-OC`
+  (352 case tests, 23 round trips, the unit tests; the image tests
+  that need converters skipped, as none are installed there).
 
 ## Later, not scheduled
 
@@ -3574,3 +3586,8 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   under `-O2` and `-OC` (352 case tests, 5 of them new, the round
   trips, the image tests, the unit tests with `PdCodeTest`'s 161
   cases).
+- 2026-11-22: Phase 24.9 done, and with it Phase 24: the user
+  documentation for code highlighting, AGENTS.md's status. `make
+  test` passes under `-O2` and `-OC` on atla and the six BSD VMs
+  (352 case tests, the round trips, the unit tests; on the VMs the
+  image tests that need converters skipped).

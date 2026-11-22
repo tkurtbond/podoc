@@ -39,9 +39,9 @@ the rest have not yet been.
   pandoc); any other, such as `-t markdown-raw_html`, ends podoc with
   exit status 23. As in pandoc, an extension both enabled and disabled
   (`+gutenberg-gutenberg`) is on.
-- `--pdf-engine` takes only `groff`, `pdfroff` or `context` (by base
-  name, so a path is allowed); anything else ends podoc with status 6,
-  and the message lists only those three. PDF output with neither
+- `--pdf-engine` takes only `groff`, `pdfroff`, `context` or
+  `pdfmom` (by base name, so a path is allowed); anything else ends
+  podoc with status 6, and the message lists only those four. PDF output with neither
   `-t` nor `--pdf-engine`, which pandoc makes with LaTeX and
   `pdflatex`, and PDF from html, end podoc with status 4.
 - Filters are not run. `--lua-filter` (`-L`) and `-F`/`--filter`
@@ -55,6 +55,13 @@ the rest have not yet been.
   (decision 4). Any other filter ends podoc with status 83.
 - A `--wrap` value other than `auto`, `none` or `preserve` gives
   pandoc's message and status, 6.
+- `--syntax-highlighting` and `--highlight-style` are not taken.
+  podoc's own `--code-style`, `--code-align` and `--code-keywords`,
+  and the metadata fields `code-style`, `code-align` and
+  `code-keywords`, control its own highlighter (see Code
+  highlighting). A bad `--code-style` or `--code-align`, an unknown
+  language or a missing `:` in `--code-keywords` end podoc with
+  status 6, and a `--code-keywords` file that cannot be read with 1.
 - `--unknown=warn|error` is podoc's own (see The reStructuredText
   reader). A value other than `warn` or `error` ends podoc with status 6.
 - `--reference-location` is used only by the mom writer, where
@@ -208,14 +215,35 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
 - A template that cannot be found is reported as `Could not find data
   file 'templates/NAME'`; pandoc names the file in its own data
   directory.
+- The ms and ConTeXt templates and the HTML template's
+  `styles.html` have lines of podoc's own for highlighted code, each
+  inside `$if(...)$`, so that output without highlighting is as from
+  pandoc's: `code-column` and `code-gap` in all three,
+  `code-proportional` (set by the writer) in `styles.html`, and
+  `code-highlight` (set by the writer) in `default.context`.
 - `pandoc-version` is `3.10`, the pandoc that podoc follows.
 - The variable `meta-json` is not set, and there is no
   `--variable-json` or `--data-dir`.
 
+## Code highlighting
+
+pandoc highlights code with skylighting, in colour, for every language
+it has a definition for. podoc highlights only with `--code-style`
+(or `code-style`) set to `mono` or `proportional`, only the languages
+it knows (the Oberon family, Modula-2, the Pascals, Ada, C, C++, sh and
+bash), and only reserved words (bold) and comments (italic). With the
+default, `none`, it writes what `pandoc --syntax-highlighting=none`
+writes. The `proportional` style, which sets code blocks in the text
+font and aligns them, has no counterpart in pandoc. The markdown,
+plain and JSON writers ignore the style. See podoc.md's "Code
+highlighting".
+
 ## The HTML writer
 
-- Code is not highlighted: podoc writes what `pandoc
-  --syntax-highlighting=none` writes.
+- Code is highlighted only as Code highlighting says, with `<b>` and
+  `<i>`, not pandoc's `<span class="kw">` and style sheet. Of the
+  alignments only `fixed` is available: `elastic` and `hybrid` give
+  `fixed`'s output.
 - TeX math is written as its TeX, escaped, inside `span.math`
   (`\(...\)` and `\[...\]`); pandoc's default output converts it
   with texmath to HTML where it can.
@@ -233,8 +261,8 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
 
 ## The ms writer
 
-- Code is not highlighted: podoc writes what `pandoc
-  --syntax-highlighting=none` writes. By default, pandoc 3.14's ms
+- Code is highlighted only as Code highlighting says, with fonts
+  (`\f[CB]`, `\f[CI]`), not tokens. By default, pandoc 3.14's ms
   writer highlights code blocks and inline code that name a language,
   writing `\*[KeywordTok "..."]` and the like, and with `-s` defines
   the macros for them. (pandoc 3.10 wrote the tokens even with
@@ -311,7 +339,8 @@ for groff 1.23 and later.
   `papersize`, the four margins, `fontfamily`, `pointsize`,
   `lineheight`, and mom's own `columns` (with `column-gutter`, 1.5P by
   default), `printstyle` (TYPESET by default), `doctype`, `linkcolor`,
-  `covers` and `code-indent` (code blocks' indent, 0 by default). mom
+  `covers`, `code-indent` (code blocks' indent, 0 by default), and
+  `code-column` and `code-gap` (see Code highlighting). mom
   shows `date` only on covers.
 - `--toc` puts the contents first. mom has no contents depth;
   `--toc-depth` and unnumbered headings under `--number-sections` are
@@ -323,9 +352,11 @@ for groff 1.23 and later.
 
 ## The ConTeXt writer
 
-- Code is not highlighted: podoc writes what `pandoc
-  --syntax-highlighting=none` writes, `\starttyping` ... `\stoptyping`
-  and `\type{...}`. By default, pandoc 3.14's ConTeXt writer
+- Code is highlighted only as Code highlighting says; with the style
+  `none` podoc writes what `pandoc --syntax-highlighting=none` writes,
+  `\starttyping` ... `\stoptyping` and `\type{...}`. With a style the
+  writer sets the variable `code-highlight`, and with it the default
+  template adds a bold and italic monospaced font. By default, pandoc 3.14's ConTeXt writer
   highlights code blocks and inline code that name a language, writing
   `\starthighlighting` ... `\stophighlighting` and `\highlight{...}`.
   (pandoc 3.10 highlighted code blocks only when no style was named,

@@ -83,6 +83,9 @@ when no files are named. `podoc --help` lists the options:
 | `--pdf-engine PROGRAM`, `--pdf-engine-opt STRING` | how PDF is made |
 | `--extract-media DIR` | copy the local images into `DIR` and refer to the copies |
 | `-F PROGRAM`, `-L FILE` | the built-in filters (see below) |
+| `--code-style none\|mono\|proportional` | how code is highlighted (podoc's own; see "Code highlighting") |
+| `--code-align none\|fixed\|elastic\|hybrid` | how proportional code is aligned (podoc's own) |
+| `--code-keywords LANG:FILE` | change a language's reserved words (podoc's own) |
 | `--wrap auto\|none\|preserve` | wrapping: for `plain`, `markdown`, `ms` and `context`, `auto` (the default) wraps at `--columns`; HTML is not wrapped |
 | `--columns N` | the line length, 72 by default; it also sets table column widths, as in pandoc |
 | `--tab-stop N`, `-p` | tabs |
@@ -204,6 +207,123 @@ that should stay straight. `subs2yaml` converts a `substitutions.lua`
 file:
 
     subs2yaml substitutions.lua > substitutions.yaml
+
+## Code highlighting
+
+pandoc highlights code with its skylighting library. podoc has a small
+highlighter of its own, for the HTML, ms, mom and ConTeXt writers:
+reserved words are bold and comments italic; strings and everything
+else are left as they are. It is off by default, and then podoc writes
+what `pandoc --syntax-highlighting=none` writes.
+
+`--code-style`, or the metadata field `code-style`, chooses it:
+
+- `none`, the default: no highlighting.
+- `mono`: code in the monospaced font, highlighted.
+- `proportional`: code blocks in the text font, highlighted and
+  aligned (see below). Inline code stays in the monospaced font.
+
+A code block or inline code with the class `.plain`, `.mono` or
+`.proportional` takes that style, whatever the document's. Otherwise
+the command line wins over the metadata.
+
+The language is the first class that names one: ```` ```oberon ````
+or `` `x`{.c} ``. Code with no language, or one podoc does not know,
+is not highlighted, but in the proportional style it is still aligned.
+The languages, with their names:
+
+| Names | Language |
+|---|---|
+| `oberon`, `oberon2` | Oberon-2 |
+| `oberon1`, `oberon87` | the original Oberon (the 1990 report) |
+| `oberon07` | Oberon-07 (the 2016 revision) |
+| `cp`, `componentpascal` | Component Pascal |
+| `modula2` | Modula-2 |
+| `pascal`, `fpc` | Free Pascal's default mode |
+| `objfpc`, `delphi`, `tp`, `macpas`, `iso` | Free Pascal's other modes |
+| `ada` | Ada 2022 |
+| `c`, `cpp` | C and C++ |
+| `sh`, `bash` | the POSIX shell and bash |
+
+Names are lower case. A language that ignores case (Pascal, Ada) finds
+its reserved words in any case.
+
+### Alignment
+
+In the proportional style the text font's letters have different
+widths, so the source's spaces cannot line columns up. podoc cuts each
+line at every run of two or more spaces, and places the pieces by
+their columns in the source. `--code-align`, or the metadata field
+`code-align`, chooses how:
+
+- `hybrid`, the default: pieces that start in the same column on
+  consecutive lines form a group, placed at its column or, if the text
+  before any of them is wider, after the widest; the whole group moves
+  together.
+- `fixed`: each piece at its column, or after the text before it if
+  that is wider.
+- `elastic`: each group just after its widest preceding text, ignoring
+  the columns.
+- `none`: the source's spaces, unaligned.
+
+A line's indentation is always placed by its column. HTML has only
+`fixed`: `elastic` and `hybrid` give `fixed` there. Copying code from
+an HTML page gives the source's text, spaces and all.
+
+Two template variables, plain numbers of ems, set the measures:
+`code-column`, the width of a column (0.5 by default), and `code-gap`,
+the least space between two pieces (1). For example, `-V
+code-column=0.4 -V code-gap=2`. In ms and mom the em is that of the
+point size where the template sets them, near its top.
+
+### Reserved words
+
+Each language has a built-in list of its reserved words, from its
+report or standard. `--code-keywords=LANG:FILE` changes it with the
+words in `FILE`, separated by spaces or line ends; `#` at the start of
+a word starts a comment that runs to the end of the line. A word is
+added to the list, and `-word` takes `word` out of it. If the file's
+first line is `#!replace`, its words replace the list:
+
+    #!replace
+    # Only these words are reserved.
+    MODULE PROCEDURE BEGIN END
+
+The metadata field `code-keywords` does the same, a map from
+languages to words, as a list or a string of words separated by
+spaces:
+
+    code-keywords:
+      c: [widget, gadget, -int]
+      sh: -case
+      ada:
+        replace: true
+        words: [procedure, begin, end]
+
+A language's names share one list: a change to `pascal` changes
+`fpc`. The built-in lists are changed first by the metadata, then by
+each `--code-keywords` file in turn. An unknown language or a missing
+`:` on the command line ends podoc with status 6, and a file that
+cannot be read with status 1; in the metadata, an unknown language is
+a warning.
+
+### In each format
+
+- **HTML:** reserved words in `<b>`, comments in `<i>`. Proportional
+  code blocks have the class `pd-proportional`; with `-s`,
+  `styles.html` styles them and their alignment.
+- **ms:** code in `\f[CR]` (Courier), reserved words in `\f[CB]` and
+  comments in `\f[CI]`; proportional code in `\f[R]`, `\f[B]` and
+  `\f[I]`.
+- **mom:** `\*[BD]` and `\*[IT]`; proportional code blocks are
+  `.QUOTE`s in roman. `code-indent` sets their indent.
+- **ConTeXt:** monospaced code in `\starttyping[escape=yes]`;
+  proportional code in `\startlines`, with macros podoc writes before
+  the first such block. With `-s` and no `monofont`, the default
+  template adds Latin Modern Mono's bold and italic, which Latin
+  Modern Typewriter lacks.
+
+The markdown, plain and JSON writers ignore the style.
 
 ## mom
 

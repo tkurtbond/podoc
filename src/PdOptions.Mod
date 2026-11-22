@@ -620,7 +620,7 @@ BEGIN
   parser.AddOption(ArgParser.MakeStringOption("r", "read",
     "The same as --from.", SetFrom));
   parser.AddOption(ArgParser.MakeStringOption("t", "to",
-    "The output format: html, html5, ms, context, markdown, json or pdf.", SetTo));
+    "The output format: html, html5, ms, mom, context, markdown, plain, json or pdf.", SetTo));
   parser.AddOption(ArgParser.MakeStringOption("w", "write",
     "The same as --to.", SetTo));
   parser.AddOption(ArgParser.MakeStringOption("o", "output",
