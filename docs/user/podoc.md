@@ -244,6 +244,7 @@ with these variables:
 | `margin-left`, `margin-right`, `margin-top`, `margin-bottom` | the margins (`1i`, `2c`, ...) |
 | `fontfamily`, `pointsize`, `lineheight` | `FAMILY`, `PT_SIZE`, `LS` |
 | `columns`, `column-gutter` | `COLUMNS`, the gutter 1.5P by default |
+| `code-indent` | `QUOTE_INDENT`, code blocks' indent: 0 (the left margin) by default; a length (`2m`, `1P`) or a whole number of paragraph indents |
 | `printstyle` | `TYPESET` (the default) or `TYPEWRITE` |
 | `doctype` | `DOCTYPE`: `DEFAULT`, `CHAPTER`, `NAMED "..."`, `LETTER` |
 | `linkcolor` | `PDF_LINK_COLOR`: a colour name, `#rrggbb` or three numbers |

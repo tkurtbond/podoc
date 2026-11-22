@@ -4,6 +4,11 @@ Where podoc deliberately, or for now, does not do what pandoc 3.10
 does. Output that differs from pandoc's but is equivalent (decision 3
 in PLAN.md) is listed by the writer.
 
+The comparisons were made with pandoc 3.10. pandoc 3.14 became the
+reference on 2026-11-22. The entries on highlighted code, and the
+markdown writer's escaped colons, have been checked against 3.14;
+the rest have not yet been.
+
 ## The command line
 
 - An unknown option, or an option missing its argument, ends podoc
@@ -228,11 +233,12 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
 
 ## The ms writer
 
-- Code is not highlighted. pandoc's ms writer highlights code blocks
-  and inline code that name a language even with
-  `--syntax-highlighting=none`, writing `\*[NormalTok "..."]`
-  strings that are left undefined without the highlighting macros;
-  podoc writes the code as plain text.
+- Code is not highlighted: podoc writes what `pandoc
+  --syntax-highlighting=none` writes. By default, pandoc 3.14's ms
+  writer highlights code blocks and inline code that name a language,
+  writing `\*[KeywordTok "..."]` and the like, and with `-s` defines
+  the macros for them. (pandoc 3.10 wrote the tokens even with
+  `none`, and without the macros, so its code vanished from the PDF.)
 - TeX math is written as its TeX: `$...$` inline, and `$$...$$`
   inside `.RS 3` ... `.RE` for display math (pandoc's fallback when
   it cannot convert a formula). pandoc converts math with texmath to
@@ -299,8 +305,9 @@ for groff 1.23 and later.
   are `title`, `subtitle`, `author`, `date`, `abstract`, `toc-title`,
   `papersize`, the four margins, `fontfamily`, `pointsize`,
   `lineheight`, and mom's own `columns` (with `column-gutter`, 1.5P by
-  default), `printstyle` (TYPESET by default), `doctype`, `linkcolor`
-  and `covers`. mom shows `date` only on covers.
+  default), `printstyle` (TYPESET by default), `doctype`, `linkcolor`,
+  `covers` and `code-indent` (code blocks' indent, 0 by default). mom
+  shows `date` only on covers.
 - `--toc` puts the contents first. mom has no contents depth;
   `--toc-depth` and unnumbered headings under `--number-sections` are
   written with mom's internal macros and registers.
@@ -311,11 +318,13 @@ for groff 1.23 and later.
 
 ## The ConTeXt writer
 
-- Code is not highlighted. pandoc's ConTeXt writer highlights code
-  blocks that name a language even with `--syntax-highlighting=none`,
-  writing `\starthighlighting` ... `\stophighlighting`; podoc writes
-  `\starttyping` ... `\stoptyping`, as pandoc does for code with no
-  language.
+- Code is not highlighted: podoc writes what `pandoc
+  --syntax-highlighting=none` writes, `\starttyping` ... `\stoptyping`
+  and `\type{...}`. By default, pandoc 3.14's ConTeXt writer
+  highlights code blocks and inline code that name a language, writing
+  `\starthighlighting` ... `\stophighlighting` and `\highlight{...}`.
+  (pandoc 3.10 highlighted code blocks only when no style was named,
+  and then `context` failed on an undefined control sequence.)
 - Output is wrapped at `--columns` (72) as pandoc wraps it;
   `--wrap=preserve` keeps the input's line breaks. On the user's 54
   markdown documents, at 40, 72 and 100 columns, with and without
@@ -384,7 +393,7 @@ it is not there, 4 for PDF to a terminal). It differs in these ways.
 ## The markdown writer
 
 - A run of colons that would start a fenced div is escaped as `\`
-  and the same colons. pandoc 3.10 writes one colon too many (`::::`
+  and the same colons. pandoc (3.10 and 3.14) writes one colon too many (`::::`
   becomes `\:::::`), so its output does not read back as its input.
 - Citations, which podoc's reader does not read, are written as their
   text.

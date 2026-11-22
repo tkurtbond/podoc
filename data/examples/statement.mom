@@ -53,6 +53,8 @@ $endif$
 $if(linkcolor)$
 .PDF_LINK_COLOR $linkcolor$
 $endif$
+.\" code blocks (QUOTE) at the left margin unless code-indent is set
+.QUOTE_INDENT $if(code-indent)$$code-indent$$else$0$endif$
 .\" the colour for strikeout
 .defcolor strikecolor rgb 0.7 0.7 0.7
 .\" captions below images

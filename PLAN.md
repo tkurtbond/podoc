@@ -240,6 +240,80 @@ Made by the user on 2026-11-20, on the questions of §15.
     with groff (ms and mom) and ConTeXt. The plan that was proposed,
     numbered L1, is kept in that document's §10.
 
+29. **No port of skylighting** (2026-11-22). After the research in
+    docs/research/syntax-highlighting-big.md, the user decided that
+    highlighting through a port of skylighting (its regex engine,
+    tokenizer and 164 syntax files, for ms, mom and ConTeXt) is too
+    big, and will not be done. podoc keeps writing code plain. A
+    smaller form of highlighting, or accepting pandoc's highlighting
+    options, is a separate question, not settled here.
+
+30. **Comments in italic in the proportional style** (2026-11-22).
+    After the research in docs/research/vgrind.md (its question V1),
+    the user decided that the proportional style of the small
+    highlighting design (docs/research/syntax-highlighting-small.md)
+    sets comments in italic, as vgrind does, as well as reserved words
+    in bold.
+
+31. **Reserved-word lists in podoc's own format only** (2026-11-22).
+    On vgrind.md's question V3, the user decided that podoc reads
+    users' reserved-word lists in its own format only, not in
+    vgrindefs format.
+
+32. **Column width and gap for aligned code** (2026-11-22). On
+    vgrind.md's question V4, part 2: if the proportional style aligns
+    columns (vgrind.md §8), the defaults are 0.5 em per source column
+    (*W*) and a least gap of 1 em (*G*), and the user must be able to
+    change both. The form of alignment (V4 part 1) is decision 33.
+
+    How they are changed (decided the same day): through template
+    variables, `code-column` and `code-gap`, set with `-V` or in the
+    metadata like podoc's other variables. Each value is a plain
+    number of ems (`code-column: 0.4`), so one setting serves every
+    format; each template adds its own unit (`m` in ms and mom, `em`
+    in ConTeXt) and holds the default:
+
+    ```
+    .nr PdCodeCol $if(code-column)$$code-column$$else$0.5$endif$m
+    .nr PdCodeGap $if(code-gap)$$code-gap$$else$1$endif$m
+    ```
+
+    ```
+    \newdimen\PdColumn \PdColumn=$if(code-column)$$code-column$$else$0.5$endif$em
+    \def\PdGap{$if(code-gap)$$code-gap$$else$1$endif$em}
+    ```
+
+    The writer writes source column numbers, not lengths
+    (`\h'|28*\n[PdCodeCol]u'`, `\PdSeg{28}{...}`), so its output does
+    not depend on the widths and no command-line option is needed.
+    Not yet verified: the experiment wrote lengths directly. Ems are
+    fixed at the body size where the template sets them.
+
+33. **The form of alignment is a choice** (2026-11-22). On vgrind.md's
+    question V4, part 1: the user chooses the form with podoc's own
+    option `--code-align=none|fixed|elastic|hybrid`, or with
+    `code-align` in the document's metadata. The default is `hybrid`.
+    - `none`: the proportional style with spaces kept as they are;
+    - `fixed`, `elastic`, `hybrid`: as in vgrind.md §8.1.
+
+    The option changes what the writer writes (fixed writes no
+    measuring lines), so it is read by the writer, not only by the
+    template. When both are given, the command line wins, as pandoc's
+    `-M` wins over a document's metadata. Being podoc's own, it goes
+    in docs/user/differences.md when it is implemented.
+
+34. **mom code blocks at the left margin** (2026-11-22). `PdMom`
+    writes code blocks as mom's `.QUOTE` with `.CODE`, as mom's
+    documentation advises, and `.QUOTE` indented them by about an inch
+    (75 pt). The user preferred them at the margin, with the indent a
+    template variable: `default.mom` and `statement.mom` set
+    `.QUOTE_INDENT $if(code-indent)$$code-indent$$else$0$endif$`.
+    `code-indent` takes mom's own argument, as the other mom variables
+    do (`2m`, `1P`, or a whole number of paragraph indents). `PdMom`
+    uses `.QUOTE` only for code blocks. Its `.CODE OFF` before
+    `.QUOTE OFF`, which mom's documentation calls unneeded, was kept:
+    removing it moved nothing, on one page or across eight.
+
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
 JSON AST compared byte for byte.
@@ -2904,3 +2978,75 @@ the body.
   The user decided the same day not to add a LaTeX backend
   (decision 28). The plan proposed for it, first written here as
   Phase 24, was moved to the research's §10, renumbered L1. No code.
+- 2026-11-22: Research on syntax highlighting for ms, mom and
+  ConTeXt, in docs/research/syntax-highlighting-big.md. Its findings:
+  - The user's built documents have no code with a skylighting
+    language.
+  - pandoc 3.10's default ms output drops highlighted code (the
+    token macros are never defined), and its default ConTeXt output
+    stops `context` with an undefined control sequence. Both are 3.8
+    regressions, reportedly fixed in 3.11 (#11829, unchecked).
+  - Porting skylighting means a KDE regex engine, the tokenizer and
+    164 syntax files, about 4,000 lines of Oberon plus megabytes of
+    data, and 84 of the syntax files are GPL or LGPL.
+
+  The user decided the same day that this port is too big and will
+  not be done (decision 29). No code.
+- 2026-11-22: Research on small syntax highlighting, written from
+  scratch, in docs/research/syntax-highlighting-small.md: reserved words
+  in bold, in a mono or a proportional style, for ms, mom and ConTeXt;
+  sh, bash, Oberon-2, Modula-2, Ada, Pascal (FreePascal's modes), C and
+  C++; user lists of reserved words. Its findings:
+  - Both styles were rendered by hand in each writer. Problems found:
+    mom's `.QUOTE` is italic, and ConTeXt's default mono bold is too
+    light to see.
+  - The reserved-word lists were checked against poc, gm2, GNAT, gcc,
+    g++, bash and FreePascal's `tokens.pas`.
+  - Estimated at 1,500 to 2,300 lines, mostly one new module.
+  - A bug found on the way: under groff 1.25.0, ms code blocks are set
+    in Times-Roman, because `\f[C]` is no longer a font. pandoc 3.14
+    writes the same.
+  - pandoc 3.14 no longer has the 3.10 highlighting regressions.
+
+  Questions Q1 to Q8 are open for the user. No code.
+- 2026-11-22: Research on vgrind's highlighting, in
+  docs/research/vgrind.md. vgrind 5.7 (the 4.4BSD sources, from the
+  user's stored Debian package) was built and run on Oberon and C
+  samples and rendered with groff 1.25.0. Its findings:
+  - It sets code in roman, reserved words in bold and comments in
+    italic, and puts tabs at absolute positions (`\h'|Nn'`) so that
+    columns align in a proportional font.
+  - Its languages are a 1980s termcap-style database, with no Ada or
+    Oberon and dated, partly wrong entries.
+  - It cannot be used from podoc: it has its own page layout, its
+    filter mode does not work with ms, and it has no ConTeXt form.
+  - NetBSD 11.0 ships it; FreeBSD 15.1 and OpenBSD 7.9 do not.
+
+  It supports the small design's proportional style, and suggests
+  absolute positions for runs of spaces. Questions V1 to V3 are open.
+  No code.
+- 2026-11-22: The user decided vgrind.md's V1 (comments in italic in
+  the proportional style, decision 30) and V3 (reserved-word lists in
+  podoc's own format only, decision 31). For V2, the alignment
+  experiment is in vgrind.md §8: a throwaway awk script wrote ms, mom
+  and ConTeXt for an Oberon and a C sample, in four forms (mono,
+  fixed, elastic, hybrid), rendered with groff 1.25.0 (`-ms`,
+  `pdfmom`) and ConTeXt LMTX and looked at. All forms worked in all
+  three formats; ConTeXt needs three macros. Recommended: hybrid,
+  0.5 em per column, 1 em gap (question V4, open). No podoc code.
+- 2026-11-22: The user decided V4's part 2 (decision 32): 0.5 em per
+  column and a 1 em gap by default, both changeable. V4's part 1, the
+  form of alignment, is open.
+- 2026-11-22: Decision 32 extended: the widths are template variables,
+  `code-column` and `code-gap`, in ems, and the writer writes column
+  numbers. V4's part 1 remains open.
+- 2026-11-22: Decision 33: `--code-align=none|fixed|elastic|hybrid`
+  or `code-align` in the metadata, default `hybrid`. V4 is settled;
+  vgrind.md's questions are all answered. No podoc code.
+- 2026-11-22: Decision 34: `.QUOTE_INDENT`, from the new mom
+  template variable `code-indent` (0 by default), in `default.mom` and
+  `statement.mom`; `src/PdDefaults.Mod` regenerated with
+  tools/mktemplates; expected `mom-covers.mom` and `mom-standalone.mom`
+  updated (two lines each). Checked: code at the margin by default and
+  at 2m with `-V code-indent=2m`, through `--pdf-engine=pdfmom`, and
+  with statement.mom; `make test` passes under -O2 and -OC.

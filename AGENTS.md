@@ -75,7 +75,7 @@ See PLAN.md's State.
 
 | What | Where |
 |---|---|
-| pandoc 3.10 source (matches the installed binary) | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.10` |
+| pandoc 3.10 source (the installed binary is 3.14 since 2026-11-22; there is no 3.14 source here) | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.10` |
 | pandoc 3.1.11.1 source | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.1.11.1` |
 | doctemplates source | `/usr/local/sw/src/lang/Haskell/pandoc/doctemplates` |
 | The markdown reader | `src/Text/Pandoc/Readers/Markdown.hs`, `Parsing/` |
@@ -83,7 +83,7 @@ See PLAN.md's State.
 | PDF engines | `src/Text/Pandoc/PDF.hs` |
 | Default templates | `data/templates/` (GPL-2.0-or-later or BSD-3-Clause) |
 | Test fixtures | `test/testsuite.txt`, `test/writer.*`, `test/tables.*`, `test/command/*.md` |
-| Installed pandoc (the oracle) | `~/.cabal/bin/pandoc`, 3.10, with Lua 5.4 |
+| Installed pandoc (the oracle) | `~/.cabal/bin/pandoc`, 3.14 (was 3.10 until 2026-11-22), with Lua 5.4 |
 | `pandoc-include` | `~/.local/lib/python3.14/site-packages/pandoc_include/main.py` |
 | The user's filters and templates | `~/.pandoc/filters`, `~/.pandoc/templates` |
 | Markdown projects using pandoc | `~/Repos/RPG/Lost-Worlds`, `~/Repos/RPG/Galactic-Bounty-Hunters` |
@@ -158,7 +158,7 @@ reinstall after upgrading poc.
   beside it), and the image tests (`tools/runimages`, from
   `test/images` against `test/images-expected`), under both models.
   It must not need pandoc. Expected JSON
-  is pandoc 3.10's; the writers' expected files start as pandoc's
+  is pandoc 3.10's (not yet re-checked against 3.14); the writers' expected files start as pandoc's
   `--wrap=none` output and may be replaced by podoc's equivalent
   output, each difference recorded in `docs/user/differences.md`
   (decision 3).
@@ -212,7 +212,7 @@ each new code there.
 - **Portable:** Linux and the BSDs. GNU make is the build tool; shell
   scripts are POSIX `sh`.
 - **Match pandoc**, not a reading of its manual: when unsure, run
-  pandoc 3.10 and do what it does. Known, deliberate differences are
+  the installed pandoc (3.14) and do what it does. Known, deliberate differences are
   listed in the user documentation.
 - **Scope:** add a feature when the user's documents or filters need
   it, or the plan schedules it. Everything else goes to PLAN.md's

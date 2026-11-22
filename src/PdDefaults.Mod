@@ -353,26 +353,28 @@ BEGIN
   S(".HEADING_STYLE 6 NUMBER"); C(0AX); S("$endif$"); C(0AX);
   S("$if(linkcolor)$"); C(0AX); S(".PDF_LINK_COLOR $linkcolor$"); C(0AX);
   S("$endif$"); C(0AX); S(".\"); C(22X);
-  S(" the colour for strikeout"); C(0AX); S(".defcolor strikecolor rgb 0.7 0.7 0.7"); C(0AX);
-  S(".\"); C(22X); S(" captions below images"); C(0AX);
-  S(".CAPTION_AFTER_LABEL IMG"); C(0AX); S("$if(title-meta)$"); C(0AX);
-  S(".PDF_TITLE "); C(22X); S("$title-meta$"); C(22X);
-  C(0AX); S("$endif$"); C(0AX); S("$for(header-includes)$");
-  C(0AX); S("$header-includes$"); C(0AX); S("$endfor$");
-  C(0AX); S("$if(toc)$"); C(0AX); S("$if(toc-title)$");
-  C(0AX); S(".TOC_HEADER_STRING "); C(22X); S("$toc-title$");
-  C(22X); C(0AX); S("$endif$"); C(0AX);
-  S(".AUTO_RELOCATE_TOC$if(covers)$$else$ TOP$endif$"); C(0AX); S("$endif$"); C(0AX);
-  S(".START"); C(0AX); S("$if(abstract)$"); C(0AX);
-  S(".BLOCKQUOTE"); C(0AX); S("$abstract$"); C(0AX);
-  S(".BLOCKQUOTE OFF"); C(0AX); S("$endif$"); C(0AX);
-  S("$for(include-before)$"); C(0AX); S("$include-before$"); C(0AX);
-  S("$endfor$"); C(0AX); S("$body$"); C(0AX);
-  S("$for(include-after)$"); C(0AX); S("$include-after$"); C(0AX);
-  S("$endfor$"); C(0AX); S("$if(toc)$"); C(0AX);
-  S(".\"); C(22X); S(" groff 1.23 leaves vertical traps off after endnotes"); C(0AX);
-  S(".if \n[.vpt]=0 .vpt"); C(0AX); S(".TOC"); C(0AX);
-  S("$endif$"); C(0AX)
+  S(" code blocks (QUOTE) at the left margin unless code-indent i"); S("s set"); C(0AX); S(".QUOTE_INDENT $if(code-indent)$$code-indent$$else$0$endif$");
+  C(0AX); S(".\"); C(22X); S(" the colour for strikeout");
+  C(0AX); S(".defcolor strikecolor rgb 0.7 0.7 0.7"); C(0AX); S(".\");
+  C(22X); S(" captions below images"); C(0AX); S(".CAPTION_AFTER_LABEL IMG");
+  C(0AX); S("$if(title-meta)$"); C(0AX); S(".PDF_TITLE ");
+  C(22X); S("$title-meta$"); C(22X); C(0AX);
+  S("$endif$"); C(0AX); S("$for(header-includes)$"); C(0AX);
+  S("$header-includes$"); C(0AX); S("$endfor$"); C(0AX);
+  S("$if(toc)$"); C(0AX); S("$if(toc-title)$"); C(0AX);
+  S(".TOC_HEADER_STRING "); C(22X); S("$toc-title$"); C(22X);
+  C(0AX); S("$endif$"); C(0AX); S(".AUTO_RELOCATE_TOC$if(covers)$$else$ TOP$endif$");
+  C(0AX); S("$endif$"); C(0AX); S(".START");
+  C(0AX); S("$if(abstract)$"); C(0AX); S(".BLOCKQUOTE");
+  C(0AX); S("$abstract$"); C(0AX); S(".BLOCKQUOTE OFF");
+  C(0AX); S("$endif$"); C(0AX); S("$for(include-before)$");
+  C(0AX); S("$include-before$"); C(0AX); S("$endfor$");
+  C(0AX); S("$body$"); C(0AX); S("$for(include-after)$");
+  C(0AX); S("$include-after$"); C(0AX); S("$endfor$");
+  C(0AX); S("$if(toc)$"); C(0AX); S(".\");
+  C(22X); S(" groff 1.23 leaves vertical traps off after endnotes"); C(0AX); S(".if \n[.vpt]=0 .vpt");
+  C(0AX); S(".TOC"); C(0AX); S("$endif$");
+  C(0AX)
 END T4;
 
 PROCEDURE T5;

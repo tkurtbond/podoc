@@ -6,6 +6,8 @@
 .DOCTYPE CHAPTER
 .\" PAPER comes before PRINTSTYLE, which sets the page from it
 .PRINTSTYLE TYPESET
+.\" code blocks (QUOTE) at the left margin unless code-indent is set
+.QUOTE_INDENT 0
 .\" the colour for strikeout
 .defcolor strikecolor rgb 0.7 0.7 0.7
 .\" captions below images
