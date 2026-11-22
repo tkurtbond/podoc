@@ -5,7 +5,9 @@ MODULE PdCodeAlignTest;
    later segment, then ":" and its pieces marked as PdCodeTest marks
    them ([reserved word], {comment}, |string|, plain unmarked); then
    the groups, in their order, as " G<id>@<column>=<lines>", the lines
-   numbered from 1. In the code, "$" stands for a newline and "`" for a
+   numbered from 1. Spaces shows only the spaces: for each line the
+   gap before each segment, separated by ",", then ";" and its
+   trailing spaces. In the code, "$" stands for a newline and "`" for a
    double quote. *)
 
 IMPORT Out, Ropes, PdCode, A := PdCodeAlign;
@@ -100,6 +102,40 @@ BEGIN
   out[k] := 0X
 END Show;
 
+PROCEDURE ShowSpaces(b: A.Block; VAR out: ARRAY OF CHAR);
+  VAR k: INTEGER; l: A.Line; s: A.Segment;
+BEGIN
+  k := 0; l := b.lines;
+  WHILE l # NIL DO
+    IF l # b.lines THEN AppendStr(out, k, " / ") END;
+    s := l.segs;
+    WHILE s # NIL DO
+      IF s # l.segs THEN Append(out, k, ",") END;
+      AppendInt(out, k, s.gap); s := s.next
+    END;
+    Append(out, k, ";"); AppendInt(out, k, l.trail);
+    l := l.next
+  END;
+  out[k] := 0X
+END ShowSpaces;
+
+PROCEDURE TS(name, code, want: ARRAY OF CHAR);
+  VAR got: ARRAY 256 OF CHAR; t: ARRAY 256 OF CHAR; i: INTEGER;
+BEGIN
+  i := 0;
+  WHILE code[i] # 0X DO
+    IF code[i] = "$" THEN t[i] := 0AX ELSE t[i] := code[i] END;
+    INC(i)
+  END;
+  t[i] := 0X;
+  ShowSpaces(A.Layout(Ropes.FromString(t), NIL), got);
+  IF got # want THEN
+    Out.String("  got  "); Out.String(got); Out.Ln;
+    Out.String("  want "); Out.String(want); Out.Ln
+  END;
+  Report(got = want, name)
+END TS;
+
 PROCEDURE T(name, langName, code, want: ARRAY OF CHAR);
   VAR got: ARRAY 1024 OF CHAR; t: ARRAY 512 OF CHAR; i: INTEGER;
     lang: PdCode.Language; text: Ropes.Rope; sp: PdCode.Span;
@@ -170,6 +206,14 @@ BEGIN
     "  a$  b  x$  c  x", "@2:a / @2:b @5#1:x / @2:c @5#1:x G1@5=2,3")
 END Groups;
 
+PROCEDURE Spaces;
+BEGIN
+  TS("gaps", "a  b   c", "0,2,3;0");
+  TS("indentation is a gap", "  a b  c", "2,2;0");
+  TS("trailing spaces", "a  b   $x ", "0,2;3 / 0;1");
+  TS("blank lines", "a$   $$b", "0;0 / ;3 / ;0 / 0;0")
+END Spaces;
+
 PROCEDURE Names;
 BEGIN
   Report((A.AlignOf("none") = A.None) & (A.AlignOf("fixed") = A.Fixed)
@@ -182,6 +226,7 @@ BEGIN
   Cutting;
   Kinds;
   Groups;
+  Spaces;
   Names;
   IF failures > 0 THEN Out.Int(failures, 0); Out.String(" failed"); Out.Ln END
 END PdCodeAlignTest.

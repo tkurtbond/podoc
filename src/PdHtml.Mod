@@ -10,7 +10,7 @@ MODULE PdHtml;
    notes are gathered and written at its end. *)
 
 IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
-  Sh := PdShared, PdMime, PdIO;
+  Sh := PdShared, PdMime, PdIO, PdCode, PdCodeAlign;
 
 TYPE
   Rope = Ropes.Rope;
@@ -35,6 +35,7 @@ VAR
   notes: Rope; (* the notes' list items *)
   noteCount: LONGINT;
   mathSeen, cslSeen, cslHasSpacing: BOOLEAN;
+  proportionalSeen: BOOLEAN; (* a code block in the proportional style *)
   cslSpacing: Rope;
   inLink, inCite, inCslEntry: INTEGER;
   known: Rope; (* " name name ... ": HTML5 and RDFa attribute names *)
@@ -490,16 +491,129 @@ BEGIN
   RETURN CatS(CatS(CatS(Cat(CatS(CatS(R("<"), tag), ">"), content), "</"), tag), ">")
 END Wrap;
 
-PROCEDURE Code(i: A.CodeInl): Rope;
-  VAR classes: A.StrList; tag: ARRAY 8 OF CHAR;
+(* Highlighted code (Phase 24.5; decision 46) *)
+
+(* out with the code text r escaped (as a block's text, else as Text
+   does), between <b> and </b> if kind is
+   PdCode.Reserved, <i> and </i> if it is PdCode.Comment *)
+PROCEDURE CodePiece(out, r: Rope; kind: INTEGER; block: BOOLEAN): Rope;
 BEGIN
+  IF block THEN r := Escape(r, TRUE, FALSE) ELSE r := Text(r) END;
+  IF kind = PdCode.Reserved THEN RETURN CatS(Cat(CatS(out, "<b>"), r), "</b>")
+  ELSIF kind = PdCode.Comment THEN RETURN CatS(Cat(CatS(out, "<i>"), r), "</i>")
+  END;
+  RETURN Cat(out, r)
+END CodePiece;
+
+(* The code text escaped, its reserved words in <b> and its comments in
+   <i>, as lang's scanner finds them; all plain if lang is NIL *)
+PROCEDURE Highlight(text: Rope; lang: PdCode.Language; block: BOOLEAN): Rope;
+  VAR sp: PdCode.Span; out: Rope;
+BEGIN
+  IF lang = NIL THEN sp := NIL ELSE sp := PdCode.Scan(lang, text) END;
+  IF sp = NIL THEN RETURN CodePiece(NIL, text, PdCode.Plain, block) END;
+  out := NIL;
+  WHILE sp # NIL DO
+    out := CodePiece(out, Ropes.Substring(text, sp.start, sp.len), sp.kind, block);
+    sp := sp.next
+  END;
+  RETURN out
+END Highlight;
+
+(* out with n spaces, in a <span class="pd-gap"> if n > 0 *)
+PROCEDURE Gap(out: Rope; n: LONGINT): Rope;
+BEGIN
+  IF n > 0 THEN
+    out := CatS(out, '<span class="pd-gap">');
+    WHILE n > 0 DO out := CatS(out, " "); DEC(n) END;
+    out := CatS(out, "</span>")
+  END;
+  RETURN out
+END Gap;
+
+(* The code text laid out in the fixed alignment (decisions 32, 33 and
+   46): a line's indentation, and each segment before another, in an
+   inline block that the template's CSS makes at least --pd-w columns
+   wide (the distance to the next segment's column) and the text and
+   the least gap wide, so that each segment starts at its column if the
+   text before it leaves room. The spaces before a segment, in the text
+   as they were, are in a <span class="pd-gap"> that the CSS gives no
+   width, so that the text copied from a browser is the code's. *)
+PROCEDURE AlignedCode(text: Rope; lang: PdCode.Language): Rope;
+  VAR b: PdCodeAlign.Block; l: PdCodeAlign.Line; s: PdCodeAlign.Segment;
+    p: PdCodeAlign.Piece; out: Rope; sp: PdCode.Span;
+BEGIN
+  IF lang = NIL THEN sp := NIL ELSE sp := PdCode.Scan(lang, text) END;
+  b := PdCodeAlign.Layout(text, sp);
+  out := NIL; l := b.lines;
+  WHILE l # NIL DO
+    s := l.segs;
+    IF (s # NIL) & (s.col > 0) THEN
+      out := CatS(Cat(CatS(out, '<span class="pd-ind" style="--pd-w:'), Sh.IntRope(s.col)), '">');
+      out := CatS(Gap(out, s.gap), "</span>")
+    END;
+    WHILE s # NIL DO
+      IF s.next # NIL THEN
+        out := CatS(Cat(CatS(out, '<span class="pd-seg" style="--pd-w:'), Sh.IntRope(s.next.col - s.col)), '">')
+      END;
+      IF s # l.segs THEN out := Gap(out, s.gap) END;
+      p := s.pieces;
+      WHILE p # NIL DO out := CodePiece(out, p.text, p.kind, TRUE); p := p.next END;
+      IF s.next # NIL THEN out := CatS(out, "</span>") END;
+      s := s.next
+    END;
+    out := Gap(out, l.trail);
+    l := l.next;
+    IF l # NIL THEN out := Cat(out, nl) END
+  END;
+  RETURN out
+END AlignedCode;
+
+(* A code block: in the mono style, highlighted in its <code>; in the
+   proportional style, in a <pre> with the class pd-proportional, that
+   the template's CSS sets in the body font, aligned (its <code> with
+   the class pd-aligned) unless --code-align is none, with elastic and
+   hybrid as fixed (decision 46) *)
+PROCEDURE CodeBlock(c: A.CodeBlk): Rope;
+  VAR lang: PdCode.Language; style: INTEGER; attr, code, body: Rope; cls: A.Attr;
+    l: A.StrList;
+BEGIN
+  style := Sh.CodeStyle(c.attr, lang);
+  IF style = Sh.CodeProportional THEN
+    proportionalSeen := TRUE;
+    cls := A.NewAttr(NIL);
+    IF c.attr # NIL THEN
+      l := c.attr.classes;
+      WHILE l # NIL DO A.AddClass(cls, l.s); l := l.next END
+    END;
+    A.AddClass(cls, R("pd-proportional"));
+    attr := AttrStr(Id(c.attr), cls.classes, KVs(c.attr));
+    IF Sh.codeAlign = PdCodeAlign.None THEN
+      code := R("<code>"); body := Highlight(c.text, lang, TRUE)
+    ELSE
+      code := R('<code class="pd-aligned">'); body := AlignedCode(c.text, lang)
+    END
+  ELSE
+    IF style = Sh.CodeNone THEN lang := NIL END;
+    attr := AttrOf(c.attr); code := R("<code>"); body := Highlight(c.text, lang, TRUE)
+  END;
+  RETURN CatS(Cat(Cat(CatS(Cat(R("<pre"), attr), ">"), code), body), "</code></pre>")
+END CodeBlock;
+
+(* Inline code: highlighted, in either style, if it has a language
+   (decision 38) *)
+PROCEDURE Code(i: A.CodeInl): Rope;
+  VAR classes: A.StrList; tag: ARRAY 8 OF CHAR; lang: PdCode.Language; text: Rope;
+BEGIN
+  IF Sh.CodeStyle(i.attr, lang) = Sh.CodeNone THEN lang := NIL END;
+  IF lang = NIL THEN text := Text(i.text) ELSE text := Highlight(i.text, lang, FALSE) END;
   classes := Classes(i.attr);
   IF HasStr(classes, "sample") THEN tag := "samp"; classes := DeleteClass(classes, "sample")
   ELSIF HasStr(classes, "variable") THEN tag := "var"; classes := DeleteClass(classes, "variable")
   ELSE tag := "code"
   END;
   RETURN CatS(CatS(CatS(Cat(CatS(Cat(CatS(R("<"), tag), AttrStr(Id(i.attr), classes, KVs(i.attr))), ">"),
-    Text(i.text)), "</"), tag), ">")
+    text), "</"), tag), ">")
 END Code;
 
 (* The url of a link to #x with the identifier prefix *)
@@ -1203,8 +1317,7 @@ BEGIN
     END;
     r := CatS(Cat(R('<div class="line-block">'), r), "</div>")
   | A.CodeBlock:
-    r := CatS(Cat(CatS(Cat(R("<pre"), AttrOf(b(A.CodeBlk).attr)), "><code>"),
-      Escape(b(A.CodeBlk).text, TRUE, FALSE)), "</code></pre>")
+    r := CodeBlock(b(A.CodeBlk))
   | A.RawBlock:
     IF IsHtml(b(A.RawBlk).format) THEN r := b(A.RawBlk).text ELSE empty := TRUE END
   | A.BlockQuote:
@@ -1526,6 +1639,7 @@ END Lit;
 PROCEDURE ResetState;
 BEGIN
   notes := NIL; noteCount := 0; mathSeen := FALSE; cslSeen := FALSE; cslHasSpacing := FALSE;
+  proportionalSeen := FALSE;
   inLink := 0; inCite := 0; inCslEntry := 0
 END ResetState;
 
@@ -1560,7 +1674,7 @@ PROCEDURE WriteDoc*(doc: A.Doc; tmpl: T.Template);
     empty: BOOLEAN; meta: A.MetaMapV; v: T.Value;
 BEGIN
   ResetState;
-  meta := doc.meta;
+  meta := doc.meta; Sh.SetCodeStyle(meta);
   sections := Sh.MakeSections(numberSections, -1, doc.blocks);
   IF tmpl # NIL THEN ctx := C.Build(meta, BlockDoc, InlineDoc) END;
   toc := NIL;
@@ -1578,6 +1692,7 @@ BEGIN
     IF cslHasSpacing THEN C.DefField(ctx, "csl-entry-spacing", Lit(CatS(cslSpacing, "em"))) END
   END;
   IF mathSeen THEN C.DefField(ctx, "math", T.NewString("")) END;
+  IF proportionalSeen THEN C.DefField(ctx, "code-proportional", T.NewBool(TRUE)) END;
   C.DefField(ctx, "abstract-title", T.NewString("Abstract"));
   C.DefField(ctx, "mathjax", T.NewBool(FALSE));
   C.DefField(ctx, "displaymath-css", T.NewBool(TRUE));

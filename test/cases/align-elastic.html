@@ -1,0 +1,43 @@
+<p>An Oberon module:</p>
+<pre class="oberon pd-proportional"><code class="pd-aligned"><b>MODULE</b> Stack;
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><i>(* A bounded stack of integers. *)</i>
+
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><b>CONST</b>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:24">Max = 100;</span><span class="pd-gap">              </span><i>(* capacity *)</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:24">Overflow = 1;</span><span class="pd-gap">           </span><i>(* HALT code: too many pushes *)</i>
+
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><b>VAR</b>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:24">top: INTEGER;</span><span class="pd-gap">           </span><i>(* items in use *)</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span>items: <b>ARRAY</b> Max <b>OF</b> INTEGER;
+
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><b>PROCEDURE</b> Push*(x: INTEGER);
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><b>BEGIN</b>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><b>IF</b> top = Max <b>THEN</b>
+<span class="pd-ind" style="--pd-w:6"><span class="pd-gap">      </span></span><span class="pd-seg" style="--pd-w:22">HALT(Overflow)</span><span class="pd-gap">        </span><i>(* it&#39;s full *)</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><b>END</b>;
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:24">items[top] := x;</span><span class="pd-gap">        </span><i>(* store it *)</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:24">INC(top)</span><span class="pd-gap">                </span><i>(* and count it *)</i>
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><b>END</b> Push;
+
+<b>BEGIN</b>
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><span class="pd-seg" style="--pd-w:26">top := 0</span><span class="pd-gap">                  </span><i>(* empty at first *)</i>
+<b>END</b> Stack.</code></pre>
+<p>A C header and function:</p>
+<pre class="c pd-proportional"><code class="pd-aligned"><span class="pd-seg" style="--pd-w:18">#define MAXNAME</span><span class="pd-seg" style="--pd-w:10"><span class="pd-gap">   </span>32</span><span class="pd-gap">        </span><i>/* longest name */</i>
+<span class="pd-seg" style="--pd-w:22">#define WWWWWWWWWWWW</span><span class="pd-seg" style="--pd-w:6"><span class="pd-gap">  </span>64</span><span class="pd-gap">    </span><i>/* deliberately wide */</i>
+<span class="pd-seg" style="--pd-w:18">#define DEPTH</span><span class="pd-seg" style="--pd-w:10"><span class="pd-gap">     </span>8</span><span class="pd-gap">         </span><i>/* nesting */</i>
+
+<b>struct</b> entry {
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:8"><b>int</b></span><span class="pd-seg" style="--pd-w:16"><span class="pd-gap">     </span>kind;</span><span class="pd-gap">           </span><i>/* what it is */</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:7"><b>char</b></span><span class="pd-seg" style="--pd-w:17"><span class="pd-gap">   </span>*name;</span><span class="pd-gap">           </span><i>/* its name */</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:8"><b>long</b></span><span class="pd-seg" style="--pd-w:16"><span class="pd-gap">    </span>value;</span><span class="pd-gap">          </span><i>/* its value */</i>
+};
+
+<b>int</b> classify(<b>struct</b> entry *e)
+{
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><b>switch</b> (e-&gt;kind) {
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:9"><b>case</b> 0:</span><span class="pd-seg" style="--pd-w:15"><span class="pd-gap">  </span><b>return</b> &#39;a&#39;;</span><span class="pd-gap">    </span><i>/* plain */</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:9"><b>case</b> 1:</span><span class="pd-seg" style="--pd-w:15"><span class="pd-gap">  </span><b>return</b> &#39;&quot;&#39;;</span><span class="pd-gap">    </span><i>/* quoted */</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span><span class="pd-seg" style="--pd-w:24"><b>default</b>: <b>return</b> -1;</span><span class="pd-gap">     </span><i>/* none -- unknown */</i>
+<span class="pd-ind" style="--pd-w:4"><span class="pd-gap">    </span></span>}
+}</code></pre>

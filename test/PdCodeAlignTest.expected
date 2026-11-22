@@ -19,5 +19,9 @@ ok   - groups in column order
 ok   - a group skips a line without it
 ok   - a line without the column ends it
 ok   - indentation is not grouped
+ok   - gaps
+ok   - indentation is a gap
+ok   - trailing spaces
+ok   - blank lines
 ok   - alignment names
 ok   - unknown alignment

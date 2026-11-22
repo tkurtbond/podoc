@@ -133,6 +133,23 @@ pre code {
  background-color: transparent;
  overflow: visible;
 }
+$if(code-proportional)$
+pre.pd-proportional, pre.pd-proportional code {
+  font-family: inherit;
+  font-size: inherit;
+}
+.pd-aligned .pd-gap {
+  font-size: 0;
+}
+.pd-aligned .pd-ind, .pd-aligned .pd-seg {
+  display: inline-block;
+  box-sizing: border-box;
+  min-width: calc(var(--pd-w) * $if(code-column)$$code-column$$else$0.5$endif$em);
+}
+.pd-aligned .pd-seg {
+  padding-right: $if(code-gap)$$code-gap$$else$1$endif$em;
+}
+$endif$
 hr {
   border: none;
   border-top: 1px solid #1a1a1a;

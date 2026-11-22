@@ -1785,7 +1785,7 @@ Each subphase passes `make test` under `-O2` and `-OC`.
     (`highlight-proportional`, `highlight-meta`) changed, as the
     default is now `hybrid`; the mono and `none` cases did not.
 
-### Phase 24.5: HTML [planned]
+### Phase 24.5: HTML [done]
 
 - **Change:** `PdHtml` writes code with a style as decision 46 says:
   `<b>` and `<i>` for mono; for proportional, the lines and segments
@@ -1795,6 +1795,46 @@ Each subphase passes `make test` under `-O2` and `-OC`.
 - **Check:** case tests in both styles, inline code among them; the
   case tests without a style unchanged; the vgrind samples viewed in
   a browser, and their text copied out matching the source.
+- **Done** (2026-11-22):
+  - **Mono:** reserved words in `<b>`, comments in `<i>`, in code
+    blocks and inline code with a language; a comment across lines is
+    closed at each line's end and reopened. Without a style the output
+    is as before.
+  - **Proportional:** the `<pre>` gets the class `pd-proportional`
+    (on `<pre>`, not `<code>`, so `font-family: inherit` reaches the
+    body font), and its `<code>` the class `pd-aligned` unless the
+    alignment is `none`, which keeps the source's spaces in the body
+    font. `elastic` and `hybrid` give the same output as `fixed`.
+  - **A change from decision 46:** segments are not placed at `left:`
+    their column, which overlapped the wide `#define` of vgrind.md
+    §8's C sample. A line's indentation, and each segment that has a
+    next one, are `inline-block`s of `min-width` (the next column
+    minus this one) times `code-column`, and a segment has
+    `padding-right` `code-gap` with `box-sizing: border-box`: its
+    width is the larger of the two, decision 32's least gap, as in
+    ms. After a push, the line's later segments are placed after it,
+    not back at their columns; groff's fixed returns to the column
+    when it can. The widths are `--pd-w` in each span's `style`.
+  - **Copying:** the source's spaces stay in the text, in
+    `<span class="pd-gap">` of `font-size: 0`, so a copy gives the
+    code exactly. `PdCodeAlign` now records them: a segment's `gap`
+    (spaces before it, the indentation for the first) and a line's
+    `trail` (after its last segment, or all of a blank line's).
+  - **CSS:** in `styles.html` inside `$if(code-proportional)$`, a
+    variable the writer sets when a proportional block was written,
+    with `code-column` (0.5 by default) and `code-gap` (1).
+  - **Checked:** `PdCodeAlignTest`, 4 new cases (gaps, indentation,
+    trailing spaces, blank lines). 8 new case tests, `.html` beside
+    `highlight-mono`, `highlight-proportional`, `highlight-meta`,
+    `align-fixed`, `align-elastic`, `align-hybrid`, `align-none` and
+    `align-template` (`-s`, the CSS with `code-column` 0.4 and
+    `code-gap` 2); the other HTML cases did not change. vgrind.md §8's
+    samples, with `-s`, in fixed and none and with
+    `-V code-column=0.4 -V code-gap=2`, were rendered with headless
+    Chromium and looked at: body font, the comments aligned, the
+    wide `#define` pushed and not overlapped, none's spaces kept. The
+    text selected over each `<pre>` (`Selection.toString`, through
+    `--dump-dom`) equals the source of both blocks, in fixed and none.
 
 ### Phase 24.6: Pascal, Ada, C++ [planned]
 
@@ -3398,3 +3438,10 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   tests, 19 of them new, 23 round trips, 10 image tests, the unit
   tests with `PdCodeAlignTest`'s 23 cases). The writer, not the
   template, holds ConTeXt's macros (24.4's Done says why).
+- 2026-11-22: Phase 24.5 done: highlighted code in HTML, mono with
+  `<b>` and `<i>`, proportional in the body font with fixed alignment
+  by `min-width` inline-blocks (a change from decision 46's `left:`,
+  in 24.5's Done), the CSS in `styles.html` inside
+  `$if(code-proportional)$`. `make test` passes under `-O2` and
+  `-OC` (345 case tests, 8 of them new, the round trips, the image
+  tests, the unit tests with `PdCodeAlignTest`'s 27 cases).

@@ -50,20 +50,24 @@ TYPE
   Group* = POINTER TO GroupDesc;
 
   (* A segment: pieces placed at the source column col; group is NIL
-     for a line's first segment *)
+     for a line's first segment; gap is the number of spaces before
+     it in the source (the indentation, for the first) *)
   Segment* = POINTER TO SegmentDesc;
   SegmentDesc* = RECORD
     col*: LONGINT;
+    gap*: LONGINT;
     group*: Group;
     pieces*: Piece;
     next*: Segment
   END;
 
   (* A line: its segments, NIL if it is blank; the first segment's
-     column is the line's indentation *)
+     column is the line's indentation; trail is the number of spaces
+     after its last segment, or of a blank line *)
   Line* = POINTER TO LineDesc;
   LineDesc* = RECORD
     segs*: Segment;
+    trail*: LONGINT;
     next*: Line
   END;
 
@@ -133,17 +137,26 @@ PROCEDURE NewSegment(VAR c: Cutter);
   VAR s: Segment;
 BEGIN
   ClosePiece(c);
-  NEW(s); s.col := c.col; s.group := NIL; s.pieces := NIL; s.next := NIL;
+  NEW(s); s.col := c.col; s.group := NIL;
+  IF c.seg = NIL THEN s.gap := c.col ELSE s.gap := c.spaces END; s.pieces := NIL; s.next := NIL;
   IF c.seg = NIL THEN c.line.segs := s ELSE c.seg.next := s END;
   c.seg := s; c.piece := NIL
 END NewSegment;
+
+(* Ends the open line, if any: its trailing spaces *)
+PROCEDURE EndLine(VAR c: Cutter);
+BEGIN
+  IF c.line # NIL THEN
+    IF c.started THEN c.line.trail := c.spaces ELSE c.line.trail := c.col END
+  END
+END EndLine;
 
 (* Opens a new line *)
 PROCEDURE NewLine(VAR c: Cutter);
   VAR l: Line;
 BEGIN
-  ClosePiece(c);
-  NEW(l); l.segs := NIL; l.next := NIL;
+  ClosePiece(c); EndLine(c);
+  NEW(l); l.segs := NIL; l.trail := 0; l.next := NIL;
   IF c.line = NIL THEN c.b.lines := l ELSE c.line.next := l END;
   c.line := l; c.seg := NIL; c.piece := NIL;
   c.col := 0; c.spaces := 0; c.started := FALSE
@@ -232,7 +245,7 @@ BEGIN
     END;
     WHILE i < end DO Take(c, i, Ropes.Fetch(text, i), kind); INC(i) END
   END;
-  ClosePiece(c);
+  ClosePiece(c); EndLine(c);
   FindGroups(c.b);
   RETURN c.b
 END Layout;

@@ -1,0 +1,43 @@
+<p>An Oberon module:</p>
+<pre class="oberon pd-proportional"><code><b>MODULE</b> Stack;
+  <i>(* A bounded stack of integers. *)</i>
+
+  <b>CONST</b>
+    Max = 100;              <i>(* capacity *)</i>
+    Overflow = 1;           <i>(* HALT code: too many pushes *)</i>
+
+  <b>VAR</b>
+    top: INTEGER;           <i>(* items in use *)</i>
+    items: <b>ARRAY</b> Max <b>OF</b> INTEGER;
+
+  <b>PROCEDURE</b> Push*(x: INTEGER);
+  <b>BEGIN</b>
+    <b>IF</b> top = Max <b>THEN</b>
+      HALT(Overflow)        <i>(* it&#39;s full *)</i>
+    <b>END</b>;
+    items[top] := x;        <i>(* store it *)</i>
+    INC(top)                <i>(* and count it *)</i>
+  <b>END</b> Push;
+
+<b>BEGIN</b>
+  top := 0                  <i>(* empty at first *)</i>
+<b>END</b> Stack.</code></pre>
+<p>A C header and function:</p>
+<pre class="c pd-proportional"><code>#define MAXNAME   32        <i>/* longest name */</i>
+#define WWWWWWWWWWWW  64    <i>/* deliberately wide */</i>
+#define DEPTH     8         <i>/* nesting */</i>
+
+<b>struct</b> entry {
+    <b>int</b>     kind;           <i>/* what it is */</i>
+    <b>char</b>   *name;           <i>/* its name */</i>
+    <b>long</b>    value;          <i>/* its value */</i>
+};
+
+<b>int</b> classify(<b>struct</b> entry *e)
+{
+    <b>switch</b> (e-&gt;kind) {
+    <b>case</b> 0:  <b>return</b> &#39;a&#39;;    <i>/* plain */</i>
+    <b>case</b> 1:  <b>return</b> &#39;&quot;&#39;;    <i>/* quoted */</i>
+    <b>default</b>: <b>return</b> -1;     <i>/* none -- unknown */</i>
+    }
+}</code></pre>

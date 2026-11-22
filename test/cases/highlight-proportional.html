@@ -1,0 +1,12 @@
+<h1 id="head-if-x-c-end">Head <code class="oberon"><b>IF</b> x <i>(* c *)</i> <b>END</b></code></h1>
+<p>Inline <code class="oberon"><b>IF</b> x <b>THEN</b> <i>(* c *)</i> <b>END</b></code>, <code class="c"><b>int</b> x; <i>// c {}</i></code>, <code class="haskell">IF x</code> and <code>plain</code>.</p>
+<pre class="oberon pd-proportional"><code class="pd-aligned"><b>MODULE</b> M; <i>(* a {comment}</i>
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><i>over two lines *)</i>
+<span class="pd-ind" style="--pd-w:2"><span class="pd-gap">  </span></span><b>VAR</b> s: <b>ARRAY</b> 8 <b>OF</b> CHAR; <i>(* it&#39;s -- 50% *)</i>
+<b>BEGIN</b> s := &quot;(* a\b *)&quot;; t := &#39;END&#39;
+<b>END</b> M.</code></pre>
+<pre class="c pd-proportional"><code class="pd-aligned">.dot at start
+<b>static</b> <b>int</b> f(<b>void</b>) { <b>return</b> &#39;\&#39;&#39;; } <i>// x--y ``z&#39;&#39;</i></code></pre>
+<pre class="modula2 pd-proportional"><code class="pd-aligned"><b>FROM</b> InOut <b>IMPORT</b> WriteString; <i>(* end END *)</i></code></pre>
+<pre class="pd-proportional"><code class="pd-aligned">no language # $ { } -- x</code></pre>
+<pre class="oberon plain"><code>MODULE Plain;</code></pre>
