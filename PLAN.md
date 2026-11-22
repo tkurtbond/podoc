@@ -234,6 +234,12 @@ Made by the user on 2026-11-20, on the questions of §15.
       (`.BOX`, or a drawn frame if mom 2.5_d has none) and a keep for
       `keep`, going past the user's `general.lua`.
 
+28. **No LaTeX backend** (2026-11-22). After the research in
+    docs/research/latex-backend.md, the user decided that podoc will
+    not write LaTeX or make PDF through TeX engines: podoc makes PDF
+    with groff (ms and mom) and ConTeXt. The plan that was proposed,
+    numbered L1, is kept in that document's §10.
+
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
 JSON AST compared byte for byte.
@@ -2882,3 +2888,19 @@ the body.
   trips, 5 image tests; `mom-eps` and `mom-pdf` skipped on all (only
   yishana has groff 1.23 or later, 1.24.1 with pdfmom and gs, but no
   pdfinfo or pdftotext).
+- 2026-11-22: Research on a LaTeX writer and PDF through TeX, in
+  docs/research/latex-backend.md. Its findings:
+  - pandoc 3.10's LaTeX writer is the oracle; it is 2,594 lines of
+    Haskell.
+  - The user's only pandoc LaTeX build, Breachworld `003-Arena`
+    (xelatex, eisvogel), fails on atla for a missing
+    `footnotebackref.sty`, in pandoc too.
+  - Timings for the merchant scenario with `--toc`:
+    - xelatex 3.2 s, lualatex 5.4 s, four runs each;
+    - pdflatex stops on ♂;
+    - podoc's ms takes 1.4 s.
+  - None of the six BSD VMs has a TeX engine.
+
+  The user decided the same day not to add a LaTeX backend
+  (decision 28). The plan proposed for it, first written here as
+  Phase 24, was moved to the research's §10, renumbered L1. No code.
