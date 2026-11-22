@@ -1307,7 +1307,7 @@ or when it fails, podoc warns and the image keeps `.PSPIC`. Tested by
 draws the text `EPSMARK`, found in it with `pdftotext`; skipped
 without groff, gs and pdftotext.
 
-## Phase 23: mom output and PDF through pdfmom [in progress]
+## Phase 23: mom output and PDF through pdfmom [done]
 
 Scheduled 2026-11-21 by decision 27, which settles the research's
 questions (docs/research/pdfmom-backend.md §9). The acceptance
@@ -1336,7 +1336,7 @@ Each subphase passes `make test` under `-O2` and `-OC`.
 - **Check:** ms output does not change, and every ms case test
   passes byte for byte.
 
-### Phase 23.2: The mom writer, blocks and inlines
+### Phase 23.2: The mom writer, blocks and inlines [done]
 
 `PdMom`, with `-t mom`, and `.mom` for `-o`. Without `-s` it writes
 the body.
