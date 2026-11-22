@@ -1711,7 +1711,7 @@ Each subphase passes `make test` under `-O2` and `-OC`.
     line's start, `--` and `\` as written. `make test` passes under
     `-O2` and `-OC`; no existing case test changed.
 
-### Phase 24.4: Alignment [planned]
+### Phase 24.4: Alignment [done]
 
 - **Change:** a new module `PdCodeAlign` (study §12.3): lines into
   indentation and segments, groups, positions for `fixed`, `elastic`
@@ -1723,6 +1723,67 @@ Each subphase passes `make test` under `-O2` and `-OC`.
 - **Check:** `PdCodeAlignTest`; the two samples of vgrind.md §8 as
   case tests, rendered in all three formats and compared with the
   experiment's PDFs; decision 32's template lines verified.
+- **Done** 2026-11-22: `PdCodeAlign` cuts a block into lines,
+  segments (at a run of two or more spaces; a single space stays,
+  trailing spaces go, a string is never cut) and pieces of one kind,
+  with columns in code points, and finds the groups: a later segment
+  joins the group of the segment at its column on the line before,
+  and a blank line or a line without that column ends it. Every later
+  segment is in a group, a single line's included, so that no
+  position is ever measured from `\n[.k]` inside `\w`. Groups are
+  numbered in the order of their column, then of their first line,
+  which is the order the writers place them in. `--code-align` and
+  `code-align` (`PdOptions`, `PdShared.SetCodeStyle`): hybrid by
+  default, the command line over the metadata, a bad value an option
+  error (6) or, in the metadata, a warning and ignored. `none` keeps
+  24.3's unaligned output.
+  - **roff** (`PdRoff.AlignedCode`, for ms and mom): indentation as
+    `\h'|N*\n[PdCodeCol]u'`; `fixed` as
+    `\h'(N*\n[PdCodeCol]u-\n[.k]u)>?\n[PdCodeGap]u'`; `elastic` and
+    `hybrid` with a number register per group, `PdG<k>`, set before
+    the block to the column (`hybrid`) or 0 (`elastic`) and widened by
+    each member's `\w'<text before it>'u+\n[PdCodeGap]u`, then
+    `\h'|\n[PdG<k>]u'`. Every number in `\h` and `.nr` needs its `u`:
+    without it groff scales it as ems and the lines vanished off the
+    page. mom's aligned blocks use `\*[BD]`, `\*[IT]` and `\*[ROM]`.
+  - **ConTeXt:** `\PdLine`, `\PdSeg{<position>}{<text>}` and
+    `\PdMeasure{PdG<k>}{<text>}` (positions with `\setvalue` and
+    `\getvalue`), in `\startlines[style=\PdCodeR]`; bold and italic in
+    `PdCodeB` and `PdCodeI`. The fonts are `Serif*pdcode`, a feature
+    set with `textcontrol=no`, which keeps `'` straight (24.3's
+    leftover, now fixed, also for `none`).
+  - **A change from the plan:** the macros and fonts are not in
+    `default.context` but written by the writer once per document,
+    before the first proportional block, inside `\ifdefined\PdSeg`,
+    with `\PdColumn` and `\PdGap` defaulted inside `\ifdefined`; and
+    each roff block starts with `.if !r PdCodeCol .nr PdCodeCol 0.5m`
+    and the same for `PdCodeGap`. So a fragment without `-s`, and a
+    user's own template, still work. The templates only set the
+    values, when given: `default.ms` and `default.mom`
+    `$if(code-column)$.nr PdCodeCol $code-column$m$endif$` (and
+    `code-gap`, `PdCodeGap`), `default.context`
+    `\newdimen\PdColumn \PdColumn=$code-column$em` and
+    `\def\PdGap{$code-gap$em}`, after `\setupbodyfont`. Output that
+    sets neither is unchanged. In ms and mom the `m` is the point size
+    where the line is read, near the template's top; groff's default
+    there is 10 points.
+  - **Checked:** `PdCodeAlignTest`, 23 cases (cutting, kinds, groups,
+    names). 19 new case tests (`test/cases/align-*`): vgrind.md §8's
+    two samples (Oberon, with comments at column 28; C, with
+    `#define`s, a wide one, a `struct` and a `switch`) in ms, mom and
+    ConTeXt in each alignment, the metadata's `code-align`, the
+    command line over it, the template lines with `-s`, and both bad
+    values. The samples' PDFs, from `groff -ms -Tpdf`, `pdfmom` and
+    `context`, in all four alignments, were looked at: hybrid groups
+    move together, fixed's least gap pushes only the wide `#define`,
+    elastic aligns only within groups, none keeps the source spaces,
+    and ConTeXt matches groff, with straight `'`. With
+    `-V code-column=0.4 -V code-gap=2` the columns narrowed and the
+    gaps widened in all three. `groff -ww` warns only of ms's
+    `pdfsync`; ConTeXt's logs have no overfull box, error or undefined
+    control sequence. The 24.3 proportional cases
+    (`highlight-proportional`, `highlight-meta`) changed, as the
+    default is now `hybrid`; the mono and `none` cases did not.
 
 ### Phase 24.5: HTML [planned]
 
@@ -3330,3 +3391,10 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   (318 case tests, 15 of them new, the round trips, the image tests,
   the unit tests). ConTeXt's `'` as ’ in the proportional style is
   left for 24.4.
+- 2026-11-22: Phase 24.4 done: `PdCodeAlign`, `--code-align` and
+  `code-align`, aligned proportional code in ms, mom and ConTeXt
+  (fixed, elastic, hybrid), and `code-column` and `code-gap` in the
+  templates. `make test` passes under `-O2` and `-OC` (337 case
+  tests, 19 of them new, 23 round trips, 10 image tests, the unit
+  tests with `PdCodeAlignTest`'s 23 cases). The writer, not the
+  template, holds ConTeXt's macros (24.4's Done says why).

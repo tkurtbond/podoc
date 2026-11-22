@@ -11,7 +11,7 @@ MODULE PdMs;
    same order. *)
 
 IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
-  Sh := PdShared, Ro := PdRoff, PdIO, PdCode;
+  Sh := PdShared, Ro := PdRoff, PdIO, PdCode, PdCodeAlign;
 
 TYPE
   Rope = Ropes.Rope;
@@ -426,14 +426,18 @@ END Header;
 
 (* A code block: in the code font, its reserved words in bold and
    comments in italic in the mono style; in the text font, with them in
-   bold and italic, in the proportional style (decisions 35 and 36) *)
+   bold and italic, in the proportional style (decisions 35 and 36),
+   aligned as --code-align says (decision 33) *)
 PROCEDURE CodeBlock(c: A.CodeBlk): L.Doc;
   VAR d: L.Doc; lang: PdCode.Language; style: INTEGER;
 BEGIN
   firstPara := TRUE;
   style := Sh.CodeStyle(c.attr, lang);
   IF style = Sh.CodeProportional THEN
-    d := L.Literal(Ro.Highlight(c.text, lang, TRUE, "\f[B]", "\f[I]", "\f[R]"));
+    IF Sh.codeAlign = PdCodeAlign.None THEN
+      d := L.Literal(Ro.Highlight(c.text, lang, TRUE, "\f[B]", "\f[I]", "\f[R]"))
+    ELSE d := L.Literal(Ro.AlignedCode(c.text, lang, Sh.codeAlign, "\f[B]", "\f[I]", "\f[R]"))
+    END;
     RETURN Above3(Above(Lit(".IP"), Lit(".nf")), d, Lit(".fi"))
   END;
   IF style = Sh.CodeNone THEN lang := NIL END;

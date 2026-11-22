@@ -1,0 +1,66 @@
+An Oberon module:
+
+\ifdefined\PdSeg\else
+\definefontfeature[pdcode][default][textcontrol=no]
+\definefont[PdCodeR][Serif*pdcode]
+\definefont[PdCodeB][SerifBold*pdcode]
+\definefont[PdCodeI][SerifItalic*pdcode]
+\ifdefined\PdColumn\else\newdimen\PdColumn \PdColumn=0.5em\fi
+\ifdefined\PdGap\else\def\PdGap{1em}\fi
+\newdimen\PdPos \newdimen\PdT \newbox\PdBox
+\def\PdLine{\global\PdPos=0pt\relax}
+\def\PdSeg#1#2{\setbox\PdBox\hbox{#2}\PdT=#1\relax
+  \ifdim\PdPos>0pt \ifdim\PdT<\dimexpr\PdPos+\PdGap\relax \PdT=\dimexpr\PdPos+\PdGap\relax\fi\fi
+  \hskip\dimexpr\PdT-\PdPos\relax \global\PdPos=\dimexpr\PdT+\wd\PdBox\relax \box\PdBox}
+\def\PdMeasure#1#2{\setbox\PdBox\hbox{#2}%
+  \ifdim\dimexpr\wd\PdBox+\PdGap\relax>\getvalue{#1}\relax
+    \setxvalue{#1}{\the\dimexpr\wd\PdBox+\PdGap\relax}\fi}
+\fi
+\startlines[style=\PdCodeR,space=on]
+{\PdCodeB{}MODULE} Stack;
+  {\PdCodeI{}(* A bounded stack of integers. *)}
+
+  {\PdCodeB{}CONST}
+    Max = 100;              {\PdCodeI{}(* capacity *)}
+    Overflow = 1;           {\PdCodeI{}(* HALT code: too many pushes *)}
+
+  {\PdCodeB{}VAR}
+    top: INTEGER;           {\PdCodeI{}(* items in use *)}
+    items: {\PdCodeB{}ARRAY} Max {\PdCodeB{}OF} INTEGER;
+
+  {\PdCodeB{}PROCEDURE} Push*(x: INTEGER);
+  {\PdCodeB{}BEGIN}
+    {\PdCodeB{}IF} top = Max {\PdCodeB{}THEN}
+      HALT(Overflow)        {\PdCodeI{}(* it's full *)}
+    {\PdCodeB{}END};
+    items{[}top{]} := x;        {\PdCodeI{}(* store it *)}
+    INC(top)                {\PdCodeI{}(* and count it *)}
+  {\PdCodeB{}END} Push;
+
+{\PdCodeB{}BEGIN}
+  top := 0                  {\PdCodeI{}(* empty at first *)}
+{\PdCodeB{}END} Stack.
+\stoplines
+
+A C header and function:
+
+\startlines[style=\PdCodeR,space=on]
+\#define MAXNAME   32        {\PdCodeI{}/* longest name */}
+\#define WWWWWWWWWWWW  64    {\PdCodeI{}/* deliberately wide */}
+\#define DEPTH     8         {\PdCodeI{}/* nesting */}
+
+{\PdCodeB{}struct} entry \{
+    {\PdCodeB{}int}     kind;           {\PdCodeI{}/* what it is */}
+    {\PdCodeB{}char}   *name;           {\PdCodeI{}/* its name */}
+    {\PdCodeB{}long}    value;          {\PdCodeI{}/* its value */}
+\};
+
+{\PdCodeB{}int} classify({\PdCodeB{}struct} entry *e)
+\{
+    {\PdCodeB{}switch} (e-\kern0pt>kind) \{
+    {\PdCodeB{}case} 0:  {\PdCodeB{}return} 'a';    {\PdCodeI{}/* plain */}
+    {\PdCodeB{}case} 1:  {\PdCodeB{}return} '"';    {\PdCodeI{}/* quoted */}
+    {\PdCodeB{}default}: {\PdCodeB{}return} -1;     {\PdCodeI{}/* none -\kern0pt- unknown */}
+    \}
+\}
+\stoplines

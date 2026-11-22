@@ -1,0 +1,98 @@
+.PP
+An Oberon module:
+.ds pd:qft \*[$QUOTE_FT]
+.QUOTE_FONT R
+.QUOTE
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
+.nr PdG1 28*\n[PdCodeCol]
+.nr PdG1 \n[PdG1]>?(\w'\&\h'|4u*\n[PdCodeCol]u'Max = 100;'u+\n[PdCodeGap]u)
+.nr PdG1 \n[PdG1]>?(\w'\&\h'|4u*\n[PdCodeCol]u'Overflow = 1;'u+\n[PdCodeGap]u)
+.nr PdG2 28*\n[PdCodeCol]
+.nr PdG2 \n[PdG2]>?(\w'\&\h'|4u*\n[PdCodeCol]u'top: INTEGER;'u+\n[PdCodeGap]u)
+.nr PdG3 28*\n[PdCodeCol]
+.nr PdG3 \n[PdG3]>?(\w'\&\h'|6u*\n[PdCodeCol]u'HALT(Overflow)'u+\n[PdCodeGap]u)
+.nr PdG4 28*\n[PdCodeCol]
+.nr PdG4 \n[PdG4]>?(\w'\&\h'|4u*\n[PdCodeCol]u'items[top] := x;'u+\n[PdCodeGap]u)
+.nr PdG4 \n[PdG4]>?(\w'\&\h'|4u*\n[PdCodeCol]u'INC(top)'u+\n[PdCodeGap]u)
+.nr PdG5 28*\n[PdCodeCol]
+.nr PdG5 \n[PdG5]>?(\w'\&\h'|2u*\n[PdCodeCol]u'top := 0'u+\n[PdCodeGap]u)
+\*[BD]MODULE\*[ROM] Stack;
+\h'|2u*\n[PdCodeCol]u'\*[IT](* A bounded stack of integers. *)\*[ROM]
+
+\h'|2u*\n[PdCodeCol]u'\*[BD]CONST\*[ROM]
+\h'|4u*\n[PdCodeCol]u'Max = 100;\h'|\n[PdG1]u'\*[IT](* capacity *)\*[ROM]
+\h'|4u*\n[PdCodeCol]u'Overflow = 1;\h'|\n[PdG1]u'\*[IT](* HALT code: too many pushes *)\*[ROM]
+
+\h'|2u*\n[PdCodeCol]u'\*[BD]VAR\*[ROM]
+\h'|4u*\n[PdCodeCol]u'top: INTEGER;\h'|\n[PdG2]u'\*[IT](* items in use *)\*[ROM]
+\h'|4u*\n[PdCodeCol]u'items: \*[BD]ARRAY\*[ROM] Max \*[BD]OF\*[ROM] INTEGER;
+
+\h'|2u*\n[PdCodeCol]u'\*[BD]PROCEDURE\*[ROM] Push*(x: INTEGER);
+\h'|2u*\n[PdCodeCol]u'\*[BD]BEGIN\*[ROM]
+\h'|4u*\n[PdCodeCol]u'\*[BD]IF\*[ROM] top = Max \*[BD]THEN\*[ROM]
+\h'|6u*\n[PdCodeCol]u'HALT(Overflow)\h'|\n[PdG3]u'\*[IT](* it\(aqs full *)\*[ROM]
+\h'|4u*\n[PdCodeCol]u'\*[BD]END\*[ROM];
+\h'|4u*\n[PdCodeCol]u'items[top] := x;\h'|\n[PdG4]u'\*[IT](* store it *)\*[ROM]
+\h'|4u*\n[PdCodeCol]u'INC(top)\h'|\n[PdG4]u'\*[IT](* and count it *)\*[ROM]
+\h'|2u*\n[PdCodeCol]u'\*[BD]END\*[ROM] Push;
+
+\*[BD]BEGIN\*[ROM]
+\h'|2u*\n[PdCodeCol]u'top := 0\h'|\n[PdG5]u'\*[IT](* empty at first *)\*[ROM]
+\*[BD]END\*[ROM] Stack.
+.QUOTE OFF
+.QUOTE_FONT \*[pd:qft]
+.PP
+A C header and function:
+.ds pd:qft \*[$QUOTE_FT]
+.QUOTE_FONT R
+.QUOTE
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
+.nr PdG1 11*\n[PdCodeCol]
+.nr PdG1 \n[PdG1]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]char\*[ROM]'u+\n[PdCodeGap]u)
+.nr PdG2 12*\n[PdCodeCol]
+.nr PdG2 \n[PdG2]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]int\*[ROM]'u+\n[PdCodeGap]u)
+.nr PdG3 12*\n[PdCodeCol]
+.nr PdG3 \n[PdG3]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]long\*[ROM]'u+\n[PdCodeGap]u)
+.nr PdG4 13*\n[PdCodeCol]
+.nr PdG4 \n[PdG4]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]case\*[ROM] 0:'u+\n[PdCodeGap]u)
+.nr PdG4 \n[PdG4]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]case\*[ROM] 1:'u+\n[PdCodeGap]u)
+.nr PdG5 18*\n[PdCodeCol]
+.nr PdG5 \n[PdG5]>?(\w'\&#define MAXNAME'u+\n[PdCodeGap]u)
+.nr PdG6 18*\n[PdCodeCol]
+.nr PdG6 \n[PdG6]>?(\w'\&#define DEPTH'u+\n[PdCodeGap]u)
+.nr PdG7 22*\n[PdCodeCol]
+.nr PdG7 \n[PdG7]>?(\w'\&#define WWWWWWWWWWWW'u+\n[PdCodeGap]u)
+.nr PdG8 28*\n[PdCodeCol]
+.nr PdG8 \n[PdG8]>?(\w'\&#define MAXNAME\h'|\n[PdG5]u'32'u+\n[PdCodeGap]u)
+.nr PdG8 \n[PdG8]>?(\w'\&#define WWWWWWWWWWWW\h'|\n[PdG7]u'64'u+\n[PdCodeGap]u)
+.nr PdG8 \n[PdG8]>?(\w'\&#define DEPTH\h'|\n[PdG6]u'8'u+\n[PdCodeGap]u)
+.nr PdG9 28*\n[PdCodeCol]
+.nr PdG9 \n[PdG9]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]int\*[ROM]\h'|\n[PdG2]u'kind;'u+\n[PdCodeGap]u)
+.nr PdG9 \n[PdG9]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]char\*[ROM]\h'|\n[PdG1]u'*name;'u+\n[PdCodeGap]u)
+.nr PdG9 \n[PdG9]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]long\*[ROM]\h'|\n[PdG3]u'value;'u+\n[PdCodeGap]u)
+.nr PdG10 28*\n[PdCodeCol]
+.nr PdG10 \n[PdG10]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]case\*[ROM] 0:\h'|\n[PdG4]u'\*[BD]return\*[ROM] \(aqa\(aq;'u+\n[PdCodeGap]u)
+.nr PdG10 \n[PdG10]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]case\*[ROM] 1:\h'|\n[PdG4]u'\*[BD]return\*[ROM] \(aq\(dq\(aq;'u+\n[PdCodeGap]u)
+.nr PdG10 \n[PdG10]>?(\w'\&\h'|4u*\n[PdCodeCol]u'\*[BD]default\*[ROM]: \*[BD]return\*[ROM] -1;'u+\n[PdCodeGap]u)
+#define MAXNAME\h'|\n[PdG5]u'32\h'|\n[PdG8]u'\*[IT]/* longest name */\*[ROM]
+#define WWWWWWWWWWWW\h'|\n[PdG7]u'64\h'|\n[PdG8]u'\*[IT]/* deliberately wide */\*[ROM]
+#define DEPTH\h'|\n[PdG6]u'8\h'|\n[PdG8]u'\*[IT]/* nesting */\*[ROM]
+
+\*[BD]struct\*[ROM] entry {
+\h'|4u*\n[PdCodeCol]u'\*[BD]int\*[ROM]\h'|\n[PdG2]u'kind;\h'|\n[PdG9]u'\*[IT]/* what it is */\*[ROM]
+\h'|4u*\n[PdCodeCol]u'\*[BD]char\*[ROM]\h'|\n[PdG1]u'*name;\h'|\n[PdG9]u'\*[IT]/* its name */\*[ROM]
+\h'|4u*\n[PdCodeCol]u'\*[BD]long\*[ROM]\h'|\n[PdG3]u'value;\h'|\n[PdG9]u'\*[IT]/* its value */\*[ROM]
+};
+
+\*[BD]int\*[ROM] classify(\*[BD]struct\*[ROM] entry *e)
+{
+\h'|4u*\n[PdCodeCol]u'\*[BD]switch\*[ROM] (e->kind) {
+\h'|4u*\n[PdCodeCol]u'\*[BD]case\*[ROM] 0:\h'|\n[PdG4]u'\*[BD]return\*[ROM] \(aqa\(aq;\h'|\n[PdG10]u'\*[IT]/* plain */\*[ROM]
+\h'|4u*\n[PdCodeCol]u'\*[BD]case\*[ROM] 1:\h'|\n[PdG4]u'\*[BD]return\*[ROM] \(aq\(dq\(aq;\h'|\n[PdG10]u'\*[IT]/* quoted */\*[ROM]
+\h'|4u*\n[PdCodeCol]u'\*[BD]default\*[ROM]: \*[BD]return\*[ROM] -1;\h'|\n[PdG10]u'\*[IT]/* none -- unknown */\*[ROM]
+\h'|4u*\n[PdCodeCol]u'}
+}
+.QUOTE OFF
+.QUOTE_FONT \*[pd:qft]

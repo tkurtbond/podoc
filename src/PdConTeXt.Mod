@@ -10,7 +10,7 @@ MODULE PdConTeXt;
    metadata first, then the body. *)
 
 IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
-  Sh := PdShared, PdWords, PdIO, PdCode;
+  Sh := PdShared, PdWords, PdIO, PdCode, PdCodeAlign;
 
 TYPE
   Rope = Ropes.Rope;
@@ -29,6 +29,7 @@ VAR
   nextRef: LONGINT; (* the number of the next \useURL *)
   listLevel: INTEGER; (* the depth of ordered lists *)
   cslRefs, cslHanging: BOOLEAN;
+  codeMacros: BOOLEAN; (* whether CodeMacros has been written *)
 
 (* Ropes *)
 
@@ -345,11 +346,11 @@ BEGIN
     piece := Ropes.Substring(text, sp.start, sp.len);
     CASE sp.kind OF
       PdCode.Reserved:
-      IF proportional THEN out := CatC(Cat(CatS(out, "{\bf{}"), Escape(piece)), "}")
+      IF proportional THEN out := CatC(Cat(CatS(out, "{\PdCodeB{}"), Escape(piece)), "}")
       ELSE out := CatS(Cat(CatS(out, "/BTEX\bf "), Escape(piece)), "/ETEX")
       END
     | PdCode.Comment:
-      IF proportional THEN out := CodeComment(out, piece, "{\it{}", "}", FALSE, TRUE)
+      IF proportional THEN out := CodeComment(out, piece, "{\PdCodeI{}", "}", FALSE, TRUE)
       ELSE out := CodeComment(out, piece, "/BTEX{\it ", "}/ETEX", TRUE, FALSE)
       END
     ELSE
@@ -360,15 +361,122 @@ BEGIN
   RETURN out
 END CodeLines;
 
+(* The fonts of the proportional style and the macros of aligned code
+   (Phase 24.4; docs/research/vgrind.md §8.2), each guarded so that a
+   template, or a document a fragment goes into, may define them
+   first, as the template does \PdColumn and \PdGap from code-column
+   and code-gap (decision 32); written once, before the first code
+   block in the proportional style, NIL after. The fonts are the body
+   font's, with the feature textcontrol off, so that ' stays straight
+   in code as it is written. \PdSeg{pos}{text} sets text at pos, but
+   at least \PdGap after the line's text before it; \PdMeasure{g}{text}
+   widens the position \getvalue{g} to text's width and \PdGap. *)
+PROCEDURE CodeMacros(): L.Doc;
+  VAR d: L.Doc;
+BEGIN
+  IF codeMacros THEN RETURN NIL END;
+  codeMacros := TRUE;
+  d := Above3(Lit("\ifdefined\PdSeg\else"),
+    Lit("\definefontfeature[pdcode][default][textcontrol=no]"),
+    Lit("\definefont[PdCodeR][Serif*pdcode]"));
+  d := Above3(d, Lit("\definefont[PdCodeB][SerifBold*pdcode]"),
+    Lit("\definefont[PdCodeI][SerifItalic*pdcode]"));
+  d := Above3(d, Lit("\ifdefined\PdColumn\else\newdimen\PdColumn \PdColumn=0.5em\fi"),
+    Lit("\ifdefined\PdGap\else\def\PdGap{1em}\fi"));
+  d := Above3(d, Lit("\newdimen\PdPos \newdimen\PdT \newbox\PdBox"),
+    Lit("\def\PdLine{\global\PdPos=0pt\relax}"));
+  d := Above3(d, Lit("\def\PdSeg#1#2{\setbox\PdBox\hbox{#2}\PdT=#1\relax"),
+    Lit("  \ifdim\PdPos>0pt \ifdim\PdT<\dimexpr\PdPos+\PdGap\relax \PdT=\dimexpr\PdPos+\PdGap\relax\fi\fi"));
+  d := Above3(d, Lit("  \hskip\dimexpr\PdT-\PdPos\relax \global\PdPos=\dimexpr\PdT+\wd\PdBox\relax \box\PdBox}"),
+    Lit("\def\PdMeasure#1#2{\setbox\PdBox\hbox{#2}%"));
+  d := Above3(d, Lit("  \ifdim\dimexpr\wd\PdBox+\PdGap\relax>\getvalue{#1}\relax"),
+    Lit("    \setxvalue{#1}{\the\dimexpr\wd\PdBox+\PdGap\relax}\fi}"));
+  RETURN Above(d, Lit("\fi"))
+END CodeMacros;
+
+(* The line l's segments before upto (all if upto is NIL), each as
+   \PdSeg at its column times \PdColumn, or in the elastic and hybrid
+   forms at its group's position, \getvalue{PdGn}; bold and italic
+   reopened in each segment, since each is a box *)
+PROCEDURE AlignedLine(l: PdCodeAlign.Line; upto: PdCodeAlign.Segment; align: INTEGER): Rope;
+  VAR s: PdCodeAlign.Segment; p: PdCodeAlign.Piece; out: Rope;
+BEGIN
+  IF l.segs = NIL THEN RETURN NIL END;
+  out := R("\PdLine"); s := l.segs;
+  WHILE (s # NIL) & (s # upto) DO
+    IF (s = l.segs) OR (align = PdCodeAlign.Fixed) THEN
+      out := CatS(Cat(CatS(out, "\PdSeg{"), Sh.IntRope(s.col)), "\PdColumn}{")
+    ELSE out := CatS(Cat(CatS(out, "\PdSeg{\getvalue{PdG"), Sh.IntRope(s.group.id)), "}}{")
+    END;
+    p := s.pieces;
+    WHILE p # NIL DO
+      CASE p.kind OF
+        PdCode.Reserved: out := CatC(Cat(CatS(out, "{\PdCodeB{}"), CodeText(p.text, TRUE, TRUE)), "}")
+      | PdCode.Comment: out := CatC(Cat(CatS(out, "{\PdCodeI{}"), CodeText(p.text, TRUE, TRUE)), "}")
+      ELSE out := Cat(out, CodeText(p.text, TRUE, TRUE))
+      END;
+      p := p.next
+    END;
+    out := CatC(out, "}");
+    s := s.next
+  END;
+  RETURN out
+END AlignedLine;
+
+(* The code text aligned as align (PdCodeAlign's Fixed, Elastic or
+   Hybrid) says, in \startlines, reserved words in bold and comments
+   in italic as lang's scanner finds them (none if lang is NIL); for
+   the elastic and hybrid forms, before it, each group's position,
+   PdG1, PdG2 ..., measured from its lines' text before it *)
+PROCEDURE AlignedCode(text: Rope; lang: PdCode.Language; align: INTEGER): L.Doc;
+  VAR b: PdCodeAlign.Block; sp: PdCode.Span; out, name: Rope; l: PdCodeAlign.Line;
+    g: PdCodeAlign.Group; m: PdCodeAlign.Member;
+BEGIN
+  IF lang = NIL THEN sp := NIL ELSE sp := PdCode.Scan(lang, text) END;
+  b := PdCodeAlign.Layout(text, sp);
+  out := NIL;
+  IF align # PdCodeAlign.Fixed THEN
+    g := b.groups;
+    WHILE g # NIL DO
+      name := Cat(R("PdG"), Sh.IntRope(g.id));
+      out := CatS(Cat(CatS(out, "\setvalue{"), name), "}{");
+      IF align = PdCodeAlign.Hybrid THEN out := CatS(Cat(out, Sh.IntRope(g.col)), "\PdColumn}")
+      ELSE out := CatS(out, "0pt}")
+      END;
+      out := CatC(out, 0AX);
+      m := g.members;
+      WHILE m # NIL DO
+        out := CatS(Cat(CatS(out, "\PdMeasure{"), name), "}{\PdCodeR");
+        out := CatC(CatC(Cat(out, AlignedLine(m.line, m.seg, align)), "}"), 0AX);
+        m := m.next
+      END;
+      g := g.next
+    END
+  END;
+  out := CatC(CatS(out, "\startlines[style=\PdCodeR]"), 0AX);
+  l := b.lines;
+  WHILE l # NIL DO
+    out := CatC(Cat(out, AlignedLine(l, NIL, align)), 0AX);
+    l := l.next
+  END;
+  RETURN L.Literal(CatS(out, "\stoplines"))
+END AlignedCode;
+
 (* A code block, as \starttyping, or in the mono style with a language
-   \starttyping[escape=yes], or in the proportional style
-   \startlines[space=on] (decision 35) *)
+   \starttyping[escape=yes], or in the proportional style (decision
+   35) aligned as --code-align says (decision 33), or with the
+   alignment none as \startlines[space=on]; the proportional style
+   in the fonts CodeMacros defines *)
 PROCEDURE CodeBlock(c: A.CodeBlk): L.Doc;
   VAR d: L.Doc; lang: PdCode.Language; style: INTEGER;
 BEGIN
   style := Sh.CodeStyle(c.attr, lang);
   IF style = Sh.CodeProportional THEN
-    d := Above3(Lit("\startlines[space=on]"), L.Literal(CodeLines(c.text, lang, TRUE)), Lit("\stoplines"))
+    IF Sh.codeAlign = PdCodeAlign.None THEN
+      d := Above3(Lit("\startlines[style=\PdCodeR,space=on]"), L.Literal(CodeLines(c.text, lang, TRUE)), Lit("\stoplines"))
+    ELSE d := AlignedCode(c.text, lang, Sh.codeAlign)
+    END;
+    d := Above(CodeMacros(), d)
   ELSIF (style = Sh.CodeMono) & (lang # NIL) THEN
     d := Above3(Lit("\starttyping[escape=yes]"), L.Literal(CodeLines(c.text, lang, FALSE)), Lit("\stoptyping"))
   ELSE d := Above3(Lit("\starttyping"), L.Literal(c.text), Lit("\stoptyping"))
@@ -1092,7 +1200,7 @@ PROCEDURE Write(doc: A.Doc; blocks: A.Block; tmpl: T.Template; stream: BOOLEAN):
     slot: T.Template; w: RefsFinder; ours, refs0, hanging0, refs1, hanging1: BOOLEAN;
     bl: A.Block;
 BEGIN
-  nextRef := 1; listLevel := 0; cslRefs := FALSE; cslHanging := FALSE;
+  nextRef := 1; listLevel := 0; cslRefs := FALSE; cslHanging := FALSE; codeMacros := FALSE;
   meta := doc.meta; Sh.SetCodeStyle(meta);
   ctx := C.Build(meta, BlockDoc, InlineDoc);
   IF tmpl = NIL THEN

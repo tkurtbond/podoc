@@ -259,6 +259,9 @@ BEGIN
   S(".\"); C(22X); S(" point size"); C(0AX);
   S(".nr PS $if(pointsize)$$pointsize$$else$10p$endif$"); C(0AX); S(".\"); C(22X);
   S(" line height"); C(0AX); S(".nr VS $if(lineheight)$$lineheight$$else$12p$endif$"); C(0AX);
+  S("$if(code-column)$"); C(0AX); S(".nr PdCodeCol $code-column$m"); C(0AX);
+  S("$endif$"); C(0AX); S("$if(code-gap)$"); C(0AX);
+  S(".nr PdCodeGap $code-gap$m"); C(0AX); S("$endif$"); C(0AX);
   S(".\"); C(22X); S(" font family: A, BM, H, HN, N, P, T, ZCM"); C(0AX);
   S(".fam $if(fontfamily)$$fontfamily$$else$T$endif$"); C(0AX); S(".\"); C(22X);
   S(" paragraph indent"); C(0AX); S(".nr PI $if(indent)$$indent$$else$0m$endif$"); C(0AX);
@@ -354,6 +357,9 @@ BEGIN
   S("$if(linkcolor)$"); C(0AX); S(".PDF_LINK_COLOR $linkcolor$"); C(0AX);
   S("$endif$"); C(0AX); S(".\"); C(22X);
   S(" code blocks (QUOTE) at the left margin unless code-indent i"); S("s set"); C(0AX); S(".QUOTE_INDENT $if(code-indent)$$code-indent$$else$0$endif$");
+  C(0AX); S("$if(code-column)$"); C(0AX); S(".nr PdCodeCol $code-column$m");
+  C(0AX); S("$endif$"); C(0AX); S("$if(code-gap)$");
+  C(0AX); S(".nr PdCodeGap $code-gap$m"); C(0AX); S("$endif$");
   C(0AX); S(".\"); C(22X); S(" the colour for strikeout");
   C(0AX); S(".defcolor strikecolor rgb 0.7 0.7 0.7"); C(0AX); S(".\");
   C(22X); S(" captions below images"); C(0AX); S(".CAPTION_AFTER_LABEL IMG");
@@ -423,6 +429,9 @@ BEGIN
   S("ap$$else$Latin Modern Math$endif$]"); C(0AX); S("\definefontfamily[mainface][ss][$if(sansfont)$$sansfont/nowr"); S("ap$$else$Latin Modern Sans$endif$]");
   C(0AX); S("\definefontfamily[mainface][tt][$if(monofont)$$monofont/nowr"); S("ap$$else$Latin Modern Typewriter$endif$][features=none$if(co"); S("de-highlight)$$if(monofont)$$else$, bf=file:lmmonolt10-bold,");
   S(" it=file:lmmono10-italic, bi=file:lmmonolt10-boldoblique$end"); S("if$$endif$]"); C(0AX); S("\setupbodyfont[mainface$if(fontsize)$,$fontsize$$endif$]");
+  C(0AX); S("$if(code-column)$"); C(0AX); S("\newdimen\PdColumn \PdColumn=$code-column$em");
+  C(0AX); S("$endif$"); C(0AX); S("$if(code-gap)$");
+  C(0AX); S("\def\PdGap{$code-gap$em}"); C(0AX); S("$endif$");
   C(0AX); C(0AX); S("\setupwhitespace[$if(whitespace)$$whitespace$$else$medium$en"); S("dif$]");
   C(0AX); S("$if(indenting)$"); C(0AX); S("\setupindenting[$for(indenting)$$indenting$$sep$,$endfor$]");
   C(0AX); S("$endif$"); C(0AX); S("$if(interlinespace)$");

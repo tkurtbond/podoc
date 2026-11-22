@@ -3,7 +3,9 @@ The metadata\(cqs style, \f[CR]\f[CB]BEGIN\f[CR] \f[CB]END\f[CR]\f[R]:
 .ds pd:qft \*[$QUOTE_FT]
 .QUOTE_FONT R
 .QUOTE
-\*[BD]BEGIN\*[PREV] x := 1 \*[BD]END\*[PREV]
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
+\*[BD]BEGIN\*[ROM] x := 1 \*[BD]END\*[ROM]
 .QUOTE OFF
 .QUOTE_FONT \*[pd:qft]
 .PP

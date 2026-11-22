@@ -7,29 +7,37 @@ Inline
 .ds pd:qft \*[$QUOTE_FT]
 .QUOTE_FONT R
 .QUOTE
-\*[BD]MODULE\*[PREV] M; \*[IT](* a {comment}
-  over two lines *)\*[PREV]
-  \*[BD]VAR\*[PREV] s: \*[BD]ARRAY\*[PREV] 8 \*[BD]OF\*[PREV] CHAR; \*[IT](* it\(aqs -- 50% *)\*[PREV]
-\*[BD]BEGIN\*[PREV] s := \(dq(* a\(rsb *)\(dq; t := \(aqEND\(aq
-\*[BD]END\*[PREV] M.
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
+\*[BD]MODULE\*[ROM] M; \*[IT](* a {comment}\*[ROM]
+\h'|2u*\n[PdCodeCol]u'\*[IT]over two lines *)\*[ROM]
+\h'|2u*\n[PdCodeCol]u'\*[BD]VAR\*[ROM] s: \*[BD]ARRAY\*[ROM] 8 \*[BD]OF\*[ROM] CHAR; \*[IT](* it\(aqs -- 50% *)\*[ROM]
+\*[BD]BEGIN\*[ROM] s := \(dq(* a\(rsb *)\(dq; t := \(aqEND\(aq
+\*[BD]END\*[ROM] M.
 .QUOTE OFF
 .QUOTE_FONT \*[pd:qft]
 .ds pd:qft \*[$QUOTE_FT]
 .QUOTE_FONT R
 .QUOTE
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
 \&.dot at start
-\*[BD]static\*[PREV] \*[BD]int\*[PREV] f(\*[BD]void\*[PREV]) { \*[BD]return\*[PREV] \(aq\(rs\(aq\(aq; } \*[IT]// x--y \(ga\(gaz\(aq\(aq\*[PREV]
+\*[BD]static\*[ROM] \*[BD]int\*[ROM] f(\*[BD]void\*[ROM]) { \*[BD]return\*[ROM] \(aq\(rs\(aq\(aq; } \*[IT]// x--y \(ga\(gaz\(aq\(aq\*[ROM]
 .QUOTE OFF
 .QUOTE_FONT \*[pd:qft]
 .ds pd:qft \*[$QUOTE_FT]
 .QUOTE_FONT R
 .QUOTE
-\*[BD]FROM\*[PREV] InOut \*[BD]IMPORT\*[PREV] WriteString; \*[IT](* end END *)\*[PREV]
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
+\*[BD]FROM\*[ROM] InOut \*[BD]IMPORT\*[ROM] WriteString; \*[IT](* end END *)\*[ROM]
 .QUOTE OFF
 .QUOTE_FONT \*[pd:qft]
 .ds pd:qft \*[$QUOTE_FT]
 .QUOTE_FONT R
 .QUOTE
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
 no language # $ { } -- x
 .QUOTE OFF
 .QUOTE_FONT \*[pd:qft]

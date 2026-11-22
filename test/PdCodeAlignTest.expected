@@ -1,0 +1,23 @@
+ok   - one line
+ok   - indentation
+ok   - two spaces cut
+ok   - single spaces stay
+ok   - trailing spaces dropped
+ok   - blank lines
+ok   - empty text
+ok   - final newline
+ok   - utf-8 columns
+ok   - tab is text
+ok   - pieces by kind
+ok   - comment cut by spaces
+ok   - comment across lines
+ok   - string kept whole
+ok   - space between kinds
+ok   - group of consecutive lines
+ok   - blank line splits a group
+ok   - groups in column order
+ok   - a group skips a line without it
+ok   - a line without the column ends it
+ok   - indentation is not grouped
+ok   - alignment names
+ok   - unknown alignment

@@ -73,6 +73,7 @@ VAR
   before*, after*, header*: File; (* -B, -A, -H *)
   wrap*: String; (* --wrap: auto, none or preserve *)
   codeStyle*: String; (* --code-style: none, mono or proportional; "" if not given *)
+  codeAlign*: String; (* --code-align: none, fixed, elastic or hybrid; "" if not given *)
   (* --reference-location: block, section or document; "" if not given *)
   referenceLocation*: String;
   unknown*: String; (* --unknown: "", warn or error *)
@@ -482,6 +483,17 @@ BEGIN
   RETURN TRUE
 END SetCodeStyle;
 
+(* --code-align: none, fixed, elastic or hybrid *)
+PROCEDURE SetCodeAlign(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  IF (arg # "none") & (arg # "fixed") & (arg # "elastic") & (arg # "hybrid") THEN
+    PdIO.Message("--code-align must be none, fixed, elastic or hybrid");
+    PdIO.Exit(PdIO.OptionError)
+  END;
+  COPY(arg, codeAlign);
+  RETURN TRUE
+END SetCodeAlign;
+
 (* --reference-location: block, section or document *)
 PROCEDURE SetReferenceLocation(VAR arg: ARRAY OF CHAR): BOOLEAN;
 BEGIN
@@ -648,6 +660,8 @@ BEGIN
     "How to wrap lines: auto, none or preserve.", SetWrap));
   parser.AddOption(ArgParser.MakeStringOption(0X, "code-style",
     "Highlight code: none, mono or proportional.", SetCodeStyle));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "code-align",
+    "Align proportional code: none, fixed, elastic or hybrid.", SetCodeAlign));
   parser.AddOption(ArgParser.MakeStringOption(0X, "columns",
     "Wrap lines at N columns (72).", SetColumns));
   parser.AddOption(ArgParser.MakeStringOption(0X, "reference-location",
@@ -932,7 +946,7 @@ BEGIN
   pdfEngineOpts := NIL; lastOpt := NIL; filters := NIL; lastFilter := NIL;
   tabStop := DefaultTabStop; done := FALSE;
   standalone := FALSE; template := "";
-  wrap := "auto"; codeStyle := ""; referenceLocation := ""; unknown := ""; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
+  wrap := "auto"; codeStyle := ""; codeAlign := ""; referenceLocation := ""; unknown := ""; columns := 72; idPrefix := ""; numberSections := FALSE; toc := FALSE; tocDepth := 3;
   before := NIL; lastBefore := NIL; after := NIL; lastAfter := NIL;
   header := NIL; lastHeader := NIL
 END PdOptions.

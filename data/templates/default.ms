@@ -34,6 +34,12 @@ $endif$
 .nr PS $if(pointsize)$$pointsize$$else$10p$endif$
 .\" line height
 .nr VS $if(lineheight)$$lineheight$$else$12p$endif$
+$if(code-column)$
+.nr PdCodeCol $code-column$m
+$endif$
+$if(code-gap)$
+.nr PdCodeGap $code-gap$m
+$endif$
 .\" font family: A, BM, H, HN, N, P, T, ZCM
 .fam $if(fontfamily)$$fontfamily$$else$T$endif$
 .\" paragraph indent

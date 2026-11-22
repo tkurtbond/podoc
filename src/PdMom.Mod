@@ -12,7 +12,7 @@ MODULE PdMom;
    warning. *)
 
 IMPORT Ropes, A := PdAst, L := PdLayout, T := PdTemplate, C := PdContext,
-  Sh := PdShared, Ro := PdRoff, PdIO, PdImages, Run := PdRun, PdCode;
+  Sh := PdShared, Ro := PdRoff, PdIO, PdImages, Run := PdRun, PdCode, PdCodeAlign;
 
 TYPE
   Rope = Ropes.Rope;
@@ -413,13 +413,17 @@ END Header;
 (* A code block: in .CODE, its reserved words in bold and comments in
    italic in the mono style; in the proportional style, without .CODE
    and in roman, the quote font saved before and restored after
-   (decision 37) *)
+   (decision 37), aligned as --code-align says (decision 33), with
+   \*[ROM] after bold and italic, since \*[PREV] cannot be measured *)
 PROCEDURE CodeBlock(c: A.CodeBlk): L.Doc;
   VAR d: L.Doc; lang: PdCode.Language; style: INTEGER;
 BEGIN
   style := Sh.CodeStyle(c.attr, lang);
   IF style = Sh.CodeNone THEN lang := NIL END;
-  d := L.Literal(Ro.Highlight(c.text, lang, TRUE, "\*[BD]", "\*[IT]", "\*[PREV]"));
+  IF (style = Sh.CodeProportional) & (Sh.codeAlign # PdCodeAlign.None) THEN
+    d := L.Literal(Ro.AlignedCode(c.text, lang, Sh.codeAlign, "\*[BD]", "\*[IT]", "\*[ROM]"))
+  ELSE d := L.Literal(Ro.Highlight(c.text, lang, TRUE, "\*[BD]", "\*[IT]", "\*[PREV]"))
+  END;
   IF style = Sh.CodeProportional THEN
     RETURN Above3(Above3(Lit(".ds pd:qft \*[$QUOTE_FT]"), Lit(".QUOTE_FONT R"), Lit(".QUOTE")), d,
       Above(Lit(".QUOTE OFF"), Lit(".QUOTE_FONT \*[pd:qft]")))

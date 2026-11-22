@@ -4,7 +4,7 @@ MODULE PdRoff;
    RoffChar), small caps, PDF anchors and strings, the font state, the
    plain text of inlines for PDF bookmarks, and tbl tables. *)
 
-IMPORT Ropes, Strings, Utf8, Unicode, A := PdAst, L := PdLayout, Sh := PdShared, PdAscii, PdCode;
+IMPORT Ropes, Strings, Utf8, Unicode, A := PdAst, L := PdLayout, Sh := PdShared, PdAscii, PdCode, PdCodeAlign;
 
 TYPE
   Rope = Ropes.Rope;
@@ -404,6 +404,97 @@ BEGIN
   END;
   RETURN out
 END Highlight;
+
+(* Aligned code (Phase 24.4; decisions 32 and 33): columns are written
+   as numbers times the register PdCodeCol, gaps as PdCodeGap, which
+   the template may set from code-column and code-gap; the block sets
+   them to 0.5 and 1 em if they are not. *)
+
+(* out with the pieces of the segment s, escaped, reserved words between
+   bold and back, comments between italic and back *)
+PROCEDURE SegText(out: Rope; s: PdCodeAlign.Segment; bold, italic, back: ARRAY OF CHAR): Rope;
+  VAR p: PdCodeAlign.Piece;
+BEGIN
+  p := s.pieces;
+  WHILE p # NIL DO
+    CASE p.kind OF
+      PdCode.Reserved: out := CatS(Cat(CatS(out, bold), EscapeStr(p.text)), back)
+    | PdCode.Comment: out := CatS(Cat(CatS(out, italic), EscapeStr(p.text)), back)
+    ELSE out := Cat(out, EscapeStr(p.text))
+    END;
+    p := p.next
+  END;
+  RETURN out
+END SegText;
+
+(* The line l's segments before upto (all if upto is NIL), each moved to
+   its place: the first to its column, a later one in the fixed form
+   to its column but at least a gap past the text before it, or in the
+   elastic and hybrid forms to its group's register *)
+PROCEDURE AlignedLine(l: PdCodeAlign.Line; upto: PdCodeAlign.Segment; align: INTEGER;
+  bold, italic, back: ARRAY OF CHAR): Rope;
+  VAR s: PdCodeAlign.Segment; out, col: Rope;
+BEGIN
+  out := NIL; s := l.segs;
+  WHILE (s # NIL) & (s # upto) DO
+    col := Sh.IntRope(s.col);
+    IF s = l.segs THEN
+      IF s.col > 0 THEN out := CatS(Cat(CatS(out, "\h'|"), col), "u*\n[PdCodeCol]u'")
+      ELSIF Ropes.Fetch(s.pieces.text, 0) = "." THEN out := CatS(out, "\&")
+      END
+    ELSIF align = PdCodeAlign.Fixed THEN
+      out := CatS(Cat(CatS(out, "\h'("), col), "u*\n[PdCodeCol]u-\n[.k]u)>?\n[PdCodeGap]u'")
+    ELSE out := CatS(Cat(CatS(out, "\h'|\n[PdG"), Sh.IntRope(s.group.id)), "]u'")
+    END;
+    out := SegText(out, s, bold, italic, back);
+    s := s.next
+  END;
+  RETURN out
+END AlignedLine;
+
+(* The code text, in the lines of a no-fill block, aligned as align
+   (PdCodeAlign's Fixed, Elastic or Hybrid) says: reserved words
+   between bold and back, comments between italic and back, as lang's
+   scanner finds them (none if lang is NIL); before the lines, the
+   requests that set the registers it needs: PdCodeCol and PdCodeGap
+   if they are not set, and for the elastic and hybrid forms one
+   register per group, PdG1, PdG2 ..., measured from its lines' text
+   before it *)
+PROCEDURE AlignedCode*(text: Rope; lang: PdCode.Language; align: INTEGER;
+  bold, italic, back: ARRAY OF CHAR): Rope;
+  VAR b: PdCodeAlign.Block; sp: PdCode.Span; out, reg: Rope; l: PdCodeAlign.Line;
+    g: PdCodeAlign.Group; m: PdCodeAlign.Member;
+BEGIN
+  IF lang = NIL THEN sp := NIL ELSE sp := PdCode.Scan(lang, text) END;
+  b := PdCodeAlign.Layout(text, sp);
+  out := CatC(CatS(CatC(R(".if !r PdCodeCol .nr PdCodeCol 0.5m"), 0AX), ".if !r PdCodeGap .nr PdCodeGap 1m"), 0AX);
+  IF align # PdCodeAlign.Fixed THEN
+    g := b.groups;
+    WHILE g # NIL DO
+      reg := CatS(Sh.IntRope(g.id), " ");
+      out := Cat(CatS(out, ".nr PdG"), reg);
+      IF align = PdCodeAlign.Hybrid THEN out := CatS(Cat(out, Sh.IntRope(g.col)), "*\n[PdCodeCol]")
+      ELSE out := CatS(out, "0")
+      END;
+      out := CatC(out, 0AX);
+      m := g.members;
+      WHILE m # NIL DO
+        out := CatS(Cat(CatS(Cat(CatS(out, ".nr PdG"), reg), "\n[PdG"), Sh.IntRope(g.id)), "]>?(\w'\&");
+        out := CatS(Cat(out, AlignedLine(m.line, m.seg, align, bold, italic, back)), "'u+\n[PdCodeGap]u)");
+        out := CatC(out, 0AX);
+        m := m.next
+      END;
+      g := g.next
+    END
+  END;
+  l := b.lines;
+  WHILE l # NIL DO
+    out := Cat(out, AlignedLine(l, NIL, align, bold, italic, back));
+    IF l.next # NIL THEN out := CatC(out, 0AX) END;
+    l := l.next
+  END;
+  RETURN out
+END AlignedCode;
 
 (* Inline code, text with the attributes attr, in the fonts f (and
    bold if bold) with the code font added; with a language class and

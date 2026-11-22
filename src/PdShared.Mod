@@ -4,7 +4,7 @@ MODULE PdShared;
    (stringify), the division of a document into sections
    (makeSections), and the metadata that writers look up. *)
 
-IMPORT Ropes, PdJson, PdIO, A := PdAst, PdCode;
+IMPORT Ropes, PdJson, PdIO, A := PdAst, PdCode, PdCodeAlign;
 
 CONST
   MaxLevels = 100; (* the most levels a section number has *)
@@ -32,6 +32,8 @@ TYPE
 VAR
   cmdCodeStyle*: INTEGER; (* --code-style's code style; -1 if not given *)
   docCodeStyle: INTEGER; (* the document's code style, from SetCodeStyle *)
+  cmdCodeAlign*: INTEGER; (* --code-align's alignment (PdCodeAlign); -1 if not given *)
+  codeAlign-: INTEGER; (* the document's alignment, from SetCodeStyle *)
   numbering: BOOLEAN; (* MakeSections: whether sections are numbered *)
   baseLevel: INTEGER; (* MakeSections: the level of the top sections; < 0 if they keep theirs *)
   minLevel: INTEGER; (* the lowest header level in the document *)
@@ -796,18 +798,37 @@ BEGIN
   RETURN -1
 END CodeStyleOf;
 
-(* Sets the document's code style: the command line's (cmdCodeStyle)
-   if it gave one, else the metadata field code-style's, else none. A
-   field that names no style is warned about and ignored. *)
-PROCEDURE SetCodeStyle*(meta: A.MetaMapV);
-  VAR s: ARRAY 32 OF CHAR; r: Rope; k: INTEGER;
+(* The metadata field name's value as a string in s; "" if it is too
+   long *)
+PROCEDURE MetaString(meta: A.MetaMapV; name: ARRAY OF CHAR; VAR s: ARRAY OF CHAR);
+  VAR r: Rope;
 BEGIN
+  r := Stringify(DocMeta(meta, name));
+  s[0] := 0X;
+  IF Ropes.Length(r) < LEN(s) THEN Ropes.ToString(r, s) END
+END MetaString;
+
+(* Sets the document's code style: the command line's (cmdCodeStyle)
+   if it gave one, else the metadata field code-style's, else none; and
+   its alignment, codeAlign, the same way from cmdCodeAlign and
+   code-align, else hybrid (decision 33). A field that names no style
+   or alignment is warned about and ignored. *)
+PROCEDURE SetCodeStyle*(meta: A.MetaMapV);
+  VAR s: ARRAY 32 OF CHAR; k: INTEGER;
+BEGIN
+  codeAlign := PdCodeAlign.Hybrid;
+  IF cmdCodeAlign >= 0 THEN codeAlign := cmdCodeAlign
+  ELSIF A.GetMeta(meta, "code-align") # NIL THEN
+    MetaString(meta, "code-align", s);
+    k := PdCodeAlign.AlignOf(s);
+    IF k >= 0 THEN codeAlign := k
+    ELSE PdIO.Warn("code-align must be none, fixed, elastic or hybrid; ignored")
+    END
+  END;
   docCodeStyle := CodeNone;
   IF cmdCodeStyle >= 0 THEN docCodeStyle := cmdCodeStyle
   ELSIF A.GetMeta(meta, "code-style") # NIL THEN
-    r := Stringify(DocMeta(meta, "code-style"));
-    s := "";
-    IF Ropes.Length(r) < LEN(s) THEN Ropes.ToString(r, s) END;
+    MetaString(meta, "code-style", s);
     k := CodeStyleOf(s);
     IF k >= 0 THEN docCodeStyle := k
     ELSE PdIO.Warn("code-style must be none, mono or proportional; ignored")
@@ -838,5 +859,6 @@ BEGIN
 END CodeStyle;
 
 BEGIN
-  cmdCodeStyle := -1; docCodeStyle := CodeNone
+  cmdCodeStyle := -1; docCodeStyle := CodeNone;
+  cmdCodeAlign := -1; codeAlign := PdCodeAlign.Hybrid
 END PdShared.

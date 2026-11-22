@@ -2,6 +2,8 @@
 The metadata\(cqs style, \f[CR]\f[CB]BEGIN\f[CR] \f[CB]END\f[CR]\f[R]:
 .IP
 .nf
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
 \f[B]BEGIN\f[R] x := 1 \f[B]END\f[R]
 .fi
 .LP

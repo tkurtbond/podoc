@@ -1,0 +1,24 @@
+.\" Written by podoc's default mom template, for groff 1.23 and later
+.\" PAPER comes before PRINTSTYLE, which sets the page from it
+.PRINTSTYLE TYPESET
+.\" code blocks (QUOTE) at the left margin unless code-indent is set
+.QUOTE_INDENT 0
+.nr PdCodeCol 0.4m
+.nr PdCodeGap 2m
+.\" the colour for strikeout
+.defcolor strikecolor rgb 0.7 0.7 0.7
+.\" captions below images
+.CAPTION_AFTER_LABEL IMG
+.START
+.ds pd:qft \*[$QUOTE_FT]
+.QUOTE_FONT R
+.QUOTE
+.if !r PdCodeCol .nr PdCodeCol 0.5m
+.if !r PdCodeGap .nr PdCodeGap 1m
+.nr PdG1 6*\n[PdCodeCol]
+.nr PdG1 \n[PdG1]>?(\w'\&x :='u+\n[PdCodeGap]u)
+.nr PdG2 9*\n[PdCodeCol]
+.nr PdG2 \n[PdG2]>?(\w'\&x :=\h'|\n[PdG1]u'1'u+\n[PdCodeGap]u)
+x :=\h'|\n[PdG1]u'1\h'|\n[PdG2]u'\*[IT](* one *)\*[ROM]
+.QUOTE OFF
+.QUOTE_FONT \*[pd:qft]

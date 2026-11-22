@@ -1,0 +1,55 @@
+.PP
+An Oberon module:
+.ds pd:qft \*[$QUOTE_FT]
+.QUOTE_FONT R
+.QUOTE
+\*[BD]MODULE\*[PREV] Stack;
+  \*[IT](* A bounded stack of integers. *)\*[PREV]
+
+  \*[BD]CONST\*[PREV]
+    Max = 100;              \*[IT](* capacity *)\*[PREV]
+    Overflow = 1;           \*[IT](* HALT code: too many pushes *)\*[PREV]
+
+  \*[BD]VAR\*[PREV]
+    top: INTEGER;           \*[IT](* items in use *)\*[PREV]
+    items: \*[BD]ARRAY\*[PREV] Max \*[BD]OF\*[PREV] INTEGER;
+
+  \*[BD]PROCEDURE\*[PREV] Push*(x: INTEGER);
+  \*[BD]BEGIN\*[PREV]
+    \*[BD]IF\*[PREV] top = Max \*[BD]THEN\*[PREV]
+      HALT(Overflow)        \*[IT](* it\(aqs full *)\*[PREV]
+    \*[BD]END\*[PREV];
+    items[top] := x;        \*[IT](* store it *)\*[PREV]
+    INC(top)                \*[IT](* and count it *)\*[PREV]
+  \*[BD]END\*[PREV] Push;
+
+\*[BD]BEGIN\*[PREV]
+  top := 0                  \*[IT](* empty at first *)\*[PREV]
+\*[BD]END\*[PREV] Stack.
+.QUOTE OFF
+.QUOTE_FONT \*[pd:qft]
+.PP
+A C header and function:
+.ds pd:qft \*[$QUOTE_FT]
+.QUOTE_FONT R
+.QUOTE
+#define MAXNAME   32        \*[IT]/* longest name */\*[PREV]
+#define WWWWWWWWWWWW  64    \*[IT]/* deliberately wide */\*[PREV]
+#define DEPTH     8         \*[IT]/* nesting */\*[PREV]
+
+\*[BD]struct\*[PREV] entry {
+    \*[BD]int\*[PREV]     kind;           \*[IT]/* what it is */\*[PREV]
+    \*[BD]char\*[PREV]   *name;           \*[IT]/* its name */\*[PREV]
+    \*[BD]long\*[PREV]    value;          \*[IT]/* its value */\*[PREV]
+};
+
+\*[BD]int\*[PREV] classify(\*[BD]struct\*[PREV] entry *e)
+{
+    \*[BD]switch\*[PREV] (e->kind) {
+    \*[BD]case\*[PREV] 0:  \*[BD]return\*[PREV] \(aqa\(aq;    \*[IT]/* plain */\*[PREV]
+    \*[BD]case\*[PREV] 1:  \*[BD]return\*[PREV] \(aq\(dq\(aq;    \*[IT]/* quoted */\*[PREV]
+    \*[BD]default\*[PREV]: \*[BD]return\*[PREV] -1;     \*[IT]/* none -- unknown */\*[PREV]
+    }
+}
+.QUOTE OFF
+.QUOTE_FONT \*[pd:qft]

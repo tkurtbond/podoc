@@ -1,0 +1,95 @@
+% Enable hyperlinks
+\setupinteraction
+  [state=start,
+  style=,
+  color=,
+  contrastcolor=]
+\setupurl[style=]
+
+% make chapter, section bookmarks visible when opening document
+\placebookmarks[chapter, section, subsection, subsubsection, subsubsubsection, subsubsubsubsection][chapter, section]
+\setupinteractionscreen[option={bookmark,title}]
+
+\setuppagenumbering[location={footer,middle}]
+\setupstructure[state=start,method=auto]
+
+% use microtypography
+\definefontfeature[default][default][script=latn, protrusion=quality, expansion=quality, itlc=yes, textitalics=yes, onum=yes, pnum=yes]
+\definefontfeature[default:tnum][default][tnum=yes, pnum=no]
+\definefontfeature[smallcaps][script=latn, protrusion=quality, expansion=quality, smcp=yes, onum=yes, pnum=yes]
+\setupalign[hz,hanging]
+\setupitaliccorrection[global, always]
+
+\setupbodyfontenvironment[default][em=italic] % use italic as em, not slanted
+
+\definefallbackfamily[mainface][rm][CMU Serif][preset=range:greek, force=yes]
+\definefontfamily[mainface][rm][Latin Modern Roman]
+\definefontfamily[mainface][mm][Latin Modern Math]
+\definefontfamily[mainface][ss][Latin Modern Sans]
+\definefontfamily[mainface][tt][Latin Modern Typewriter][features=none, bf=file:lmmonolt10-bold, it=file:lmmono10-italic, bi=file:lmmonolt10-boldoblique]
+\setupbodyfont[mainface]
+\newdimen\PdColumn \PdColumn=0.4em
+\def\PdGap{2em}
+
+\setupwhitespace[medium]
+
+\setuphead[chapter]            [style=\tfd\setupinterlinespace,header=empty]
+\setuphead[section]            [style=\tfc\setupinterlinespace]
+\setuphead[subsection]         [style=\tfb\setupinterlinespace]
+\setuphead[subsubsection]      [style=\bf]
+\setuphead[subsubsubsection]   [style=\sc]
+\setuphead[subsubsubsubsection][style=\it]
+
+\definesectionlevels
+   [default]
+   [section, subsection, subsubsection, subsubsubsection, subsubsubsubsection]
+
+\setuphead[chapter, section, subsection, subsubsection, subsubsubsection, subsubsubsubsection][number=no]
+
+\definedescription
+  [description]
+  [headstyle=bold, style=normal, location=hanging, width=broad, margin=1cm, alternative=hanging]
+
+\setupitemize[autointro]    % prevent orphan list intro
+\setupitemize[indentnext=no]
+
+\defineitemgroup[enumerate]
+\setupenumerate[each][fit][itemalign=left,distance=.5em,style={\feature[+][default:tnum]}]
+
+\setupfloat[figure][default={here,nonumber}]
+\setupfloat[table][default={here,nonumber}]
+
+\setupxtable[frame=off]
+\setupxtable[head][topframe=on]
+\setupxtable[body][]
+\setupxtable[foot][]
+\setupxtable[lastrow][bottomframe=on]
+
+
+\starttext
+
+\ifdefined\PdSeg\else
+\definefontfeature[pdcode][default][textcontrol=no]
+\definefont[PdCodeR][Serif*pdcode]
+\definefont[PdCodeB][SerifBold*pdcode]
+\definefont[PdCodeI][SerifItalic*pdcode]
+\ifdefined\PdColumn\else\newdimen\PdColumn \PdColumn=0.5em\fi
+\ifdefined\PdGap\else\def\PdGap{1em}\fi
+\newdimen\PdPos \newdimen\PdT \newbox\PdBox
+\def\PdLine{\global\PdPos=0pt\relax}
+\def\PdSeg#1#2{\setbox\PdBox\hbox{#2}\PdT=#1\relax
+  \ifdim\PdPos>0pt \ifdim\PdT<\dimexpr\PdPos+\PdGap\relax \PdT=\dimexpr\PdPos+\PdGap\relax\fi\fi
+  \hskip\dimexpr\PdT-\PdPos\relax \global\PdPos=\dimexpr\PdT+\wd\PdBox\relax \box\PdBox}
+\def\PdMeasure#1#2{\setbox\PdBox\hbox{#2}%
+  \ifdim\dimexpr\wd\PdBox+\PdGap\relax>\getvalue{#1}\relax
+    \setxvalue{#1}{\the\dimexpr\wd\PdBox+\PdGap\relax}\fi}
+\fi
+\setvalue{PdG1}{6\PdColumn}
+\PdMeasure{PdG1}{\PdCodeR\PdLine\PdSeg{0\PdColumn}{x~:=}}
+\setvalue{PdG2}{9\PdColumn}
+\PdMeasure{PdG2}{\PdCodeR\PdLine\PdSeg{0\PdColumn}{x~:=}\PdSeg{\getvalue{PdG1}}{1}}
+\startlines[style=\PdCodeR]
+\PdLine\PdSeg{0\PdColumn}{x~:=}\PdSeg{\getvalue{PdG1}}{1}\PdSeg{\getvalue{PdG2}}{{\PdCodeI{}(*~one~*)}}
+\stoplines
+
+\stoptext

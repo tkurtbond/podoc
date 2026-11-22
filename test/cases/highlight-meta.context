@@ -1,8 +1,24 @@
 The metadata's style,
 \type[escape=yes]{/BTEX\bf BEGIN/ETEX /BTEX\bf END/ETEX}:
 
-\startlines[space=on]
-{\bf{}BEGIN} x := 1 {\bf{}END}
+\ifdefined\PdSeg\else
+\definefontfeature[pdcode][default][textcontrol=no]
+\definefont[PdCodeR][Serif*pdcode]
+\definefont[PdCodeB][SerifBold*pdcode]
+\definefont[PdCodeI][SerifItalic*pdcode]
+\ifdefined\PdColumn\else\newdimen\PdColumn \PdColumn=0.5em\fi
+\ifdefined\PdGap\else\def\PdGap{1em}\fi
+\newdimen\PdPos \newdimen\PdT \newbox\PdBox
+\def\PdLine{\global\PdPos=0pt\relax}
+\def\PdSeg#1#2{\setbox\PdBox\hbox{#2}\PdT=#1\relax
+  \ifdim\PdPos>0pt \ifdim\PdT<\dimexpr\PdPos+\PdGap\relax \PdT=\dimexpr\PdPos+\PdGap\relax\fi\fi
+  \hskip\dimexpr\PdT-\PdPos\relax \global\PdPos=\dimexpr\PdT+\wd\PdBox\relax \box\PdBox}
+\def\PdMeasure#1#2{\setbox\PdBox\hbox{#2}%
+  \ifdim\dimexpr\wd\PdBox+\PdGap\relax>\getvalue{#1}\relax
+    \setxvalue{#1}{\the\dimexpr\wd\PdBox+\PdGap\relax}\fi}
+\fi
+\startlines[style=\PdCodeR]
+\PdLine\PdSeg{0\PdColumn}{{\PdCodeB{}BEGIN}~x~:=~1~{\PdCodeB{}END}}
 \stoplines
 
 A block's class wins:
