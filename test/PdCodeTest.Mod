@@ -396,6 +396,33 @@ BEGIN
   TS("bash &> and |&", "bash", "a &>f done |& if", "a &>f done |& [if]")
 END Shell;
 
+(* Users' lists: AddWord, RemoveWord, Clear and Reset (Phase 24.8) *)
+PROCEDURE Lists;
+  VAR p, o, c, sh: C.Language;
+BEGIN
+  p := C.Find("pascal"); o := C.Find("oberon"); c := C.Find("c"); sh := C.Find("sh");
+  Report(C.AddWord(p, "Override") & C.HasWord(p, "override") & C.HasWord(p, "OVERRIDE")
+    & (C.Count(p) = 60), "add a word, case ignored");
+  Report(C.AddWord(p, "override") & (C.Count(p) = 60), "add a word twice");
+  C.RemoveWord(p, "GOTO");
+  Report(~C.HasWord(p, "goto") & (C.Count(p) = 59), "remove a word, case ignored");
+  C.RemoveWord(p, "nosuchword");
+  Report(C.Count(p) = 59, "remove a word not there");
+  Report(~C.AddWord(p, "abcdefghijklmnopqrstuvwxyz012345") & ~C.AddWord(p, "")
+    & (C.Count(p) = 59), "too long or empty words refused");
+  Report(C.AddWord(c, "Widget") & C.HasWord(c, "Widget") & ~C.HasWord(c, "widget"), "add a word, case kept");
+  T("an added word", "c", "Widget widget;", "[Widget] widget;");
+  C.Clear(o);
+  Report(C.AddWord(o, "MODULE") & (C.Count(C.Find("oberon2")) = 1), "clear, for all names");
+  T("a cleared list", "oberon", "MODULE M; BEGIN END M.", "[MODULE] M; BEGIN END M.");
+  C.RemoveWord(sh, "case");
+  TS("sh without case", "sh", "case x in a) if; esac", "case x in a) if; [esac]");
+  C.Reset;
+  Report((C.Count(p) = 59) & C.HasWord(p, "goto") & ~C.HasWord(p, "override")
+    & (C.Count(o) = 34) & (C.Count(c) = 59) & (C.Count(sh) = 16), "reset to the built-in words");
+  TS("sh with case again", "sh", "case x in a) echo if;; esac", "[case] x [in] a) echo if;; [esac]")
+END Lists;
+
 BEGIN
   failures := 0;
   Names;
@@ -407,5 +434,6 @@ BEGIN
   Ada;
   CPlusPlus;
   Shell;
+  Lists;
   IF failures > 0 THEN Out.Int(failures, 0); Out.String(" failed"); Out.Ln END
 END PdCodeTest.

@@ -1,0 +1,3 @@
+#!replace
+# Only these words are reserved.
+MODULE PROCEDURE END

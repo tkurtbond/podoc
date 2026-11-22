@@ -4,7 +4,7 @@ MODULE PdShared;
    (stringify), the division of a document into sections
    (makeSections), and the metadata that writers look up. *)
 
-IMPORT Ropes, PdJson, PdIO, A := PdAst, PdCode, PdCodeAlign;
+IMPORT Ropes, PdJson, PdIO, A := PdAst, PdCode, PdCodeAlign, PdKeywords;
 
 CONST
   MaxLevels = 100; (* the most levels a section number has *)
@@ -808,11 +808,77 @@ BEGIN
   IF Ropes.Length(r) < LEN(s) THEN Ropes.ToString(r, s) END
 END MetaString;
 
+(* The text of the metadata value v, a string, inlines or blocks, in
+   r; FALSE if it is none of those *)
+PROCEDURE ValueText(v: A.MetaValue; VAR r: Rope): BOOLEAN;
+BEGIN
+  r := NIL;
+  IF v = NIL THEN RETURN FALSE END;
+  CASE v.kind OF
+    A.MetaString: r := v(A.MetaStringV).s
+  | A.MetaInlines: r := Stringify(v(A.MetaInlinesV).inlines)
+  | A.MetaBlocks: r := StringifyBlocks(v(A.MetaBlocksV).blocks)
+  ELSE RETURN FALSE
+  END;
+  RETURN TRUE
+END ValueText;
+
+(* Gives the words of the metadata value v, a list of words or a text
+   of words separated by spaces, to PdKeywords for lang *)
+PROCEDURE KeywordList(lang: PdCode.Language; v: A.MetaValue);
+  VAR item: A.MetaItem; r: Rope; t: PdIO.Text; n: LONGINT;
+BEGIN
+  IF (v # NIL) & (v.kind = A.MetaList) THEN
+    item := v(A.MetaListV).items;
+    WHILE item # NIL DO KeywordList(lang, item.value); item := item.next END
+  ELSIF ValueText(v, r) THEN
+    n := Ropes.Length(r);
+    IF n > 0 THEN
+      NEW(t, n + 1); Ropes.ToString(r, t^);
+      PdKeywords.Words(lang, t^, 0, n, FALSE)
+    END
+  ELSE PdIO.Warn("code-keywords: a language's words must be a list of words; ignored")
+  END
+END KeywordList;
+
+(* Applies the metadata field code-keywords: a map from a language's
+   name to its words, a list, or a map with replace: true and words
+   (decisions 40 and 47) *)
+PROCEDURE CodeKeywords(meta: A.MetaMapV);
+  VAR v, words, replace: A.MetaValue; e: A.MetaEntry; lang: PdCode.Language;
+    name: ARRAY 32 OF CHAR;
+BEGIN
+  v := A.GetMeta(meta, "code-keywords");
+  IF v = NIL THEN RETURN END;
+  IF v.kind # A.MetaMap THEN
+    PdIO.Warn("code-keywords must be a map from languages to words; ignored"); RETURN
+  END;
+  e := v(A.MetaMapV).entries;
+  WHILE e # NIL DO
+    lang := NIL; name := "";
+    IF Ropes.Length(e.key) < LEN(name) THEN Ropes.ToString(e.key, name); lang := PdCode.Find(name) END;
+    IF lang = NIL THEN
+      PdIO.Message3("[WARNING] code-keywords: unknown language '", name, "'; ignored")
+    ELSIF e.value.kind = A.MetaMap THEN
+      replace := A.GetMeta(e.value(A.MetaMapV), "replace");
+      words := A.GetMeta(e.value(A.MetaMapV), "words");
+      IF (replace # NIL) & (replace.kind = A.MetaBool) & replace(A.MetaBoolV).b THEN
+        PdCode.Clear(lang)
+      END;
+      IF words # NIL THEN KeywordList(lang, words) END
+    ELSE KeywordList(lang, e.value)
+    END;
+    e := e.next
+  END
+END CodeKeywords;
+
 (* Sets the document's code style: the command line's (cmdCodeStyle)
    if it gave one, else the metadata field code-style's, else none; and
    its alignment, codeAlign, the same way from cmdCodeAlign and
    code-align, else hybrid (decision 33). A field that names no style
-   or alignment is warned about and ignored. *)
+   or alignment is warned about and ignored. The languages' words are
+   the built-in ones changed by the metadata's code-keywords and then
+   by the --code-keywords files (Phase 24.8). *)
 PROCEDURE SetCodeStyle*(meta: A.MetaMapV);
   VAR s: ARRAY 32 OF CHAR; k: INTEGER;
 BEGIN
@@ -825,6 +891,7 @@ BEGIN
     ELSE PdIO.Warn("code-align must be none, fixed, elastic or hybrid; ignored")
     END
   END;
+  PdCode.Reset; CodeKeywords(meta); PdKeywords.Apply;
   docCodeStyle := CodeNone;
   IF cmdCodeStyle >= 0 THEN docCodeStyle := cmdCodeStyle
   ELSIF A.GetMeta(meta, "code-style") # NIL THEN

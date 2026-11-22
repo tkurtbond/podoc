@@ -47,6 +47,7 @@ TYPE
 VAR
   files*: File; (* the inputs; NIL for standard input *)
   metaFiles*: File; (* --metadata-file *)
+  codeKeywords*: File; (* --code-keywords, each LANGUAGE:FILE *)
   cmdMeta*: A.MetaMapV; (* -M *)
   output*: String; (* -o; "" for standard output *)
   from*: String; (* -f; "" until Resolve *)
@@ -85,7 +86,7 @@ VAR
   done*: BOOLEAN; (* --help or --version was given: nothing else is done *)
 
   parser: ArgParser.Parser;
-  lastFile, lastMetaFile, lastBefore, lastAfter, lastHeader, lastOpt: File;
+  lastFile, lastMetaFile, lastCodeKeywords, lastBefore, lastAfter, lastHeader, lastOpt: File;
   lastFilter: Filter;
 
 (* Names and formats *)
@@ -368,6 +369,12 @@ BEGIN
   AddTo(metaFiles, lastMetaFile, arg);
   RETURN TRUE
 END AddMetaFile;
+
+PROCEDURE AddCodeKeywords(VAR arg: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  AddTo(codeKeywords, lastCodeKeywords, arg);
+  RETURN TRUE
+END AddCodeKeywords;
 
 PROCEDURE AddBefore(VAR arg: ARRAY OF CHAR): BOOLEAN;
 BEGIN
@@ -662,6 +669,8 @@ BEGIN
     "Highlight code: none, mono or proportional.", SetCodeStyle));
   parser.AddOption(ArgParser.MakeStringOption(0X, "code-align",
     "Align proportional code: none, fixed, elastic or hybrid.", SetCodeAlign));
+  parser.AddOption(ArgParser.MakeStringOption(0X, "code-keywords",
+    "Change LANG's reserved words with the list in FILE (LANG:FILE).", AddCodeKeywords));
   parser.AddOption(ArgParser.MakeStringOption(0X, "columns",
     "Wrap lines at N columns (72).", SetColumns));
   parser.AddOption(ArgParser.MakeStringOption(0X, "reference-location",
@@ -939,7 +948,7 @@ BEGIN
 END Resolve;
 
 BEGIN
-  files := NIL; lastFile := NIL; metaFiles := NIL; lastMetaFile := NIL;
+  files := NIL; lastFile := NIL; metaFiles := NIL; lastMetaFile := NIL; codeKeywords := NIL; lastCodeKeywords := NIL;
   cmdMeta := A.NewMetaMap();
   output := ""; from := ""; gridTables := TRUE; titleBlock := TRUE; to := ""; gutenberg := FALSE; pdf := FALSE;
   pdfEngine := ""; extractMedia := "";

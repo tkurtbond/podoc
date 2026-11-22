@@ -398,6 +398,15 @@ Made by the user on 2026-11-20, on the questions of §15.
       with the style `none` stays byte for byte as it is now.
     - The text inside `<pre>` is unchanged, so copying it from a
       browser gives the code exactly.
+
+47. **`code-keywords`, not `keywords`** (2026-11-22). Decision 40's
+    metadata field `keywords` is pandoc's field for the document's own
+    keywords: it goes into HTML's `<meta name="keywords">` and
+    ConTeXt's PDF `keyword=`. Given a map, pandoc 3.14 writes
+    `content="true"`. The user decided that the metadata field is
+    `code-keywords` and the option `--code-keywords=lang:file`,
+    beside `code-style` and `code-align`. Decision 40's forms are
+    otherwise unchanged.
     - It does not imitate pandoc's skylighting markup (a `<span>`
       per token, numbered lines, colour).
 
@@ -1919,14 +1928,47 @@ Each subphase passes `make test` under `-O2` and `-OC`.
     blocks of shell tokens, under both models, without a failure,
     and with the same output.
 
-### Phase 24.8: Users' lists [planned]
+### Phase 24.8: Users' lists [done]
 
 - **Change:** reserved-word lists in podoc's own format (decision
-  31), from `--keywords=lang:file` and the metadata `keywords`:
+  31), from `--code-keywords=lang:file` and the metadata
+  `code-keywords` (decision 47):
   adding, replacing with `#!replace` or `replace: true`, removing
   with `-word` (decision 40).
 - **Check:** case tests with a list of each kind; a missing file
   gives pandoc's exit status.
+- **Done** (2026-11-22):
+  - **The names:** `--code-keywords=LANG:FILE`, repeatable, and the
+    metadata field `code-keywords`, not `keywords`, which is pandoc's
+    field for the document's keywords (decision 47).
+  - **A file** (`PdKeywords`): words separated by blanks; `#` at a
+    word's start runs to the line's end; a first line `#!replace`
+    replaces the built-in words; `-word` takes a word out. The files
+    are read before the input, so a missing one stops podoc with exit
+    status 1, as pandoc 3.14 does for a missing `--abbreviations` or
+    `--syntax-definition` file (checked), not 98 or 99 as the study
+    guessed. A spec without `:`, or with a language podoc does not
+    know, is an option error (6).
+  - **The metadata:** `code-keywords: {LANG: words}`, the words a list
+    or a text of words separated by spaces, with `-word` to take one
+    out; `{replace: true, words: ...}` replaces. An unknown language
+    there is a warning, and its list is ignored.
+  - **The order:** the built-in words, then the metadata's lists, then
+    the files, in the order given. `PdShared.SetCodeStyle` applies
+    them, after `PdCode.Reset`, each time a writer starts.
+  - **`PdCode`:** `AddWord`, `RemoveWord`, `Clear`, `Reset` and
+    `HasWord`. A change holds for every name of a language (`pascal`
+    and `fpc`, `oberon` and `oberon2`); words compare without case in
+    the languages that ignore it; a word of 32 bytes or more is
+    refused with a warning. In sh and bash a word taken out stops
+    shaping the scan too: without `case`, `case x in` is a command.
+  - **Checked:** `PdCodeTest`, 161 cases, 12 of them new; 5 case tests:
+    `highlight-keywords` (HTML and ms: a file that adds, one that
+    replaces, one that removes a word the metadata added; metadata
+    lists, a replacing map, a text of words, an unknown language),
+    and a missing file, an unknown language and a spec without `:`,
+    each with its exit status. The user documentation is left for
+    Phase 24.9.
 
 ### Phase 24.9: Documentation and other systems [planned]
 
@@ -3526,3 +3568,9 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   substitutions. `make test` passes under `-O2` and `-OC` (347 case
   tests, the round trips, the image tests, the unit tests with
   `PdCodeTest`'s 149 cases).
+- 2026-11-22: Phase 24.8 done: users' reserved-word lists from
+  `--code-keywords=LANG:FILE` and the metadata field `code-keywords`
+  (decision 47), in `PdKeywords` and `PdCode`. `make test` passes
+  under `-O2` and `-OC` (352 case tests, 5 of them new, the round
+  trips, the image tests, the unit tests with `PdCodeTest`'s 161
+  cases).

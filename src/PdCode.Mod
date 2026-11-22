@@ -76,7 +76,14 @@ MODULE PdCode;
    1E10), and a "." followed by a digit; in C, a "'" between digits
    (1'000). A string ends at its closing quote or at the end of the
    line (in sh and bash, at its closing quote or the end of the text);
-   a comment that is not closed runs to the end of the text. *)
+   a comment that is not closed runs to the end of the text.
+
+   Users' lists (Phase 24.8, decisions 40 and 47) change a language's
+   words with AddWord, RemoveWord and Clear; Reset gives every language
+   its built-in words again. A change to a language holds for all its
+   names (pascal and fpc). In sh and bash, a word a user's list takes
+   out is no longer reserved for the scanner either: without "case",
+   "case x in" is a command and its arguments. *)
 
 IMPORT Ropes;
 
@@ -141,7 +148,9 @@ TYPE
     raw: BOOLEAN;             (* C++'s raw strings *)
     shell: INTEGER;           (* NoShell, Sh or Bash: Commands scans it *)
     words: Words;             (* sorted; lower case if ignoreCase *)
-    nWords: LONGINT
+    nWords: LONGINT;
+    builtin: Words;           (* the built-in words, for Reset *)
+    nBuiltin: LONGINT
   END;
 
   Name = POINTER TO NameDesc;
@@ -191,35 +200,60 @@ BEGIN
   RETURN a[i] < b[i]
 END Less;
 
-(* Add the words of list, separated by spaces, to lang's words, and
-   keep them sorted. Words as long as WordLen or longer are left out. *)
+(* Copies w into word, lower case if lang ignores case; FALSE if w is
+   too long or empty *)
+PROCEDURE ToWord(lang: Language; w: ARRAY OF CHAR; VAR word: Word): BOOLEAN;
+  VAR k: INTEGER;
+BEGIN
+  k := 0;
+  WHILE (k < LEN(w)) & (w[k] # 0X) DO
+    IF k >= WordLen - 1 THEN RETURN FALSE END;
+    IF lang.ignoreCase THEN word[k] := Ropes.LowerChar(w[k]) ELSE word[k] := w[k] END;
+    INC(k)
+  END;
+  word[k] := 0X;
+  RETURN k > 0
+END ToWord;
+
+(* The place of w in lang's words: the first word not less than it *)
+PROCEDURE Place(lang: Language; VAR w: Word): LONGINT;
+  VAR lo, hi, mid: LONGINT;
+BEGIN
+  lo := 0; hi := lang.nWords;
+  WHILE lo < hi DO
+    mid := (lo + hi) DIV 2;
+    IF Less(lang.words[mid], w) THEN lo := mid + 1 ELSE hi := mid END
+  END;
+  RETURN lo
+END Place;
+
+(* Inserts w in lang's words, kept sorted, unless it is there *)
+PROCEDURE Insert(lang: Language; VAR w: Word);
+  VAR j, m: LONGINT; ws: Words;
+BEGIN
+  IF lang.words # NIL THEN j := Place(lang, w) ELSE j := 0 END;
+  IF (j < lang.nWords) & (lang.words[j] = w) THEN RETURN END;
+  IF (lang.words = NIL) OR (lang.nWords = LEN(lang.words^)) THEN
+    IF lang.words = NIL THEN NEW(ws, 64) ELSE NEW(ws, 2 * LEN(lang.words^)) END;
+    FOR m := 0 TO lang.nWords - 1 DO ws[m] := lang.words[m] END;
+    lang.words := ws
+  END;
+  m := lang.nWords;
+  WHILE m > j DO lang.words[m] := lang.words[m - 1]; DEC(m) END;
+  lang.words[j] := w; INC(lang.nWords)
+END Insert;
+
+(* Add the words of list, separated by spaces, to lang's words *)
 PROCEDURE AddWords(lang: Language; list: ARRAY OF CHAR);
-  VAR i, k: INTEGER; j, m: LONGINT; w: Word; ws: Words;
+  VAR i, k: INTEGER; w: ARRAY 64 OF CHAR; word: Word;
 BEGIN
   i := 0;
   WHILE (i < LEN(list)) & (list[i] # 0X) DO
     WHILE list[i] = " " DO INC(i) END;
     k := 0;
-    WHILE (list[i] # " ") & (list[i] # 0X) DO
-      IF k < WordLen - 1 THEN
-        IF lang.ignoreCase THEN w[k] := Ropes.LowerChar(list[i]) ELSE w[k] := list[i] END
-      END;
-      INC(k); INC(i)
-    END;
-    IF (k > 0) & (k < WordLen) THEN
-      w[k] := 0X;
-      IF (lang.words = NIL) OR (lang.nWords = LEN(lang.words^)) THEN
-        IF lang.words = NIL THEN NEW(ws, 64) ELSE NEW(ws, 2 * LEN(lang.words^)) END;
-        FOR m := 0 TO lang.nWords - 1 DO ws[m] := lang.words[m] END;
-        lang.words := ws
-      END;
-      (* insertion *)
-      j := lang.nWords;
-      WHILE (j > 0) & Less(w, lang.words[j - 1]) DO
-        lang.words[j] := lang.words[j - 1]; DEC(j)
-      END;
-      lang.words[j] := w; INC(lang.nWords)
-    END
+    WHILE (list[i] # " ") & (list[i] # 0X) DO w[k] := list[i]; INC(k); INC(i) END;
+    w[k] := 0X;
+    IF ToWord(lang, w, word) THEN Insert(lang, word) END
   END
 END AddWords;
 
@@ -230,7 +264,7 @@ BEGIN
   l.lineContinues := FALSE; l.quotes := ""; l.escape := NoEscape;
   l.digitSep := FALSE; l.directives := FALSE; l.crossClose := FALSE;
   l.amp := FALSE; l.tick := FALSE; l.raw := FALSE; l.shell := NoShell;
-  l.words := NIL; l.nWords := 0;
+  l.words := NIL; l.nWords := 0; l.builtin := NIL; l.nBuiltin := 0;
   RETURN l
 END NewLanguage;
 
@@ -416,10 +450,85 @@ BEGIN
   AddName("bash", l)
 END InitLanguages;
 
+(* Copies the words ws, n of them *)
+PROCEDURE CopyWords(ws: Words; n: LONGINT): Words;
+  VAR c: Words; m: LONGINT;
+BEGIN
+  IF ws = NIL THEN RETURN NIL END;
+  NEW(c, LEN(ws^));
+  FOR m := 0 TO n - 1 DO c[m] := ws[m] END;
+  RETURN c
+END CopyWords;
+
+(* Keeps every language's words as its built-in ones *)
+PROCEDURE KeepBuiltins;
+  VAR n: Name;
+BEGIN
+  n := names;
+  WHILE n # NIL DO
+    IF n.lang.builtin = NIL THEN
+      n.lang.builtin := CopyWords(n.lang.words, n.lang.nWords);
+      n.lang.nBuiltin := n.lang.nWords
+    END;
+    n := n.next
+  END
+END KeepBuiltins;
+
+(* Gives every language its built-in words again, undoing AddWord,
+   RemoveWord and Clear *)
+PROCEDURE Reset*;
+  VAR n: Name;
+BEGIN
+  n := names;
+  WHILE n # NIL DO
+    n.lang.words := CopyWords(n.lang.builtin, n.lang.nBuiltin);
+    n.lang.nWords := n.lang.nBuiltin;
+    n := n.next
+  END
+END Reset;
+
+(* Adds the word w to lang's reserved words (without case if lang
+   ignores case); FALSE, and nothing added, if w is empty or as long as
+   32 bytes or longer *)
+PROCEDURE AddWord*(lang: Language; w: ARRAY OF CHAR): BOOLEAN;
+  VAR word: Word;
+BEGIN
+  IF ~ToWord(lang, w, word) THEN RETURN FALSE END;
+  Insert(lang, word);
+  RETURN TRUE
+END AddWord;
+
+(* Takes the word w out of lang's reserved words, if it is there *)
+PROCEDURE RemoveWord*(lang: Language; w: ARRAY OF CHAR);
+  VAR word: Word; j: LONGINT;
+BEGIN
+  IF ToWord(lang, w, word) & (lang.nWords > 0) THEN
+    j := Place(lang, word);
+    IF (j < lang.nWords) & (lang.words[j] = word) THEN
+      WHILE j < lang.nWords - 1 DO lang.words[j] := lang.words[j + 1]; INC(j) END;
+      DEC(lang.nWords)
+    END
+  END
+END RemoveWord;
+
+(* Takes out all of lang's reserved words *)
+PROCEDURE Clear*(lang: Language);
+BEGIN lang.nWords := 0
+END Clear;
+
 (* The number of lang's reserved words *)
 PROCEDURE Count*(lang: Language): LONGINT;
 BEGIN RETURN lang.nWords
 END Count;
+
+(* Whether w is one of lang's reserved words *)
+PROCEDURE HasWord*(lang: Language; w: ARRAY OF CHAR): BOOLEAN;
+  VAR word: Word; j: LONGINT;
+BEGIN
+  IF ~ToWord(lang, w, word) OR (lang.nWords = 0) THEN RETURN FALSE END;
+  j := Place(lang, word);
+  RETURN (j < lang.nWords) & (lang.words[j] = word)
+END HasWord;
 
 (* --- The scanner --- *)
 
@@ -564,7 +673,7 @@ END IsInclude;
 
 (* Whether the identifier [start, end) is a reserved word *)
 PROCEDURE IsReserved(VAR s: Scanner; start, end: LONGINT): BOOLEAN;
-  VAR w: Word; k: INTEGER; lo, hi, mid: LONGINT; l: Language;
+  VAR w: Word; k: INTEGER; lo: LONGINT; l: Language;
 BEGIN
   l := s.lang;
   IF (end - start >= WordLen) OR (l.nWords = 0) THEN RETURN FALSE END;
@@ -574,11 +683,7 @@ BEGIN
     INC(k); INC(start)
   END;
   w[k] := 0X;
-  lo := 0; hi := l.nWords;  (* the word, if there, is in [lo, hi) *)
-  WHILE lo < hi DO
-    mid := (lo + hi) DIV 2;
-    IF Less(l.words[mid], w) THEN lo := mid + 1 ELSE hi := mid END
-  END;
+  lo := Place(l, w);
   RETURN (lo < l.nWords) & (l.words[lo] = w)
 END IsReserved;
 
@@ -852,21 +957,21 @@ BEGIN
         start := i; ShellWord(s, i, term, literal);
         IF i = start THEN INC(i) END;
         IF test THEN
-          IF literal & Is(s, start, i, "]]") THEN
+          IF literal & Is(s, start, i, "]]") & IsReserved(s, start, i) THEN
             Emit(s, Reserved, start, i); test := FALSE; cmd := FALSE
           END
         ELSIF pattern THEN
           (* esac, not a|esac or (esac *)
-          IF patStart & literal & Is(s, start, i, "esac") THEN Emit(s, Reserved, start, i); EndCase
+          IF patStart & literal & Is(s, start, i, "esac") & IsReserved(s, start, i) THEN Emit(s, Reserved, start, i); EndCase
           ELSE patStart := FALSE
           END
         ELSIF expect = ExForName THEN expect := ExForIn; cmd := FALSE
-        ELSIF (expect = ExForIn) & literal & Is(s, start, i, "in") THEN
+        ELSIF (expect = ExForIn) & literal & Is(s, start, i, "in") & IsReserved(s, start, i) THEN
           Emit(s, Reserved, start, i); expect := ExNone; cmd := FALSE
-        ELSIF (expect = ExForIn) & literal & Is(s, start, i, "do") THEN
+        ELSIF (expect = ExForIn) & literal & Is(s, start, i, "do") & IsReserved(s, start, i) THEN
           Emit(s, Reserved, start, i); expect := ExNone; cmd := TRUE
         ELSIF expect = ExCaseWord THEN expect := ExCaseIn; cmd := FALSE
-        ELSIF (expect = ExCaseIn) & literal & Is(s, start, i, "in") THEN
+        ELSIF (expect = ExCaseIn) & literal & Is(s, start, i, "in") & IsReserved(s, start, i) THEN
           Emit(s, Reserved, start, i); expect := ExNone; INC(depth);
           pattern := TRUE; patStart := TRUE; cmd := FALSE
         ELSIF expect = ExFuncName THEN expect := ExFuncBody; cmd := TRUE
@@ -988,5 +1093,5 @@ BEGIN
 END Scan;
 
 BEGIN
-  InitLanguages
+  InitLanguages; KeepBuiltins
 END PdCode.

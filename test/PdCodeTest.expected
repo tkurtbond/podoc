@@ -147,3 +147,15 @@ ok   - bash arrays and extended patterns
 ok   - bash process substitution
 ok   - bash here-string
 ok   - bash &> and |&
+ok   - add a word, case ignored
+ok   - add a word twice
+ok   - remove a word, case ignored
+ok   - remove a word not there
+ok   - too long or empty words refused
+ok   - add a word, case kept
+ok   - an added word
+ok   - clear, for all names
+ok   - a cleared list
+ok   - sh without case
+ok   - reset to the built-in words
+ok   - sh with case again

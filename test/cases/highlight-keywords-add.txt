@@ -1,0 +1,3 @@
+# Words for Object Pascal, added to the built-in list.
+Override virtual   # case is ignored in Pascal
+-goto              # goto is a plain name here

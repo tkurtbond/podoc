@@ -1,0 +1,21 @@
+<p>Pascal, with a file that adds and removes:</p>
+<pre class="pascal"><code><b>procedure</b> P; <b>override</b>; <b>VIRTUAL</b>; goto 1; <b>begin</b> <b>end</b></code></pre>
+<p>The same list in fpc, another name for the same language:</p>
+<pre class="fpc"><code><b>OVERRIDE</b> goto</code></pre>
+<p>Oberon, with a file that replaces:</p>
+<pre class="oberon"><code><b>MODULE</b> M; <b>PROCEDURE</b> P; BEGIN <b>END</b> P; <b>END</b> M.</code></pre>
+<p>Oberon-2 is the same language, so it is changed too:</p>
+<pre class="oberon2"><code><b>MODULE</b> M; BEGIN <b>END</b> M.</code></pre>
+<p>Oberon-07 is not:</p>
+<pre class="oberon07"><code><b>MODULE</b> M; <b>BEGIN</b> <b>END</b> M.</code></pre>
+<p>C, from the metadata, with <code>widget</code> taken out again by a file:</p>
+<pre class="c"><code>int widget; <b>gadget</b> x; <b>long</b> y;</code></pre>
+<p>Ada, replaced by the metadata:</p>
+<pre class="ada"><code><b>procedure</b> P is <b>begin</b> null; end P;</code></pre>
+<p>sh without <code>case</code>:</p>
+<pre class="sh"><code>case x in a) echo; <b>esac</b>
+<b>if</b> true; <b>then</b> :; <b>fi</b></code></pre>
+<p>bash with <code>select</code> and without <code>time</code>:</p>
+<pre class="bash"><code>time ls
+<b>select</b> x <b>in</b> a b; <b>do</b> :; <b>done</b></code></pre>
+<p>Inline: <code class="pascal"><b>begin</b> <b>override</b> <b>end</b></code>.</p>

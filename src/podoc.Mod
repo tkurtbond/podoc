@@ -23,7 +23,7 @@ MODULE podoc;
 
 IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdRst, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdMom, PdConTeXt, PdMdWriter,
-  PdInclude, PdFilters, PdPdf, PdImages, O := PdOptions, Sh := PdShared, PdCodeAlign;
+  PdInclude, PdFilters, PdPdf, PdImages, O := PdOptions, Sh := PdShared, PdCodeAlign, PdKeywords;
 
 CONST
   PandocVersion = "3.10"; (* the pandoc podoc follows *)
@@ -161,6 +161,8 @@ BEGIN
   COPY(O.to, to); doc := NIL;
   IF O.codeStyle # "" THEN Sh.cmdCodeStyle := Sh.CodeStyleOf(O.codeStyle) END;
   IF O.codeAlign # "" THEN Sh.cmdCodeAlign := PdCodeAlign.AlignOf(O.codeAlign) END;
+  f := O.codeKeywords;
+  WHILE f # NIL DO PdKeywords.AddFile(f.name^); f := f.next END;
   IF O.pdf THEN PdPdf.CheckTerminal END;
   f := O.metaFiles;
   WHILE f # NIL DO
