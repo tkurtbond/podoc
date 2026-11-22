@@ -8,6 +8,15 @@ ok   - oberon07: 33 words
 ok   - cp: 40 words
 ok   - modula2: 46 words
 ok   - c: 59 words
+ok   - pascal is fpc
+ok   - fpc: 59 words
+ok   - objfpc: 67 words
+ok   - delphi: 65 words
+ok   - tp: 54 words
+ok   - macpas: 56 words
+ok   - iso: 36 words
+ok   - ada: 74 words
+ok   - cpp: 92 words
 ok   - unknown class
 ok   - classes are case sensitive
 ok   - empty text
@@ -44,6 +53,54 @@ ok   - c braces in strings
 ok   - c char escape
 ok   - c prefixes
 ok   - c directive
+ok   - c header names
 ok   - c # not at line start
 ok   - c digit separators
 ok   - c every word
+ok   - pascal case ignored
+ok   - pascal comments
+ok   - fpc nested comments
+ok   - fpc kinds nest apart
+ok   - delphi comments do not nest
+ok   - iso comments close each other
+ok   - iso no nesting
+ok   - pascal doubled quote
+ok   - pascal no double quotes
+ok   - pascal unclosed string
+ok   - pascal directives
+ok   - pascal ampersand
+ok   - pascal character codes
+ok   - fpc every word
+ok   - fpc others are names
+ok   - objfpc every word
+ok   - objfpc others are names
+ok   - delphi every word
+ok   - delphi others are names
+ok   - tp every word
+ok   - tp others are names
+ok   - macpas every word
+ok   - macpas others are names
+ok   - iso every word
+ok   - iso others are names
+ok   - pascal is fpc
+ok   - ada every word
+ok   - ada case ignored
+ok   - ada comment
+ok   - ada doubled quote
+ok   - ada attributes
+ok   - ada character literals
+ok   - ada qualified expression
+ok   - ada tick after a parenthesis
+ok   - ada tick after all
+ok   - ada literal after a word
+ok   - ada utf-8 literal
+ok   - ada lone quote
+ok   - cpp every word
+ok   - cpp contextual words are names
+ok   - cpp raw string
+ok   - cpp raw string with a delimiter
+ok   - cpp raw string prefixes
+ok   - cpp not raw strings
+ok   - cpp unclosed raw string
+ok   - cpp digit separators
+ok   - cpp comments and directives

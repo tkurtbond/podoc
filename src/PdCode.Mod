@@ -21,7 +21,37 @@ MODULE PdCode;
      oberon07                  Oberon-07, the 2016 revision (33)
      cp, componentpascal       Component Pascal, the 2006 report (40)
      modula2                   Modula-2, PIM and ISO (46)
+     pascal, fpc               FreePascal's mode fpc (59)
+     objfpc                    FreePascal's mode objfpc (67)
+     delphi                    FreePascal's mode delphi (65)
+     tp                        FreePascal's mode tp (54)
+     macpas                    FreePascal's mode macpas (56)
+     iso                       ISO 7185 Pascal, FreePascal's mode iso (36)
+     ada                       Ada 2022 (74)
      c                         C23 (59)
+     cpp                       C++23 (92)
+
+   The Pascal lists are FreePascal's, a list per mode (decision 39),
+   from the table in its compiler/tokens.pas, each word checked with
+   fpc 3.2.3, which rejects every one as a variable name in its mode
+   and accepts the others; in tp, fpc accepts "inline", which its
+   table gives to tp, so it is left out.
+
+   The rules of their own:
+
+   - Pascal: comments in { } and (* *), nested in fpc and objfpc,
+     where each kind nests in itself, as fpc does; in iso, { and (*
+     are one comment, closed by } or *), as ISO 7185 says; "//" to the
+     line's end in every mode; strings in ' with '' for a quote; a word
+     after "&" is a name (&begin).
+   - Ada: "--" to the line's end; strings in " with "" for a quote;
+     "'" after a name, a ")" or "all" is the attribute tick, and the
+     word after a tick is an attribute, never reserved (X'Range);
+     otherwise 'x' is a character literal.
+   - C and C++: a "#" directive's name is plain (#if), and after
+     #include a header name <...> is a string (<new>).
+   - C++: C's rules, with raw strings, R"d( ... )d" with the prefixes
+     R, LR, uR, UR and u8R, kept whole across lines.
 
    Identifiers are letters, digits, "_" and any byte from 80X up, so
    a word joined to UTF-8 text is not taken for a reserved word. A
@@ -41,7 +71,12 @@ CONST
   MaxComments = 2;
 
   (* escape rules in strings *)
-  NoEscape = 0; Backslash = 1;
+  NoEscape = 0; Backslash = 1; Doubled = 2;
+
+  (* what came before, for Ada's tick *)
+  PrevOther = 0; PrevName = 1; PrevTick = 2;
+
+  MaxRawDelim = 16; (* a C++ raw string's delimiter is at most this long *)
 
   LF = 0AX; CR = 0DX; TAB = 09X;
 
@@ -69,9 +104,13 @@ TYPE
     line: Delim;              (* a line comment's marker, or "" *)
     lineContinues: BOOLEAN;   (* backslash-newline continues it (C) *)
     quotes: ARRAY 4 OF CHAR;  (* the quote characters *)
-    escape: INTEGER;          (* NoEscape or Backslash *)
+    escape: INTEGER;          (* NoEscape, Backslash or Doubled *)
     digitSep: BOOLEAN;        (* "'" between digits (C23) *)
     directives: BOOLEAN;      (* "#" lines: the directive's name plain (C) *)
+    crossClose: BOOLEAN;      (* each block comment closes the others' (ISO Pascal) *)
+    amp: BOOLEAN;             (* "&" makes a word a name (Pascal) *)
+    tick: BOOLEAN;            (* Ada's tick and character literals *)
+    raw: BOOLEAN;             (* C++'s raw strings *)
     words: Words;             (* sorted; lower case if ignoreCase *)
     nWords: LONGINT
   END;
@@ -151,7 +190,8 @@ PROCEDURE NewLanguage(ignoreCase: BOOLEAN): Language;
 BEGIN
   NEW(l); l.ignoreCase := ignoreCase; l.nComments := 0; l.line := "";
   l.lineContinues := FALSE; l.quotes := ""; l.escape := NoEscape;
-  l.digitSep := FALSE; l.directives := FALSE; l.words := NIL; l.nWords := 0;
+  l.digitSep := FALSE; l.directives := FALSE; l.crossClose := FALSE;
+  l.amp := FALSE; l.tick := FALSE; l.raw := FALSE; l.words := NIL; l.nWords := 0;
   RETURN l
 END NewLanguage;
 
@@ -181,6 +221,49 @@ BEGIN
   WHILE (n # NIL) & (n.name # name) DO n := n.next END;
   IF n = NIL THEN RETURN NIL ELSE RETURN n.lang END
 END Find;
+
+(* C's words, without its underscore spellings and its words C++ does
+   not have *)
+PROCEDURE CWords(l: Language);
+BEGIN
+  AddWords(l, "alignas alignof auto bool break case char const constexpr");
+  AddWords(l, "continue default do double else enum extern false float for");
+  AddWords(l, "goto if inline int long nullptr register return short");
+  AddWords(l, "signed sizeof static static_assert struct switch thread_local");
+  AddWords(l, "true typedef union unsigned void volatile while")
+END CWords;
+
+(* C or C++: comments /* */ and //, strings with backslash escapes *)
+PROCEDURE CLike(): Language;
+  VAR l: Language;
+BEGIN
+  l := NewLanguage(FALSE); AddComment(l, "/*", "*/", FALSE);
+  l.line := "//"; l.lineContinues := TRUE; Quotes(l);
+  l.escape := Backslash; l.digitSep := TRUE; l.directives := TRUE;
+  CWords(l);
+  RETURN l
+END CLike;
+
+(* A FreePascal mode: the 36 words of every mode; comments that nest or
+   not *)
+PROCEDURE Pascal(nest: BOOLEAN): Language;
+  VAR l: Language;
+BEGIN
+  l := NewLanguage(TRUE); AddComment(l, "{", "}", nest); AddComment(l, "(*", "*)", nest);
+  l.line := "//"; l.quotes := "'"; l.escape := Doubled; l.amp := TRUE;
+  AddWords(l, "and array begin case const div do downto else end file for function");
+  AddWords(l, "goto if in label mod nil not of or packed procedure program record");
+  AddWords(l, "repeat set then to type until var while with xor");
+  RETURN l
+END Pascal;
+
+(* The words of every FreePascal mode but iso, 18 *)
+PROCEDURE PascalWords(l: Language);
+BEGIN
+  AddWords(l, "asm bitpacked constructor destructor exports implementation inherited");
+  AddWords(l, "interface library object otherwise resourcestring shl shr string");
+  AddWords(l, "threadvar unit uses")
+END PascalWords;
 
 (* An Oberon: case matters, comments (* *) nest, strings in " or ' *)
 PROCEDURE Oberon(): Language;
@@ -226,19 +309,61 @@ BEGIN
   AddWords(l, "EXCEPT FINALLY FORWARD PACKEDSET REM RETRY");
   AddName("modula2", l);
 
+  (* FreePascal's modes, a list each (decision 39), checked with fpc
+     3.2.3 (study §5.4) *)
+  l := Pascal(TRUE); PascalWords(l);
+  AddWords(l, "cppclass finalization initialization operator property");
+  AddName("pascal", l); AddName("fpc", l);
+
+  l := Pascal(TRUE); PascalWords(l);
+  AddWords(l, "as class cppclass dispinterface except finalization finally");
+  AddWords(l, "initialization is operator property raise try");
+  AddName("objfpc", l);
+
+  l := Pascal(FALSE); PascalWords(l);
+  AddWords(l, "as class dispinterface except finalization finally");
+  AddWords(l, "initialization is property raise try");
+  AddName("delphi", l);
+
+  l := Pascal(FALSE); PascalWords(l);
+  AddName("tp", l);
+
+  l := Pascal(FALSE); PascalWords(l); AddWords(l, "return univ");
+  AddName("macpas", l);
+
+  l := Pascal(FALSE); l.crossClose := TRUE;
+  AddName("iso", l);
+
+  (* Ada 2022: 74 words, checked with GNAT (study §5.3) *)
+  l := NewLanguage(TRUE); l.line := "--"; l.quotes[0] := 22X; l.quotes[1] := 0X;
+  l.escape := Doubled; l.tick := TRUE;
+  AddWords(l, "abort abs abstract accept access aliased all and array at begin");
+  AddWords(l, "body case constant declare delay delta digits do else elsif end");
+  AddWords(l, "entry exception exit for function generic goto if in interface is");
+  AddWords(l, "limited loop mod new not null of or others out overriding package");
+  AddWords(l, "parallel pragma private procedure protected raise range record rem");
+  AddWords(l, "renames requeue return reverse select separate some subtype");
+  AddWords(l, "synchronized tagged task terminate then type until use when while");
+  AddWords(l, "with xor");
+  AddName("ada", l);
+
   (* C23: 59 words (study §5.5) *)
-  l := NewLanguage(FALSE); AddComment(l, "/*", "*/", FALSE);
-  l.line := "//"; l.lineContinues := TRUE; Quotes(l);
-  l.escape := Backslash; l.digitSep := TRUE; l.directives := TRUE;
-  AddWords(l, "alignas alignof auto bool break case char const constexpr");
-  AddWords(l, "continue default do double else enum extern false float for");
-  AddWords(l, "goto if inline int long nullptr register restrict return short");
-  AddWords(l, "signed sizeof static static_assert struct switch thread_local");
-  AddWords(l, "true typedef typeof typeof_unqual union unsigned void volatile");
-  AddWords(l, "while _Alignas _Alignof _Atomic _BitInt _Bool _Complex");
+  l := CLike();
+  AddWords(l, "restrict typeof typeof_unqual");
+  AddWords(l, "_Alignas _Alignof _Atomic _BitInt _Bool _Complex");
   AddWords(l, "_Decimal128 _Decimal32 _Decimal64 _Generic _Imaginary");
   AddWords(l, "_Noreturn _Static_assert _Thread_local");
-  AddName("c", l)
+  AddName("c", l);
+
+  (* C++23: 92 words, checked with g++ (study §5.6) *)
+  l := CLike(); l.raw := TRUE;
+  AddWords(l, "and and_eq asm bitand bitor catch char8_t char16_t char32_t class");
+  AddWords(l, "compl concept consteval constinit const_cast co_await co_return");
+  AddWords(l, "co_yield decltype delete dynamic_cast explicit export friend mutable");
+  AddWords(l, "namespace new noexcept not not_eq operator or or_eq private");
+  AddWords(l, "protected public reinterpret_cast requires static_cast template");
+  AddWords(l, "this throw try typeid typename using virtual wchar_t xor xor_eq");
+  AddName("cpp", l)
 END InitLanguages;
 
 (* The number of lang's reserved words *)
@@ -286,6 +411,7 @@ BEGIN
   l := s.lang; depth := 1; INC(i, Length(l.open[c]));
   WHILE (depth > 0) & (i < s.n) DO
     IF At(s, i, l.close[c]) THEN DEC(depth); INC(i, Length(l.close[c]))
+    ELSIF l.crossClose & At(s, i, l.close[1 - c]) THEN DEC(depth); INC(i, Length(l.close[1 - c]))
     ELSIF l.nest[c] & At(s, i, l.open[c]) THEN INC(depth); INC(i, Length(l.open[c]))
     ELSE INC(i)
     END
@@ -310,7 +436,9 @@ PROCEDURE StringEnd(VAR s: Scanner; i: LONGINT): LONGINT;
 BEGIN
   q := s.t[i]; INC(i); done := FALSE;
   WHILE ~done & (i < s.n) DO
-    IF s.t[i] = q THEN INC(i); done := TRUE
+    IF (s.t[i] = q) & (s.lang.escape = Doubled) & (i + 1 < s.n) & (s.t[i + 1] = q) THEN
+      INC(i, 2)
+    ELSIF s.t[i] = q THEN INC(i); done := TRUE
     ELSIF (s.t[i] = LF) OR (s.t[i] = CR) THEN done := TRUE
     ELSIF (s.lang.escape = Backslash) & (s.t[i] = "\") & (i + 1 < s.n) THEN
       INC(i, 2);
@@ -328,6 +456,61 @@ BEGIN
   WHILE (l.quotes[k] # 0X) & (l.quotes[k] # ch) DO INC(k) END;
   RETURN (ch # 0X) & (l.quotes[k] = ch)
 END IsQuote;
+
+(* The end of Ada's character literal at i, a quote, one character
+   (UTF-8: its bytes) and a quote; i if there is none *)
+PROCEDURE CharEnd(VAR s: Scanner; i: LONGINT): LONGINT;
+  VAR j: LONGINT;
+BEGIN
+  j := i + 1;
+  IF (j < s.n) & (s.t[j] # LF) & (s.t[j] # CR) THEN
+    INC(j);
+    WHILE (j < s.n) & (s.t[j] >= 80X) & (s.t[j] < 0C0X) DO INC(j) END;
+    IF (j < s.n) & (s.t[j] = "'") THEN RETURN j + 1 END
+  END;
+  RETURN i
+END CharEnd;
+
+(* The end of C++'s raw string whose prefix is [start, i), the quote at
+   i: after its )delim", or the end of the text if not closed; start if
+   [start, i) is not a raw string's prefix or the delimiter is bad *)
+PROCEDURE RawEnd(VAR s: Scanner; start, i: LONGINT): LONGINT;
+  VAR d: ARRAY MaxRawDelim + 1 OF CHAR; k, m: INTEGER; p: ARRAY 4 OF CHAR; ok: BOOLEAN;
+BEGIN
+  IF (i - start > 3) OR (i >= s.n) OR (s.t[i] # 22X) THEN RETURN start END;
+  m := 0; WHILE start + m < i DO p[m] := s.t[start + m]; INC(m) END; p[m] := 0X;
+  IF ~((p = "R") OR (p = "LR") OR (p = "uR") OR (p = "UR") OR (p = "u8R")) THEN RETURN start END;
+  INC(i); k := 0;
+  WHILE (i < s.n) & (k <= MaxRawDelim) & (s.t[i] # "(")
+      & (s.t[i] # ")") & (s.t[i] # "\") & (s.t[i] > " ") & (s.t[i] # 22X) DO
+    IF k < MaxRawDelim THEN d[k] := s.t[i] END;
+    INC(k); INC(i)
+  END;
+  IF (k > MaxRawDelim) OR (i >= s.n) OR (s.t[i] # "(") THEN RETURN start END;
+  d[k] := 0X; INC(i);
+  LOOP
+    IF i >= s.n THEN RETURN s.n END;
+    IF s.t[i] = ")" THEN
+      m := 0; ok := TRUE;
+      WHILE ok & (m < k) DO
+        IF (i + 1 + m < s.n) & (s.t[i + 1 + m] = d[m]) THEN INC(m) ELSE ok := FALSE END
+      END;
+      IF ok & (i + 1 + k < s.n) & (s.t[i + 1 + k] = 22X) THEN RETURN i + k + 2 END
+    END;
+    INC(i)
+  END
+END RawEnd;
+
+(* Whether [start, end) is "include", "include_next" or "import", the
+   directives that take a header name *)
+PROCEDURE IsInclude(VAR s: Scanner; start, end: LONGINT): BOOLEAN;
+  VAR w: ARRAY 16 OF CHAR; k: INTEGER;
+BEGIN
+  IF end - start >= LEN(w) THEN RETURN FALSE END;
+  k := 0; WHILE start < end DO w[k] := s.t[start]; INC(k); INC(start) END;
+  w[k] := 0X;
+  RETURN (w = "include") OR (w = "include_next") OR (w = "import")
+END IsInclude;
 
 (* Whether the identifier [start, end) is a reserved word *)
 PROCEDURE IsReserved(VAR s: Scanner; start, end: LONGINT): BOOLEAN;
@@ -351,13 +534,13 @@ END IsReserved;
 
 (* The spans of text, in lang. NIL if text is empty. *)
 PROCEDURE Scan*(lang: Language; text: Rope): Span;
-  VAR s: Scanner; i, j: LONGINT; c: INTEGER; lineStart, found: BOOLEAN; ch: CHAR;
+  VAR s: Scanner; i, j: LONGINT; c, prev: INTEGER; lineStart, found: BOOLEAN; ch: CHAR;
 BEGIN
   s.lang := lang; s.n := Ropes.Length(text); s.plain := 0;
   s.first := NIL; s.last := NIL;
   IF s.n = 0 THEN RETURN NIL END;
   NEW(s.t, s.n + 1); Ropes.Blit(text, 0, s.t^, 0, s.n); s.t[s.n] := 0X;
-  i := 0; lineStart := TRUE;
+  i := 0; lineStart := TRUE; prev := PrevOther;
   WHILE i < s.n DO
     ch := s.t[i];
     found := FALSE; c := 0;
@@ -368,13 +551,38 @@ BEGIN
       j := CommentEnd(s, c, i); Emit(s, Comment, i, j); i := j; lineStart := FALSE
     ELSIF (lang.line[0] # 0X) & At(s, i, lang.line) THEN
       j := LineEnd(s, i); Emit(s, Comment, i, j); i := j
+    ELSIF lang.tick & (ch = "'") THEN
+      (* Ada: the tick after a name, else a character literal *)
+      IF prev = PrevName THEN prev := PrevTick; INC(i)
+      ELSE
+        j := CharEnd(s, i);
+        IF j > i THEN Emit(s, String, i, j); i := j ELSE INC(i) END;
+        prev := PrevOther
+      END;
+      lineStart := FALSE
     ELSIF IsQuote(lang, ch) THEN
-      j := StringEnd(s, i); Emit(s, String, i, j); i := j; lineStart := FALSE
+      j := StringEnd(s, i); Emit(s, String, i, j); i := j; lineStart := FALSE;
+      prev := PrevOther
+    ELSIF lang.amp & (ch = "&") & (i + 1 < s.n) & IsIdent(s.t[i + 1]) & ~IsDigit(s.t[i + 1]) THEN
+      (* Pascal: &begin is a name *)
+      INC(i); WHILE (i < s.n) & IsIdent(s.t[i]) DO INC(i) END;
+      lineStart := FALSE
     ELSIF lang.directives & lineStart & (ch = "#") THEN
-      (* the directive's name is not a keyword: #if, #else *)
+      (* the directive's name is not a keyword: #if, #else; after
+         #include, a header name <...> is a string: <new> *)
       INC(i);
       WHILE (i < s.n) & ((s.t[i] = " ") OR (s.t[i] = TAB)) DO INC(i) END;
+      j := i;
       WHILE (i < s.n) & IsIdent(s.t[i]) DO INC(i) END;
+      IF IsInclude(s, j, i) THEN
+        WHILE (i < s.n) & ((s.t[i] = " ") OR (s.t[i] = TAB)) DO INC(i) END;
+        IF (i < s.n) & (s.t[i] = "<") THEN
+          j := i + 1;
+          WHILE (j < s.n) & (s.t[j] # ">") & (s.t[j] # LF) & (s.t[j] # CR) DO INC(j) END;
+          IF (j < s.n) & (s.t[j] = ">") THEN INC(j) END;
+          Emit(s, String, i, j); i := j
+        END
+      END;
       lineStart := FALSE
     ELSIF IsDigit(ch) THEN
       INC(i);
@@ -383,15 +591,30 @@ BEGIN
           OR lang.digitSep & (s.t[i] = "'") & (i + 1 < s.n) & IsIdent(s.t[i + 1])) DO
         INC(i)
       END;
-      lineStart := FALSE
+      lineStart := FALSE; prev := PrevOther
     ELSIF IsIdent(ch) THEN
       j := i + 1;
       WHILE (j < s.n) & IsIdent(s.t[j]) DO INC(j) END;
-      IF IsReserved(s, i, j) THEN Emit(s, Reserved, i, j) END;
+      IF lang.raw & (RawEnd(s, i, j) > i) THEN
+        (* C++: R"d( ... )d" *)
+        Emit(s, String, i, RawEnd(s, i, j)); j := s.plain; prev := PrevOther
+      ELSIF prev = PrevTick THEN prev := PrevName  (* an attribute: X'Range *)
+      ELSIF IsReserved(s, i, j) THEN
+        Emit(s, Reserved, i, j);
+        IF (j - i = 3) & (Ropes.LowerChar(s.t[i]) = "a") & (Ropes.LowerChar(s.t[i + 1]) = "l")
+            & (Ropes.LowerChar(s.t[i + 2]) = "l") THEN
+          prev := PrevName  (* Ada: X.all'Access *)
+        ELSE prev := PrevOther
+        END
+      ELSE prev := PrevName
+      END;
       i := j; lineStart := FALSE
     ELSE
       IF (ch = LF) OR (ch = CR) THEN lineStart := TRUE
       ELSIF (ch # " ") & (ch # TAB) THEN lineStart := FALSE
+      END;
+      IF ch = ")" THEN prev := PrevName
+      ELSIF (ch # " ") & (ch # TAB) & (ch # LF) & (ch # CR) THEN prev := PrevOther
       END;
       INC(i)
     END

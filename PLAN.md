@@ -1836,12 +1836,49 @@ Each subphase passes `make test` under `-O2` and `-OC`.
     text selected over each `<pre>` (`Selection.toString`, through
     `--dump-dom`) equals the source of both blocks, in fixed and none.
 
-### Phase 24.6: Pascal, Ada, C++ [planned]
+### Phase 24.6: Pascal, Ada, C++ [done]
 
 - **Change:** Pascal with a list per mode, plain `pascal` as `fpc`
   (decision 39), Ada's tick, C++'s raw
   strings and digit separators (study §5.3 to §5.6).
 - **Check:** `PdCodeTest` cases from each language's corner cases.
+- **Done** (2026-11-22):
+  - **Pascal:** the classes `pascal` and `fpc` (59 words), `objfpc`
+    (67), `delphi` (65), `tp` (54), `macpas` (56) and `iso` (36),
+    computed from `compiler/tokens.pas` (a word is reserved in a mode
+    when its set meets the mode's switches, as fpc's `is_keyword`
+    does) and checked with the installed fpc 3.2.3: in each mode it
+    rejects every word of the mode's list as a variable name and
+    accepts the other words of the six lists. Two corrections to the
+    study's §5.4: the source under `/usr/local/sw/src/lang/Pascal/fpc`
+    is trunk (3.3.1), not 3.2.3; and its grouping left out `xor`
+    (every mode) and `initialization` and `finalization` (fpc, objfpc,
+    delphi). fpc 3.2.3 accepts `inline` as a name in tp, though its
+    table gives it to tp, so tp's list leaves it out.
+  - **Pascal's rules:** case ignored; `{ }` and `(* *)`, nested in fpc
+    and objfpc, each kind in itself (checked with fpc), not in the
+    other modes; in iso `{` and `(*` close each other's comments, as
+    ISO 7185 and fpc's trunk do (fpc 3.2.3 closes `(*` with `}` but
+    not `{` with `*)`); `//` in every mode (checked); strings in `'`
+    with `''`; `&begin` a name.
+  - **Ada:** `ada`, 74 words (GNAT accepts only `parallel`, as the
+    study found); case ignored; `--`; strings in `"` with `""`; `'`
+    after a name, `)` or `all` is the tick, and the word after it an
+    attribute, never bold (`A'Range`); otherwise `'x'` (UTF-8 too) is a
+    character literal; `Character'('a')` gives both.
+  - **C++:** `cpp`, 92 words (g++ `-std=c++23` rejects all 92 and
+    accepts `final`, `override`, `import`, `module`); C's rules, with
+    raw strings `R"d(...)d"` and the prefixes `LR`, `uR`, `UR`,
+    `u8R`, kept whole across lines; C's digit separators.
+  - **An addition, for C and C++:** after `#include`, `#include_next`
+    or `#import`, a header name `<...>` is a string, so `<new>` is not
+    bold. No case test changed.
+  - **Checked:** `PdCodeTest`, 106 cases, 52 of them new (each mode's
+    every word, and the others plain; comments, strings, directives
+    and `&` in Pascal; Ada's tick, literals and attributes; C++'s raw
+    strings and words; header names). A case test,
+    `highlight-languages` (ms and HTML, mono), with objfpc, Ada and
+    C++ blocks and inline C++.
 
 ### Phase 24.7: sh and bash [planned]
 
@@ -3445,3 +3482,8 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   `$if(code-proportional)$`. `make test` passes under `-O2` and
   `-OC` (345 case tests, 8 of them new, the round trips, the image
   tests, the unit tests with `PdCodeAlignTest`'s 27 cases).
+- 2026-11-22: Phase 24.6 done: Pascal's six FreePascal modes, Ada and
+  C++ in `PdCode`, the lists checked with fpc 3.2.3, GNAT and g++.
+  `make test` passes under `-O2` and `-OC` (347 case tests, 2 of them
+  new, the round trips, the image tests, the unit tests with
+  `PdCodeTest`'s 106 cases).
