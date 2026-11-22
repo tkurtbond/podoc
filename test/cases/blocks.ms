@@ -10,7 +10,7 @@ A heading
 A heading
 .IP
 .nf
-\f[C]
+\f[CR]
 indented code
   more
 
@@ -19,13 +19,13 @@ after blank
 .fi
 .IP
 .nf
-\f[C]
+\f[CR]
 main = print 1
 \f[]
 .fi
 .IP
 .nf
-\f[C]
+\f[CR]
 x = 1
 \f[]
 .fi

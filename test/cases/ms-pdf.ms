@@ -54,7 +54,7 @@ Second paragraph.
 .IP "\f[B]Term two\f[R]" 3
 .IP
 .nf
-\f[C]
+\f[CR]
 code def
 \f[]
 .fi
@@ -63,7 +63,7 @@ code def
 \(bu .RS 3
 .IP
 .nf
-\f[C]
+\f[CR]
 code item
 \f[]
 .fi
@@ -101,7 +101,7 @@ And another.\**
 .FS
 .IP
 .nf
-\f[C]
+\f[CR]
 code note
 \f[]
 .fi

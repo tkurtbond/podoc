@@ -433,7 +433,7 @@ BEGIN
   d := NIL;
   IF StartsWithChar(c.text, ".") THEN d := Lit("\&") END;
   d := L.Cat(d, L.Literal(Ro.EscapeStr(c.text)));
-  RETURN Above3(Above3(Lit(".IP"), Lit(".nf"), Lit("\f[C]")), d, Above(Lit("\f[]"), Lit(".fi")))
+  RETURN Above3(Above3(Lit(".IP"), Lit(".nf"), Lit("\f[CR]")), d, Above(Lit("\f[]"), Lit(".fi")))
 END CodeBlock;
 
 PROCEDURE Para(i: A.Inline): L.Doc;

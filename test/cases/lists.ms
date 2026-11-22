@@ -15,7 +15,7 @@ item
 continued para
 .IP
 .nf
-\f[C]
+\f[CR]
 code in item
 \f[]
 .fi

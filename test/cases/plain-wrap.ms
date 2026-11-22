@@ -72,7 +72,7 @@ break and \f[I]emphasis that is long enough to wrap across lines
 here\f[R] and \f[CR]code that is long enough to wrap\f[R].
 .IP
 .nf
-\f[C]
+\f[CR]
 code block that is very long and should never be wrapped by anything at all whatsoever ok
 \f[]
 .fi

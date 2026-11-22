@@ -40,7 +40,7 @@ nested quote
 .QE
 .IP
 .nf
-\f[C]
+\f[CR]
 tab code
 line two
 \f[]

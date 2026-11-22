@@ -239,6 +239,11 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
   writing `\*[KeywordTok "..."]` and the like, and with `-s` defines
   the macros for them. (pandoc 3.10 wrote the tokens even with
   `none`, and without the macros, so its code vanished from the PDF.)
+- Code blocks are set in `\f[CR]` (Courier), where pandoc writes
+  `\f[C]`. groff 1.25 no longer accepts the font name `C`: it warns
+  "font name 'C' is deprecated", fails to open it, and leaves the
+  block in the text font, Times-Roman. `\f[CR]` is the font pandoc
+  already uses for inline code.
 - TeX math is written as its TeX: `$...$` inline, and `$$...$$`
   inside `.RS 3` ... `.RE` for display math (pandoc's fallback when
   it cannot convert a formula). pandoc converts math with texmath to

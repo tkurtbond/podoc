@@ -1654,12 +1654,16 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   Modula-2 46 and C 59 as the study verified. Nothing calls `PdCode`
   yet: the writers come in 24.3.
 
-### Phase 24.2: The ms code font [planned]
+### Phase 24.2: The ms code font [done]
 
 - **Change:** code blocks in ms written with `\f[CR]`, not `\f[C]`,
   which groff 1.25 cannot open (study §4.1; Q6). A change of its own,
   and a difference from pandoc.
 - **Check:** ms case tests updated; `pdffonts` shows Courier.
+- **Done** 2026-11-22: `PdMs.CodeBlock` writes `\f[CR]`; the 11 ms
+  case tests that had `\f[C]` updated; docs/user/differences.md says
+  why. A code block's PDF (`podoc -s -t ms -o x.pdf`, groff 1.25.0)
+  now has Courier beside Times-Roman, and groff no longer warns.
 
 ### Phase 24.3: The writers, both styles, unaligned [planned]
 
@@ -3276,3 +3280,10 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   family, Modula-2 and C. `make test` passes under `-O2` and `-OC`
   (the unit tests with `PdCodeTest`'s 49 cases, 303 case tests, 23
   round trips, 10 image tests).
+- 2026-11-22: Phase 24.2 done: ms code blocks in `\f[CR]`. `make
+  test` passes under `-O2` and `-OC` (303 case tests, 23 round trips,
+  10 image tests, the unit tests). A `make -j4 test` failed once in
+  clang (an assertion in its `.ll` lexer, building PdLayoutTest under
+  `-O2`) and passed when run again without `-j`: the unit tests share
+  `build/<model>/test/` and its module files, so parallel builds may
+  race. Not yet looked into.

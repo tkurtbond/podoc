@@ -180,7 +180,7 @@ Para\**
 .FS
 .IP
 .nf
-\f[C]
+\f[CR]
 code note
 \f[]
 .fi
