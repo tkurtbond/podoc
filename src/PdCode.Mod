@@ -30,6 +30,8 @@ MODULE PdCode;
      ada                       Ada 2022 (74)
      c                         C23 (59)
      cpp                       C++23 (92)
+     sh                        the POSIX shell (16)
+     bash                      bash (22)
 
    The Pascal lists are FreePascal's, a list per mode (decision 39),
    from the table in its compiler/tokens.pas, each word checked with
@@ -52,13 +54,29 @@ MODULE PdCode;
      #include a header name <...> is a string (<new>).
    - C++: C's rules, with raw strings, R"d( ... )d" with the prefixes
      R, LR, uR, UR and u8R, kept whole across lines.
+   - sh and bash: a shell scanner of its own, Commands. A word is
+     reserved only where the shell takes it for one: as the first word
+     of a command (after a newline, ";", "&", "|", "(", "$(", "`" or a
+     reserved word such as "then"), and "in" and "do" after "for NAME"
+     or "case WORD"; a word after another word, an assignment or a
+     redirection is plain (echo done). "#" starts a comment only at
+     the start of a word (a#b, ${#x}). Strings: '...', "..." with "\"
+     escapes, $'...' and $"..."; they may span lines. Command
+     substitutions, $(...) and `...` outside double quotes, are
+     scanned as commands. A here-document's body, after <<WORD,
+     <<-WORD or a quoted WORD, several to a line, stays plain. In
+     "case WORD in", the patterns before ")" are plain, and "esac"
+     at a pattern's start is reserved (not in a|esac or (esac); ";;", ";&" and ";;&" start the next pattern.
+     bash: words in [[ ... ]] are plain up to "]]"; ((...)), $((...)),
+     a=(...) and extended patterns @(...) are plain.
 
    Identifiers are letters, digits, "_" and any byte from 80X up, so
    a word joined to UTF-8 text is not taken for a reserved word. A
    number is a digit followed by letters, digits and "_" (0FFH, 0x1Fu,
    1E10), and a "." followed by a digit; in C, a "'" between digits
    (1'000). A string ends at its closing quote or at the end of the
-   line; a comment that is not closed runs to the end of the text. *)
+   line (in sh and bash, at its closing quote or the end of the text);
+   a comment that is not closed runs to the end of the text. *)
 
 IMPORT Ropes;
 
@@ -77,6 +95,16 @@ CONST
   PrevOther = 0; PrevName = 1; PrevTick = 2;
 
   MaxRawDelim = 16; (* a C++ raw string's delimiter is at most this long *)
+
+  (* shells *)
+  NoShell = 0; Sh = 1; Bash = 2;
+
+  (* what the shell expects the next word to be *)
+  ExNone = 0; ExForName = 1; ExForIn = 2; ExCaseWord = 3; ExCaseIn = 4;
+  ExFuncName = 5; ExFuncBody = 6;
+
+  MaxDocs = 8;  (* here-documents pending on one line *)
+  DocLen = 64;  (* a here-document's delimiter is shorter than this *)
 
   LF = 0AX; CR = 0DX; TAB = 09X;
 
@@ -111,6 +139,7 @@ TYPE
     amp: BOOLEAN;             (* "&" makes a word a name (Pascal) *)
     tick: BOOLEAN;            (* Ada's tick and character literals *)
     raw: BOOLEAN;             (* C++'s raw strings *)
+    shell: INTEGER;           (* NoShell, Sh or Bash: Commands scans it *)
     words: Words;             (* sorted; lower case if ignoreCase *)
     nWords: LONGINT
   END;
@@ -122,12 +151,21 @@ TYPE
     next: Name
   END;
 
+  (* A here-document waiting for the end of its line *)
+  Doc = RECORD
+    word: ARRAY DocLen OF CHAR;  (* its delimiter, unquoted *)
+    len: LONGINT;                (* its length, DocLen or more if too long *)
+    tabs: BOOLEAN                (* <<-: leading tabs are stripped *)
+  END;
+
   Scanner = RECORD
     lang: Language;
     t: Text;
     n: LONGINT;           (* the text's length *)
     plain: LONGINT;       (* where the plain text not yet given starts *)
-    first, last: Span
+    first, last: Span;
+    nDocs: INTEGER;       (* the shell's pending here-documents *)
+    docs: ARRAY MaxDocs OF Doc
   END;
 
 VAR
@@ -191,7 +229,8 @@ BEGIN
   NEW(l); l.ignoreCase := ignoreCase; l.nComments := 0; l.line := "";
   l.lineContinues := FALSE; l.quotes := ""; l.escape := NoEscape;
   l.digitSep := FALSE; l.directives := FALSE; l.crossClose := FALSE;
-  l.amp := FALSE; l.tick := FALSE; l.raw := FALSE; l.words := NIL; l.nWords := 0;
+  l.amp := FALSE; l.tick := FALSE; l.raw := FALSE; l.shell := NoShell;
+  l.words := NIL; l.nWords := 0;
   RETURN l
 END NewLanguage;
 
@@ -363,7 +402,18 @@ BEGIN
   AddWords(l, "namespace new noexcept not not_eq operator or or_eq private");
   AddWords(l, "protected public reinterpret_cast requires static_cast template");
   AddWords(l, "this throw try typeid typename using virtual wchar_t xor xor_eq");
-  AddName("cpp", l)
+  AddName("cpp", l);
+
+  (* The POSIX shell: 16 words (study §5.7) *)
+  l := NewLanguage(FALSE); l.shell := Sh;
+  AddWords(l, "! { } case do done elif else esac fi for if in then until while");
+  AddName("sh", l);
+
+  (* bash: 22 words, those compgen -k prints *)
+  l := NewLanguage(FALSE); l.shell := Bash;
+  AddWords(l, "! { } case do done elif else esac fi for if in then until while");
+  AddWords(l, "[[ ]] coproc function select time");
+  AddName("bash", l)
 END InitLanguages;
 
 (* The number of lang's reserved words *)
@@ -532,6 +582,314 @@ BEGIN
   RETURN (lo < l.nWords) & (l.words[lo] = w)
 END IsReserved;
 
+(* --- The shell --- *)
+
+(* The character at k, or 0X past the end *)
+PROCEDURE Ch(VAR s: Scanner; k: LONGINT): CHAR;
+BEGIN
+  IF k < s.n THEN RETURN s.t[k] ELSE RETURN 0X END
+END Ch;
+
+(* Whether ch ends a shell word: a blank, a newline or an operator *)
+PROCEDURE IsMeta(ch: CHAR): BOOLEAN;
+BEGIN
+  RETURN (ch = " ") OR (ch = TAB) OR (ch = CR) OR (ch = LF) OR (ch = ";") OR (ch = "&")
+    OR (ch = "|") OR (ch = "(") OR (ch = ")") OR (ch = "<") OR (ch = ">")
+END IsMeta;
+
+(* Whether [start, end) is w *)
+PROCEDURE Is(VAR s: Scanner; start, end: LONGINT; w: ARRAY OF CHAR): BOOLEAN;
+  VAR k: LONGINT;
+BEGIN
+  k := 0;
+  WHILE (start + k < end) & (k < LEN(w)) & (w[k] # 0X) & (s.t[start + k] = w[k]) DO INC(k) END;
+  RETURN (start + k = end) & ((k = LEN(w)) OR (w[k] = 0X))
+END Is;
+
+(* After the '...' at i, or the end of the text *)
+PROCEDURE SingleEnd(VAR s: Scanner; i: LONGINT): LONGINT;
+BEGIN
+  INC(i);
+  WHILE (i < s.n) & (s.t[i] # "'") DO INC(i) END;
+  IF i < s.n THEN INC(i) END;
+  RETURN i
+END SingleEnd;
+
+(* After the text quoted by q at i, with backslash escapes: $'...' or
+   `...`; or the end of the text *)
+PROCEDURE EscapedEnd(VAR s: Scanner; i: LONGINT; q: CHAR): LONGINT;
+BEGIN
+  INC(i);
+  WHILE (i < s.n) & (s.t[i] # q) DO
+    IF s.t[i] = "\" THEN INC(i) END;
+    INC(i)
+  END;
+  IF i < s.n THEN INC(i) ELSIF i > s.n THEN i := s.n END;
+  RETURN i
+END EscapedEnd;
+
+PROCEDURE ^ DoubleEnd(VAR s: Scanner; i: LONGINT): LONGINT;
+
+(* After the brackets that open with open at i, skipped: nested
+   brackets, quotes and backslashes; or the end of the text *)
+PROCEDURE Balanced(VAR s: Scanner; i: LONGINT; open, close: CHAR): LONGINT;
+  VAR depth: LONGINT; ch: CHAR;
+BEGIN
+  depth := 0;
+  REPEAT
+    ch := s.t[i];
+    IF ch = open THEN INC(depth); INC(i)
+    ELSIF ch = close THEN DEC(depth); INC(i)
+    ELSIF ch = "\" THEN INC(i, 2)
+    ELSIF ch = "'" THEN i := SingleEnd(s, i)
+    ELSIF ch = 22X THEN i := DoubleEnd(s, i)
+    ELSIF ch = "`" THEN i := EscapedEnd(s, i, "`")
+    ELSE INC(i)
+    END
+  UNTIL (depth = 0) OR (i >= s.n);
+  IF i > s.n THEN i := s.n END;
+  RETURN i
+END Balanced;
+
+(* After the "..." at i, or the end of the text: backslash escapes,
+   and $(...), ${...} and `...` in it skipped *)
+PROCEDURE DoubleEnd(VAR s: Scanner; i: LONGINT): LONGINT;
+BEGIN
+  INC(i);
+  WHILE (i < s.n) & (s.t[i] # 22X) DO
+    IF s.t[i] = "\" THEN INC(i, 2)
+    ELSIF (s.t[i] = "$") & (Ch(s, i + 1) = "(") THEN i := Balanced(s, i + 1, "(", ")")
+    ELSIF (s.t[i] = "$") & (Ch(s, i + 1) = "{") THEN i := Balanced(s, i + 1, "{", "}")
+    ELSIF s.t[i] = "`" THEN i := EscapedEnd(s, i, "`")
+    ELSE INC(i)
+    END
+  END;
+  IF i < s.n THEN INC(i) ELSIF i > s.n THEN i := s.n END;
+  RETURN i
+END DoubleEnd;
+
+(* Reads the delimiter of the here-document whose "<<" ends at i, and
+   leaves it pending for the end of the line; its quoted parts are
+   strings *)
+PROCEDURE HereDoc(VAR s: Scanner; VAR i: LONGINT);
+  VAR d: Doc; k, m, last: LONGINT; ch: CHAR; start: LONGINT;
+
+  PROCEDURE Put(ch: CHAR);
+  BEGIN
+    IF d.len < DocLen - 1 THEN d.word[d.len] := ch END;
+    INC(d.len)
+  END Put;
+
+BEGIN
+  d.tabs := Ch(s, i) = "-"; d.len := 0;
+  IF d.tabs THEN INC(i) END;
+  WHILE (Ch(s, i) = " ") OR (Ch(s, i) = TAB) DO INC(i) END;
+  start := i;
+  WHILE (i < s.n) & ~IsMeta(s.t[i]) DO
+    ch := s.t[i];
+    IF (ch = "'") OR (ch = 22X) THEN
+      IF ch = "'" THEN k := SingleEnd(s, i) ELSE k := DoubleEnd(s, i) END;
+      last := k;
+      IF (k - 1 > i) & (s.t[k - 1] = ch) THEN last := k - 1 END;
+      FOR m := i + 1 TO last - 1 DO Put(s.t[m]) END;
+      Emit(s, String, i, k); i := k
+    ELSIF ch = "\" THEN
+      IF i + 1 < s.n THEN Put(s.t[i + 1]) END;
+      INC(i, 2); IF i > s.n THEN i := s.n END
+    ELSE Put(ch); INC(i)
+    END
+  END;
+  IF (i > start) & (s.nDocs < MaxDocs) THEN
+    IF d.len < DocLen THEN d.word[d.len] := 0X END;
+    s.docs[s.nDocs] := d; INC(s.nDocs)
+  END
+END HereDoc;
+
+(* Skips the bodies of the pending here-documents, which start at i,
+   each up to the line that is its delimiter; they stay plain *)
+PROCEDURE HereBodies(VAR s: Scanner; VAR i: LONGINT);
+  VAR d: INTEGER; b, e, k, m: LONGINT; found: BOOLEAN;
+BEGIN
+  FOR d := 0 TO s.nDocs - 1 DO
+    found := FALSE;
+    WHILE ~found & (i < s.n) DO
+      e := i; WHILE (e < s.n) & (s.t[e] # LF) DO INC(e) END;
+      b := i;
+      IF s.docs[d].tabs THEN WHILE (b < e) & (s.t[b] = TAB) DO INC(b) END END;
+      k := e; IF (k > b) & (s.t[k - 1] = CR) THEN DEC(k) END;
+      IF (k - b = s.docs[d].len) & (s.docs[d].len < DocLen) THEN
+        m := 0; WHILE (b + m < k) & (s.t[b + m] = s.docs[d].word[m]) DO INC(m) END;
+        found := b + m = k
+      END;
+      i := e; IF i < s.n THEN INC(i) END
+    END
+  END;
+  s.nDocs := 0
+END HereBodies;
+
+PROCEDURE ^ Commands(VAR s: Scanner; VAR i: LONGINT; term: CHAR);
+
+(* Scans the shell word at i to its end, giving its strings as spans
+   and scanning its command substitutions as commands; literal: it has
+   no quotes, escapes or expansions, so it may be a reserved word *)
+PROCEDURE ShellWord(VAR s: Scanner; VAR i: LONGINT; term: CHAR; VAR literal: BOOLEAN);
+  VAR ch, prev: CHAR; start, k: LONGINT; done: BOOLEAN;
+BEGIN
+  literal := TRUE; done := FALSE; start := i;
+  WHILE ~done & (i < s.n) DO
+    ch := s.t[i];
+    IF i > start THEN prev := s.t[i - 1] ELSE prev := 0X END;
+    IF (ch = "(") & ((prev = "=") OR (s.lang.shell = Bash) & ((prev = "?") OR (prev = "*")
+        OR (prev = "+") OR (prev = "@") OR (prev = "!"))) THEN
+      (* an array, a=(1 2), or bash's extended pattern, @(a|b) *)
+      i := Balanced(s, i, "(", ")"); literal := FALSE
+    ELSIF IsMeta(ch) OR (ch = term) THEN done := TRUE
+    ELSIF ch = "'" THEN
+      k := SingleEnd(s, i); Emit(s, String, i, k); i := k; literal := FALSE
+    ELSIF ch = 22X THEN
+      k := DoubleEnd(s, i); Emit(s, String, i, k); i := k; literal := FALSE
+    ELSIF ch = "\" THEN
+      INC(i, 2); IF i > s.n THEN i := s.n END; literal := FALSE
+    ELSIF ch = "$" THEN
+      literal := FALSE;
+      CASE Ch(s, i + 1) OF
+        "'": k := EscapedEnd(s, i + 1, "'"); Emit(s, String, i, k); i := k
+      | 22X: k := DoubleEnd(s, i + 1); Emit(s, String, i, k); i := k
+      | "(":
+        IF Ch(s, i + 2) = "(" THEN i := Balanced(s, i + 1, "(", ")")  (* $((...)) *)
+        ELSE INC(i, 2); Commands(s, i, ")")
+        END
+      | "{": i := Balanced(s, i + 1, "{", "}")
+      ELSE INC(i)
+      END
+    ELSIF ch = "`" THEN
+      INC(i); Commands(s, i, "`"); literal := FALSE
+    ELSE INC(i)
+    END
+  END
+END ShellWord;
+
+(* Scans shell commands from i up to term, after it (")" for $(...), a
+   subshell or <(...); "`" for `...`; 0X: to the end of the text) *)
+PROCEDURE Commands(VAR s: Scanner; VAR i: LONGINT; term: CHAR);
+  VAR ch: CHAR; start, j: LONGINT; expect, depth: INTEGER;
+    cmd, pattern, patStart, test, def, wasDef, literal, done: BOOLEAN;
+
+  PROCEDURE EndCase;
+  BEGIN
+    IF depth > 0 THEN DEC(depth) END;
+    pattern := FALSE; cmd := FALSE
+  END EndCase;
+
+BEGIN
+  cmd := TRUE;        (* the next word is a command's first *)
+  pattern := FALSE;   (* the next words are a case pattern *)
+  patStart := FALSE;  (* and nothing of it is read yet *)
+  test := FALSE;      (* inside bash's [[ ]] *)
+  def := FALSE;       (* the last word was a command's first: name () *)
+  expect := ExNone; depth := 0; done := FALSE;
+  WHILE ~done & (i < s.n) DO
+    ch := s.t[i];
+    IF (ch = " ") OR (ch = TAB) OR (ch = CR) THEN INC(i)
+    ELSIF (ch = "\") & (Ch(s, i + 1) = LF) THEN INC(i, 2)
+    ELSE
+      wasDef := def; def := FALSE;
+      IF ch = LF THEN
+        INC(i); HereBodies(s, i);
+        IF ~pattern & ~test THEN cmd := TRUE END
+      ELSIF ch = "#" THEN
+        j := i; WHILE (j < s.n) & (s.t[j] # LF) & (s.t[j] # CR) DO INC(j) END;
+        Emit(s, Comment, i, j); i := j
+      ELSIF test & IsMeta(ch) THEN INC(i)
+      ELSIF (ch = term) & ~(pattern & (ch = ")")) THEN INC(i); done := TRUE
+      ELSIF ch = ";" THEN
+        IF (Ch(s, i + 1) = ";") OR (Ch(s, i + 1) = "&") THEN
+          (* ;; ;& ;;& end a case item *)
+          INC(i, 2); IF Ch(s, i) = "&" THEN INC(i) END;
+          IF depth > 0 THEN pattern := TRUE; patStart := TRUE; cmd := FALSE ELSE cmd := TRUE END
+        ELSE INC(i); cmd := TRUE
+        END;
+        expect := ExNone
+      ELSIF (ch = "&") & (Ch(s, i + 1) = ">") THEN
+        (* &> &>> *)
+        INC(i); WHILE Ch(s, i) = ">" DO INC(i) END;
+        cmd := FALSE
+      ELSIF ch = "&" THEN
+        INC(i); IF Ch(s, i) = "&" THEN INC(i) END;
+        cmd := TRUE
+      ELSIF ch = "|" THEN
+        INC(i);
+        IF pattern THEN patStart := FALSE
+        ELSE
+          IF (Ch(s, i) = "|") OR (Ch(s, i) = "&") THEN INC(i) END;
+          cmd := TRUE
+        END
+      ELSIF ch = "(" THEN
+        j := i + 1; WHILE (Ch(s, j) = " ") OR (Ch(s, j) = TAB) DO INC(j) END;
+        IF pattern THEN INC(i); patStart := FALSE
+        ELSIF (wasDef OR (expect = ExFuncBody)) & (Ch(s, j) = ")") THEN
+          (* name (): a function, its body next *)
+          i := j + 1; cmd := TRUE; expect := ExNone
+        ELSIF (s.lang.shell = Bash) & (Ch(s, i + 1) = "(") & (cmd OR (expect = ExForName)) THEN
+          (* ((...)), for ((...)) *)
+          i := Balanced(s, i, "(", ")"); cmd := FALSE; expect := ExNone
+        ELSE
+          INC(i); Commands(s, i, ")"); cmd := FALSE; expect := ExNone
+        END
+      ELSIF ch = ")" THEN
+        INC(i);
+        IF pattern THEN pattern := FALSE; cmd := TRUE ELSE cmd := FALSE END
+      ELSIF (ch = "<") OR (ch = ">") THEN
+        IF Ch(s, i + 1) = "(" THEN INC(i, 2); Commands(s, i, ")")  (* <(...) *)
+        ELSIF (ch = "<") & (Ch(s, i + 1) = "<") & (Ch(s, i + 2) # "<") THEN
+          INC(i, 2); HereDoc(s, i)
+        ELSE
+          WHILE (Ch(s, i) = "<") OR (Ch(s, i) = ">") DO INC(i) END;
+          IF (Ch(s, i) = "&") OR (Ch(s, i) = "|") THEN INC(i) END
+        END;
+        cmd := FALSE
+      ELSE
+        start := i; ShellWord(s, i, term, literal);
+        IF i = start THEN INC(i) END;
+        IF test THEN
+          IF literal & Is(s, start, i, "]]") THEN
+            Emit(s, Reserved, start, i); test := FALSE; cmd := FALSE
+          END
+        ELSIF pattern THEN
+          (* esac, not a|esac or (esac *)
+          IF patStart & literal & Is(s, start, i, "esac") THEN Emit(s, Reserved, start, i); EndCase
+          ELSE patStart := FALSE
+          END
+        ELSIF expect = ExForName THEN expect := ExForIn; cmd := FALSE
+        ELSIF (expect = ExForIn) & literal & Is(s, start, i, "in") THEN
+          Emit(s, Reserved, start, i); expect := ExNone; cmd := FALSE
+        ELSIF (expect = ExForIn) & literal & Is(s, start, i, "do") THEN
+          Emit(s, Reserved, start, i); expect := ExNone; cmd := TRUE
+        ELSIF expect = ExCaseWord THEN expect := ExCaseIn; cmd := FALSE
+        ELSIF (expect = ExCaseIn) & literal & Is(s, start, i, "in") THEN
+          Emit(s, Reserved, start, i); expect := ExNone; INC(depth);
+          pattern := TRUE; patStart := TRUE; cmd := FALSE
+        ELSIF expect = ExFuncName THEN expect := ExFuncBody; cmd := TRUE
+        ELSIF cmd & literal & IsReserved(s, start, i) THEN
+          Emit(s, Reserved, start, i); expect := ExNone; cmd := TRUE;
+          IF Is(s, start, i, "case") THEN expect := ExCaseWord; cmd := FALSE
+          ELSIF Is(s, start, i, "for") OR Is(s, start, i, "select") THEN
+            expect := ExForName; cmd := FALSE
+          ELSIF Is(s, start, i, "function") THEN expect := ExFuncName; cmd := FALSE
+          ELSIF Is(s, start, i, "[[") THEN test := TRUE; cmd := FALSE
+          ELSIF Is(s, start, i, "esac") THEN EndCase
+          ELSIF Is(s, start, i, "fi") OR Is(s, start, i, "done") OR Is(s, start, i, "}")
+              OR Is(s, start, i, "in") OR Is(s, start, i, "]]") THEN
+            cmd := FALSE
+          END
+        ELSE
+          def := cmd; cmd := FALSE; expect := ExNone
+        END
+      END
+    END
+  END
+END Commands;
+
 (* The spans of text, in lang. NIL if text is empty. *)
 PROCEDURE Scan*(lang: Language; text: Rope): Span;
   VAR s: Scanner; i, j: LONGINT; c, prev: INTEGER; lineStart, found: BOOLEAN; ch: CHAR;
@@ -540,7 +898,13 @@ BEGIN
   s.first := NIL; s.last := NIL;
   IF s.n = 0 THEN RETURN NIL END;
   NEW(s.t, s.n + 1); Ropes.Blit(text, 0, s.t^, 0, s.n); s.t[s.n] := 0X;
-  i := 0; lineStart := TRUE; prev := PrevOther;
+  s.nDocs := 0; i := 0;
+  IF lang.shell # NoShell THEN
+    WHILE i < s.n DO Commands(s, i, 0X) END;
+    Emit(s, Plain, s.n, s.n);
+    RETURN s.first
+  END;
+  lineStart := TRUE; prev := PrevOther;
   WHILE i < s.n DO
     ch := s.t[i];
     found := FALSE; c := 0;

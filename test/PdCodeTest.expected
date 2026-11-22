@@ -17,6 +17,8 @@ ok   - macpas: 56 words
 ok   - iso: 36 words
 ok   - ada: 74 words
 ok   - cpp: 92 words
+ok   - sh: 16 words
+ok   - bash: 22 words
 ok   - unknown class
 ok   - classes are case sensitive
 ok   - empty text
@@ -104,3 +106,44 @@ ok   - cpp not raw strings
 ok   - cpp unclosed raw string
 ok   - cpp digit separators
 ok   - cpp comments and directives
+ok   - sh if
+ok   - sh loops
+ok   - sh ! and braces
+ok   - sh keywords out of command position
+ok   - sh after a pipe, a list or &
+ok   - sh builtins are names
+ok   - sh after an assignment or a redirection
+ok   - sh a brace in a word
+ok   - sh escaped and quoted words
+ok   - sh for
+ok   - sh for without in
+ok   - sh for, in on the next line
+ok   - sh case
+ok   - sh case on reserved words
+ok   - sh esac as a pattern
+ok   - sh empty case, in on the next line
+ok   - sh nested case
+ok   - sh comments
+ok   - sh strings
+ok   - sh strings across lines
+ok   - sh unclosed string
+ok   - sh command substitution
+ok   - sh words around substitutions
+ok   - sh subshell
+ok   - sh here-document
+ok   - sh here-documents, quoted, two on a line
+ok   - sh here-document, <<- and escaped
+ok   - sh here-document, <<- strips tabs
+ok   - sh here-document in a substitution
+ok   - sh unclosed here-document
+ok   - sh function
+ok   - sh has no bash words
+ok   - bash every word
+ok   - bash [[ ]]
+ok   - bash select
+ok   - bash function with parentheses
+ok   - bash arithmetic
+ok   - bash arrays and extended patterns
+ok   - bash process substitution
+ok   - bash here-string
+ok   - bash &> and |&

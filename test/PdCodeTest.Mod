@@ -5,7 +5,10 @@ MODULE PdCodeTest;
    for a newline and "`" for a double quote, which an Oberon string
    cannot hold. The cases include vgrind.md §6.2's mistakes: nested
    comments, comment marks in strings, C's //, Modula-2's case rule; and
-   the corner cases of Pascal's modes, Ada and C++ (study §5.3 to §5.6). *)
+   the corner cases of Pascal's modes, Ada and C++ (study §5.3 to §5.6).
+   The shell's cases (study §5.7), with vgrind.md §6.2's sh mistake,
+   keywords out of command position, write "$" as itself, a newline as
+   "~", a double quote as "`" and a backquote as "^". *)
 
 IMPORT Out, Ropes, C := PdCode;
 
@@ -24,13 +27,16 @@ END Append;
 
 (* The code's spans marked, with newlines as "$"; FALSE in ok if the
    spans do not cover the text in order *)
-PROCEDURE Mark(lang: C.Language; code: ARRAY OF CHAR; VAR out: ARRAY OF CHAR; VAR ok: BOOLEAN);
-  VAR t: ARRAY 1024 OF CHAR; i, k: INTEGER; p: LONGINT; sp: C.Span; open, close: CHAR;
+PROCEDURE Mark(lang: C.Language; code: ARRAY OF CHAR; shell: BOOLEAN;
+    VAR out: ARRAY OF CHAR; VAR ok: BOOLEAN);
+  VAR t: ARRAY 1024 OF CHAR; i, k: INTEGER; p: LONGINT; sp: C.Span; open, close, nl: CHAR;
 BEGIN
+  IF shell THEN nl := "~" ELSE nl := "$" END;
   i := 0;
   WHILE code[i] # 0X DO
-    IF code[i] = "$" THEN t[i] := 0AX
+    IF code[i] = nl THEN t[i] := 0AX
     ELSIF code[i] = "`" THEN t[i] := 22X
+    ELSIF shell & (code[i] = "^") THEN t[i] := 60X
     ELSE t[i] := code[i]
     END;
     INC(i)
@@ -48,8 +54,9 @@ BEGIN
     END;
     IF open # 0X THEN Append(out, k, open) END;
     FOR p := sp.start TO sp.start + sp.len - 1 DO
-      IF t[p] = 0AX THEN Append(out, k, "$")
+      IF t[p] = 0AX THEN Append(out, k, nl)
       ELSIF t[p] = 22X THEN Append(out, k, "`")
+      ELSIF t[p] = 60X THEN Append(out, k, "^")
       ELSE Append(out, k, t[p])
       END
     END;
@@ -60,13 +67,13 @@ BEGIN
   out[k] := 0X
 END Mark;
 
-PROCEDURE T(name, langName, code, want: ARRAY OF CHAR);
+PROCEDURE Check(name, langName, code, want: ARRAY OF CHAR; shell: BOOLEAN);
   VAR got: ARRAY 2048 OF CHAR; lang: C.Language; ok: BOOLEAN;
 BEGIN
   lang := C.Find(langName);
   IF lang = NIL THEN Out.String("  no language "); Out.String(langName); Out.Ln; Report(FALSE, name)
   ELSE
-    Mark(lang, code, got, ok);
+    Mark(lang, code, shell, got, ok);
     IF ~ok THEN Out.String("  spans do not cover the text"); Out.Ln END;
     IF got # want THEN
       Out.String("  got  "); Out.String(got); Out.Ln;
@@ -74,7 +81,16 @@ BEGIN
     END;
     Report(ok & (got = want), name)
   END
+END Check;
+
+PROCEDURE T(name, langName, code, want: ARRAY OF CHAR);
+BEGIN Check(name, langName, code, want, FALSE)
 END T;
+
+(* A shell case: "~" a newline, "^" a backquote *)
+PROCEDURE TS(name, langName, code, want: ARRAY OF CHAR);
+BEGIN Check(name, langName, code, want, TRUE)
+END TS;
 
 PROCEDURE Names;
 BEGIN
@@ -97,6 +113,8 @@ BEGIN
   Report(C.Count(C.Find("iso")) = 36, "iso: 36 words");
   Report(C.Count(C.Find("ada")) = 74, "ada: 74 words");
   Report(C.Count(C.Find("cpp")) = 92, "cpp: 92 words");
+  Report(C.Count(C.Find("sh")) = 16, "sh: 16 words");
+  Report(C.Count(C.Find("bash")) = 22, "bash: 22 words");
   Report(C.Find("haskell") = NIL, "unknown class");
   Report(C.Find("Oberon") = NIL, "classes are case sensitive");
   Report(C.Scan(C.Find("c"), Ropes.FromString("")) = NIL, "empty text")
@@ -298,6 +316,86 @@ BEGIN
     "#include |<new>|$[class] C; {// if}")
 END CPlusPlus;
 
+PROCEDURE Shell;
+BEGIN
+  TS("sh if", "sh", "if a; then b; elif c; then d; else e; fi",
+    "[if] a; [then] b; [elif] c; [then] d; [else] e; [fi]");
+  TS("sh loops", "sh", "while a; do b; done; until c~do d~done",
+    "[while] a; [do] b; [done]; [until] c~[do] d~[done]");
+  TS("sh ! and braces", "sh", "! a; { b; }", "[!] a; [{] b; [}]");
+  TS("sh keywords out of command position", "sh", "echo if then done fi in esac { }",
+    "echo if then done fi in esac { }");
+  TS("sh after a pipe, a list or &", "sh", "a | if b; then c; fi || while d; do e; done & until f; do :; done && ! g",
+    "a | [if] b; [then] c; [fi] || [while] d; [do] e; [done] & [until] f; [do] :; [done] && [!] g");
+  TS("sh builtins are names", "sh", "cd /; export x; return; set -e",
+    "cd /; export x; return; set -e");
+  TS("sh after an assignment or a redirection", "sh", "x=1 if; >f then; 2>&1 done",
+    "x=1 if; >f then; 2>&1 done");
+  TS("sh a brace in a word", "sh", "{a,b} {echo x; }", "{a,b} {echo x; [}]");
+  TS("sh escaped and quoted words", "sh", "\if 'if' i\f `if`",
+    "\if |'if'| i\f |`if`|");
+  TS("sh for", "sh", "for x in a done; do echo $x; done",
+    "[for] x [in] a done; [do] echo $x; [done]");
+  TS("sh for without in", "sh", "for x do :; done; for y; do :; done",
+    "[for] x [do] :; [done]; [for] y; [do] :; [done]");
+  TS("sh for, in on the next line", "sh", "for x~in a~do b~done",
+    "[for] x~[in] a~[do] b~[done]");
+  TS("sh case", "sh", "case $x in~  a|b) echo in;;~  (c) if d; then :; fi ;;~  *) done=1~esac",
+    "[case] $x [in]~  a|b) echo in;;~  (c) [if] d; [then] :; [fi] ;;~  *) done=1~[esac]");
+  TS("sh case on reserved words", "sh", "case done in done) echo done;; esac",
+    "[case] done [in] done) echo done;; [esac]");
+  TS("sh esac as a pattern", "sh", "case x in a|esac) :;; (esac) :;; esac",
+    "[case] x [in] a|esac) :;; (esac) :;; [esac]");
+  TS("sh empty case, in on the next line", "sh", "case x~in esac; if",
+    "[case] x~[in] [esac]; [if]");
+  TS("sh nested case", "sh", "case a in x) case b in y) z;; esac;& w) v;;& esac; fi",
+    "[case] a [in] x) [case] b [in] y) z;; [esac];& w) v;;& [esac]; [fi]");
+  TS("sh comments", "sh", "echo a#b ${#x} # c~# d~a;#e~if",
+    "echo a#b ${#x} {# c}~{# d}~a;{#e}~[if]");
+  TS("sh strings", "sh", "echo 'it''s' `a $(b `c`) \` ^d^` $'x\'y' $`z` if",
+    "echo |'it'||'s'| |`a $(b `c`) \` ^d^`| |$'x\'y'| |$`z`| if");
+  TS("sh strings across lines", "sh", "echo 'a~if' `b~if`; if",
+    "echo |'a~if'| |`b~if`|; [if]");
+  TS("sh unclosed string", "sh", "echo 'a~if", "echo |'a~if|");
+  TS("sh command substitution", "sh", "x=$(if a; then b; fi) y=^while c; do :; done^ $(echo done)",
+    "x=$([if] a; [then] b; [fi]) y=^[while] c; [do] :; [done]^ $(echo done)");
+  TS("sh words around substitutions", "sh", "done$(x) $(x)done ^x^done; ${x:-done} $((if))",
+    "done$(x) $(x)done ^x^done; ${x:-done} $((if))");
+  TS("sh subshell", "sh", "(if a; then b; fi) done; (cd x; done)",
+    "([if] a; [then] b; [fi]) done; (cd x; [done])");
+  TS("sh here-document", "sh", "cat <<EOF; if x~if then~ EOF~EOF~if y",
+    "cat <<EOF; [if] x~if then~ EOF~EOF~[if] y");
+  TS("sh here-documents, quoted, two on a line", "sh", "cat <<'A' <<`B`; done~if~A~fi~B~fi",
+    "cat <<|'A'| <<|`B`|; [done]~if~A~fi~B~[fi]");
+  TS("sh here-document, <<- and escaped", "sh", "cat <<-\E~if~E~if",
+    "cat <<-\E~if~E~[if]");
+  TS("sh here-document, <<- strips tabs", "sh", "cat <<-E~	if~	E~if",
+    "cat <<-E~	if~	E~[if]");
+  TS("sh here-document in a substitution", "sh", "x=$(cat <<E~if~E~); if",
+    "x=$(cat <<E~if~E~); [if]");
+  TS("sh unclosed here-document", "sh", "cat <<E~if~fi", "cat <<E~if~fi");
+  TS("sh function", "sh", "f() { if a; then :; fi; }~g () (done)",
+    "f() [{] [if] a; [then] :; [fi]; [}]~g () ([done])");
+  TS("sh has no bash words", "sh", "function f { :; }; select x in a; time b; coproc c; [[ d ]]",
+    "function f { :; [}]; select x in a; time b; coproc c; [[ d ]]");
+  TS("bash every word", "bash", "[[ a ]]; ! b; { c; }; time d; coproc e; function f { :; }",
+    "[[[] a []]]; [!] b; [{] c; [}]; [time] d; [coproc] e; [function] f [{] :; [}]");
+  TS("bash [[ ]]", "bash", "[[ -f done && (x || ! y) ]] && if",
+    "[[[] -f done && (x || ! y) []]] && [if]");
+  TS("bash select", "bash", "select x in a b; do break; done",
+    "[select] x [in] a b; [do] break; [done]");
+  TS("bash function with parentheses", "bash", "function f() { :; }~function g~{ done; }",
+    "[function] f() [{] :; [}]~[function] g~[{] [done]; [}]");
+  TS("bash arithmetic", "bash", "((done)) && x=$((if)); for ((i=0; i<2; i++)); do :; done",
+    "((done)) && x=$((if)); [for] ((i=0; i<2; i++)); [do] :; [done]");
+  TS("bash arrays and extended patterns", "bash", "a=(if done) b+=(fi); echo @(if|done) !(x)",
+    "a=(if done) b+=(fi); echo @(if|done) !(x)");
+  TS("bash process substitution", "bash", "diff <(if a; then :; fi) >(done)",
+    "diff <([if] a; [then] :; [fi]) >([done])");
+  TS("bash here-string", "bash", "cat <<<done; if x", "cat <<<done; [if] x");
+  TS("bash &> and |&", "bash", "a &>f done |& if", "a &>f done |& [if]")
+END Shell;
+
 BEGIN
   failures := 0;
   Names;
@@ -308,5 +406,6 @@ BEGIN
   Pascal;
   Ada;
   CPlusPlus;
+  Shell;
   IF failures > 0 THEN Out.Int(failures, 0); Out.String(" failed"); Out.Ln END
 END PdCodeTest.

@@ -1880,10 +1880,44 @@ Each subphase passes `make test` under `-O2` and `-OC`.
     `highlight-languages` (ms and HTML, mono), with objfpc, Ada and
     C++ blocks and inline C++.
 
-### Phase 24.7: sh and bash [planned]
+### Phase 24.7: sh and bash [done]
 
 - **Change:** command position, here-documents, `case` (study §5.7).
 - **Check:** `PdCodeTest` cases, with vgrind.md §6.2's sh mistake.
+- **Done** (2026-11-22):
+  - **Lists:** `sh`, POSIX's 16 reserved words; `bash`, the 22 of
+    bash's `compgen -k` (sh's and `[[ ]] coproc function select
+    time`). dash is not installed, so sh's rules were checked with
+    bash in its POSIX reading.
+  - **Command position:** a word is reserved only where a command
+    starts (after a newline, `;`, `&`, `|`, `&&`, `||`, `(`, `{`, a
+    reserved word that takes a command, `!`), and only when it is
+    literal (no quotes, escapes or expansions). After an assignment
+    (`x=1 if`) or a redirection (`>f if`) a word is not reserved:
+    checked with bash. vgrind's mistake, keywords bold as arguments
+    (`echo if then`), is a test case.
+  - **`case`:** the word, `in`, patterns up to `)`, with reserved
+    words plain in them; `esac` ends the case only at a pattern's
+    start, so `a|esac)` and `(esac)` are patterns (checked with
+    bash); `;;`, and bash's `;&` and `;;&`; nested cases.
+  - **`for` and `select`:** the name is plain, `in` reserved after it,
+    also on the next line; `for a do`.
+  - **Here-documents:** `<<` and `<<-`, the delimiter quoted or
+    escaped (a quoted one a string), several on a line, the bodies
+    plain up to their delimiter lines (`<<-` strips tabs), inside a
+    command substitution too; an unclosed one runs to the end.
+  - **Words:** comments from `#` at a word's start; strings in `'`,
+    `"`, `$'...'` and `$"..."`, across lines, ending at the end of the
+    text if unclosed; `$(...)` and backquotes scanned as commands,
+    `$((...))`, `${...}`, arrays and bash's extglob skipped; function
+    definitions `name ()` and bash's `function name`; bash's `[[ ]]`
+    (its operators plain), `((...))`, `<(` and `>(`, `<<<`, `&>`
+    and `|&`.
+  - **Checked:** `PdCodeTest`, 149 cases, 43 of them new; podoc's
+    own 10 sh scripts in `tools/`, as sh and as bash blocks, under
+    `-O2` and `-OC` (the same output, read by eye); 3,000 random
+    blocks of shell tokens, under both models, without a failure,
+    and with the same output.
 
 ### Phase 24.8: Users' lists [planned]
 
@@ -3487,3 +3521,8 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   `make test` passes under `-O2` and `-OC` (347 case tests, 2 of them
   new, the round trips, the image tests, the unit tests with
   `PdCodeTest`'s 106 cases).
+- 2026-11-22: Phase 24.7 done: sh and bash in `PdCode`, reserved
+  words only in command position, `case`, `for`, here-documents and
+  substitutions. `make test` passes under `-O2` and `-OC` (347 case
+  tests, the round trips, the image tests, the unit tests with
+  `PdCodeTest`'s 149 cases).
