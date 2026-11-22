@@ -1631,7 +1631,7 @@ are all decided, as decisions 35 to 45 (2026-11-22).
 
 Each subphase passes `make test` under `-O2` and `-OC`.
 
-### Phase 24.1: `PdCode`, the scanner [planned]
+### Phase 24.1: `PdCode`, the scanner [done]
 
 - **Change:** a new module `PdCode` scans a code rope into spans:
   plain, reserved word, comment. Language records (case, comments and
@@ -1641,6 +1641,18 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   lists of reserved words only (decision 45), compiled in.
 - **Check:** `PdCodeTest`, with vgrind.md §6.2's mistakes as cases:
   nested comments, braces in strings, C's `//`, Modula-2's case rule.
+- **Done** 2026-11-22: `src/PdCode.Mod`, `test/PdCodeTest.Mod` (49
+  cases). Spans are plain, reserved, comment and string; strings are a
+  kind of their own for 24.4 (decision 44). The rules a language needs
+  beyond the record are flags for now (C's `#` lines, its digit
+  separators, backslash-newline in `//`); hook procedures wait for
+  the languages that need them (24.6, 24.7). The lists, from the
+  languages' reports: original Oberon 32 words (the 1990/1992
+  report), Oberon-07 33 (the 2016 revision: `TRUE` and `FALSE`
+  reserved, no `EXIT`, `LOOP`, `WITH`), Component Pascal 40 (the
+  2006 report, March 2001 with updates to October 2006); Oberon-2 34,
+  Modula-2 46 and C 59 as the study verified. Nothing calls `PdCode`
+  yet: the writers come in 24.3.
 
 ### Phase 24.2: The ms code font [planned]
 
@@ -3260,3 +3272,7 @@ Each subphase passes `make test` under `-O2` and `-OC`.
 - 2026-11-22: Decision 46, HTML output for the small highlighting,
   scheduled as Phase 24.5; the later subphases renumbered 24.6 to
   24.9. No code.
+- 2026-11-22: Phase 24.1 done: `PdCode`, the scanner, with the Oberon
+  family, Modula-2 and C. `make test` passes under `-O2` and `-OC`
+  (the unit tests with `PdCodeTest`'s 49 cases, 303 case tests, 23
+  round trips, 10 image tests).

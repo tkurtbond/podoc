@@ -1,0 +1,49 @@
+ok   - oberon is oberon2
+ok   - oberon1 is oberon87
+ok   - cp is componentpascal
+ok   - oberon07, modula2, c
+ok   - oberon2: 34 words
+ok   - oberon1: 32 words
+ok   - oberon07: 33 words
+ok   - cp: 40 words
+ok   - modula2: 46 words
+ok   - c: 59 words
+ok   - unknown class
+ok   - classes are case sensitive
+ok   - empty text
+ok   - oberon words
+ok   - oberon lower case is a name
+ok   - oberon word in a name
+ok   - oberon comment
+ok   - oberon nested comment
+ok   - oberon unclosed comment
+ok   - oberon strings
+ok   - oberon unclosed string
+ok   - oberon numbers
+ok   - oberon predeclared not reserved
+ok   - oberon2 FOR BY
+ok   - oberon utf-8 joined
+ok   - comment across lines
+ok   - oberon1 has no FOR
+ok   - oberon07 TRUE FALSE
+ok   - cp words
+ok   - modula2 words
+ok   - modula2 case rule
+ok   - modula2 iso words
+ok   - modula2 pragma
+ok   - modula2 nested comment
+ok   - c words
+ok   - c case matters
+ok   - c underscore words
+ok   - c line comment
+ok   - c line comment continued
+ok   - c block comment does not nest
+ok   - c comment marks in strings
+ok   - c escaped quote
+ok   - c braces in strings
+ok   - c char escape
+ok   - c prefixes
+ok   - c directive
+ok   - c # not at line start
+ok   - c digit separators
+ok   - c every word
