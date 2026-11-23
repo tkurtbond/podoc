@@ -1,0 +1,15 @@
+== doc.md -t html -F pomermaid
+<h1 id="diagrams">Diagrams</h1>
+<p><img src="mermaid-images/e460797458bc1af50f34916d7543242b318a7f6b.svg" /></p>
+<p>Text.</p>
+<p><img src="mermaid-images/d396e9f93b45607ad0e4f054d69d11984aad4d95.svg" id="fig" style="width:50.0%" /></p>
+<pre class="python"><code>print(&quot;not a diagram&quot;)</code></pre>
+== warnings
+status 0
+== files
+./mermaid-images/d396e9f93b45607ad0e4f054d69d11984aad4d95.svg
+./mermaid-images/e460797458bc1af50f34916d7543242b318a7f6b.svg
+== mermaid-images/d396e9f93b45607ad0e4f054d69d11984aad4d95.svg
+<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub:: graph LR --></svg>
+== mermaid-images/e460797458bc1af50f34916d7543242b318a7f6b.svg
+<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub:: flowchart TD --></svg>

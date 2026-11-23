@@ -1,0 +1,8 @@
+== fonts.md -t ms -F pomermaid -V fontfamily=P -V pointsize=9
+.\" pomermaid stub: --font PR --size 9: flowchart TD
+.PS
+box
+.PE
+== warnings
+status 0
+== files

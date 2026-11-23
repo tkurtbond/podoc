@@ -1,0 +1,13 @@
+== bad.md -t ms -F pomermaid
+.IP
+.nf
+\f[CR]
+flowchart TD
+  BAD
+\f[]
+.fi
+== warnings
+podoc: [WARNING] <stdin>:1:1: stub error
+podoc: [WARNING] Could not convert mermaid diagram: pomermaid ended with status 64; it stays a code block
+status 0
+== files

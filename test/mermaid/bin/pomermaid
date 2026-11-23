@@ -1,0 +1,28 @@
+#!/bin/sh
+# A stand-in for pomermaid in tools/runmermaid's tests, so they do not
+# depend on an installed pomermaid. It writes a fixed drawing for -t
+# pic, mp or svg to the -o file, naming its other options and the
+# diagram's first line. A diagram with the word BAD in it is an error:
+# a message on standard error and status 64, as pomermaid's parse
+# errors.
+type= opts= out=
+while [ $# -gt 0 ]; do
+  case $1 in
+    -t) type=$2; shift 2 ;;
+    -o) out=$2; shift 2 ;;
+    *) opts="$opts $1"; shift ;;
+  esac
+done
+text=$(cat)
+case $text in
+  *BAD*) echo "<stdin>:1:1: stub error" >&2; exit 64 ;;
+esac
+first=$(printf '%s\n' "$text" | head -n 1)
+case $type in
+  pic) printf '.\\" pomermaid stub:%s: %s\n.PS\nbox\n.PE\n' "$opts" "$first" ;;
+  mp) printf '%% pomermaid stub:%s: %s\n\\startMPcode\ndraw fullcircle;\n\\stopMPcode\n' \
+        "$opts" "$first" ;;
+  svg) printf '<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub:%s: %s --></svg>\n' \
+         "$opts" "$first" ;;
+  *) echo "pomermaid stub: bad -t $type" >&2; exit 6 ;;
+esac > "$out"

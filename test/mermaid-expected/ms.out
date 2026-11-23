@@ -1,0 +1,22 @@
+== doc.md -t ms -F pandoc-mermaid-selenium-filter
+.SH 1
+Diagrams
+.\" pomermaid stub: --font TR --size 10: flowchart TD
+.PS
+box
+.PE
+.LP
+Text.
+.\" pomermaid stub: --font TR --size 10: graph LR
+.PS
+box
+.PE
+.IP
+.nf
+\f[CR]
+print(\(dqnot a diagram\(dq)
+\f[]
+.fi
+== warnings
+status 0
+== files

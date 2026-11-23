@@ -51,8 +51,12 @@ the rest have not yet been.
   `strip-comments.lua`, `general.lua`, `toc-columns.lua` and
   `combine-docs.lua`, given with `-L`. Given with the other option,
   each ends podoc with pandoc's message and status 83.
-  `pandoc-mermaid-selenium-filter` is ignored with a warning
-  (decision 4). Any other filter ends podoc with status 83.
+  `pandoc-mermaid-selenium-filter`, or `pomermaid`, given with `-F`,
+  draws mermaid blocks with pomermaid, not with mermaid-cli in a
+  browser: pic for ms and mom, MetaPost for ConTeXt, and for the
+  other formats `mermaid-images/<sha1>.svg` where the Python filter
+  writes `.png`. A diagram that cannot be drawn stays a code block,
+  with a warning. Any other filter ends podoc with status 83.
 - A `--wrap` value other than `auto`, `none` or `preserve` gives
   pandoc's message and status, 6.
 - `--syntax-highlighting` and `--highlight-style` are not taken.

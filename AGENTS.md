@@ -75,6 +75,10 @@ done: `PdCode` (the scanner and the languages' reserved words),
 lists, `--code-keywords`), and `--code-style` and `--code-align` in
 the HTML, ms, mom and ConTeXt writers. Read
 `docs/research/syntax-highlighting-small.md` first.
+Phase 25, mermaid diagrams (decisions 48 to 51), is done: `PdMermaid`
+runs pomermaid (`~/Repos/Oberon/pomermaid`) for `-F
+pandoc-mermaid-selenium-filter` or `-F pomermaid`; its tests are
+`tools/runmermaid`, with a stand-in pomermaid in `test/mermaid/bin`.
 See PLAN.md's State.
 
 ## Reference material
@@ -161,8 +165,10 @@ reinstall after upgrading poc.
   `ok   - ` and `FAIL - ` lines, compared with `<Name>Test.expected`)
   and the case tests (`tools/runcases`: `test/cases/<name>.md` with
   optional `<name>.args`, against each expected `<name>.<format>`
-  beside it), and the image tests (`tools/runimages`, from
-  `test/images` against `test/images-expected`), under both models.
+  beside it), the image tests (`tools/runimages`, from
+  `test/images` against `test/images-expected`), and the mermaid
+  tests (`tools/runmermaid`, from `test/mermaid` against
+  `test/mermaid-expected`), under both models.
   It must not need pandoc. Expected JSON
   is pandoc 3.10's (not yet re-checked against 3.14); the writers' expected files start as pandoc's
   `--wrap=none` output and may be replaced by podoc's equivalent

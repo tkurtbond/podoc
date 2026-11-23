@@ -1,0 +1,8 @@
+== fonts.md -t ms -F pomermaid
+.\" pomermaid stub: --font HR --size 11: flowchart TD
+.PS
+box
+.PE
+== warnings
+status 0
+== files

@@ -1,0 +1,29 @@
+== doc.md -t ms -F pomermaid
+.SH 1
+Diagrams
+.IP
+.nf
+\f[CR]
+flowchart TD
+  A --> B
+\f[]
+.fi
+.LP
+Text.
+.IP
+.nf
+\f[CR]
+graph LR
+  C --> D
+\f[]
+.fi
+.IP
+.nf
+\f[CR]
+print(\(dqnot a diagram\(dq)
+\f[]
+.fi
+== warnings
+podoc: [WARNING] Could not convert mermaid diagrams: check that pomermaid is in path.
+status 0
+== files

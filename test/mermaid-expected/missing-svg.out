@@ -1,0 +1,12 @@
+== doc.md -t html -F pomermaid
+<h1 id="diagrams">Diagrams</h1>
+<pre class="mermaid"><code>flowchart TD
+  A --&gt; B</code></pre>
+<p>Text.</p>
+<pre id="fig" class="mermaid" width="50%"><code>graph LR
+  C --&gt; D</code></pre>
+<pre class="python"><code>print(&quot;not a diagram&quot;)</code></pre>
+== warnings
+podoc: [WARNING] Could not convert mermaid diagrams: check that pomermaid is in path.
+status 0
+== files

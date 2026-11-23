@@ -1,0 +1,88 @@
+#!/bin/sh
+# runmermaid PODOC OUTDIR
+#
+# Tests podoc's mermaid diagrams, drawn with pomermaid (Phase 25,
+# decisions 48 to 51). A stand-in pomermaid, test/mermaid/bin, takes
+# the real one's place, so the results do not depend on what is
+# installed. Copies test/mermaid to OUTDIR/<test>, runs PODOC there,
+# and compares its output, warnings and status, and the files it made,
+# with test/mermaid-expected/<test>.out. TMPDIR is OUTDIR/<test>/tmp,
+# which must be empty afterwards.
+# Prints an "ok   - " or "FAIL - " line for each, and exits 1 if any
+# failed.
+
+if [ $# -ne 2 ]; then
+  echo "usage: runmermaid PODOC OUTDIR" >&2
+  exit 2
+fi
+podoc=$1
+outdir=$2
+case $podoc in /*) ;; *) podoc=$(pwd)/$podoc ;; esac
+expected=$(pwd)/test/mermaid-expected
+stub=$(pwd)/test/mermaid/bin
+rm -rf "$outdir"
+mkdir -p "$outdir/bin" || exit 2
+case $outdir in /*) ;; *) outdir=$(pwd)/$outdir ;; esac
+# the commands podoc's shell commands and the stand-in need (printf
+# is not built into OpenBSD's sh)
+for c in mkdir rm cp cat head printf; do
+  p=$(command -v $c) || { echo "runmermaid: no $c" >&2; exit 2; }
+  ln -s "$p" "$outdir/bin/$c"
+done
+bin=$outdir/bin
+
+failed=0
+total=0
+
+# run NAME PATH ARGS...: runs podoc ARGS in OUTDIR/NAME, a fresh copy
+# of test/mermaid unless it exists, with PATH, and compares the results
+run() {
+  name=$1; path=$2; shift 2
+  total=$((total + 1))
+  w=$outdir/$name
+  if [ ! -d "$w" ]; then
+    mkdir -p "$w/tmp" && cp test/mermaid/*.md "$w/" || exit 2
+  fi
+  (cd "$w" && TMPDIR=$w/tmp PATH=$path "$podoc" "$@" > stdout 2> stderr
+   echo "status $?" > status)
+  {
+    echo "== $*"; cat "$w/stdout"
+    echo "== warnings"; cat "$w/stderr"
+    cat "$w/status"
+    echo "== files"
+    (cd "$w" && find . -type f ! -name '*.md' ! -name stdout ! -name stderr \
+       ! -name status ! -name result ! -name diff | sort)
+    for f in "$w"/mermaid-images/*.svg; do
+      [ -f "$f" ] && { echo "== ${f#$w/}"; cat "$f"; }
+    done
+  } > "$w/result"
+  if diff -u "$expected/$name.out" "$w/result" > "$w/diff"; then
+    echo "ok   - mermaid $name"
+  else
+    echo "FAIL - mermaid $name"
+    cat "$w/diff"
+    failed=$((failed + 1))
+  fi
+}
+
+run ms "$stub:$bin" doc.md -t ms -F pandoc-mermaid-selenium-filter
+run mom "$stub:$bin" doc.md -t mom -F pomermaid
+run context "$stub:$bin" doc.md -t context --filter pomermaid
+run html "$stub:$bin" doc.md -t html -F pomermaid
+# the SVGs are made once: a second run finds them, without pomermaid
+cp -R "$outdir/html" "$outdir/html-cached" || exit 2
+run html-cached "$bin" doc.md -t html -F pomermaid
+run markdown "$stub:$bin" doc.md -t markdown -F pomermaid
+run fonts-meta "$stub:$bin" fonts.md -t ms -F pomermaid
+run fonts-mom "$stub:$bin" fonts.md -t mom -F pomermaid
+run fonts-vars "$stub:$bin" fonts.md -t ms -F pomermaid -V fontfamily=P -V pointsize=9
+run fonts-bad "$stub:$bin" doc.md -t ms -F pomermaid -V fontfamily=H-1 -V pointsize=big
+run bad "$stub:$bin" bad.md -t ms -F pomermaid
+run bad-svg "$stub:$bin" bad.md -t html -F pomermaid
+run missing "$bin" doc.md -t ms -F pomermaid
+run missing-svg "$bin" doc.md -t html -F pomermaid
+run no-filter "$stub:$bin" doc.md -t ms
+run lua-filter "$stub:$bin" doc.md -t ms --lua-filter pomermaid
+
+echo "$((total - failed)) of $total mermaid tests passed"
+[ $failed -eq 0 ]

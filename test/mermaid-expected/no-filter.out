@@ -1,0 +1,28 @@
+== doc.md -t ms
+.SH 1
+Diagrams
+.IP
+.nf
+\f[CR]
+flowchart TD
+  A --> B
+\f[]
+.fi
+.LP
+Text.
+.IP
+.nf
+\f[CR]
+graph LR
+  C --> D
+\f[]
+.fi
+.IP
+.nf
+\f[CR]
+print(\(dqnot a diagram\(dq)
+\f[]
+.fi
+== warnings
+status 0
+== files

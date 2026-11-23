@@ -31,10 +31,11 @@ State section at the end records what was verified.
 
 Not in scope: other input formats (reStructuredText came into scope
 on 2026-11-20, decisions 18 to 22, Phase 19);
-citations; mermaid (decision 4); Lua filters (decision 6); VAX/VMS
+citations; Lua filters (decision 6); VAX/VMS
 (decision 1). Plain text output, grid tables (reader and writers) and
 output wrapping came into scope on 2026-11-20 (decisions 10 to 15,
-Phases 16 and 17).
+Phases 16 and 17). mermaid diagrams came into scope on 2026-11-23,
+drawn by pomermaid (decisions 48 to 51, Phase 25).
 
 ## Decisions
 
@@ -53,7 +54,7 @@ Made by the user on 2026-11-20, on the questions of §15.
    in the user documentation.
 4. **No mermaid.** `--filter pandoc-mermaid-selenium-filter` is
    accepted with a warning and does nothing, leaving mermaid blocks as
-   code blocks.
+   code blocks. *Replaced by decision 48 (2026-11-23).*
 5. **Substitutions may use a new format.** The table moves from
    `substitutions.lua` to YAML metadata (Phase 13.2).
 6. **No Lua for now.** Embedded Lua stays a later possibility, if a
@@ -407,6 +408,30 @@ Made by the user on 2026-11-20, on the questions of §15.
     `code-keywords` and the option `--code-keywords=lang:file`,
     beside `code-style` and `code-align`. Decision 40's forms are
     otherwise unchanged.
+48. **mermaid diagrams through pomermaid** (2026-11-23). pomermaid,
+    the user's Oberon mermaid renderer (`~/Repos/Oberon/pomermaid`),
+    draws mermaid code blocks. `--filter pandoc-mermaid-selenium-filter`
+    (`-F`), the name the user's makefiles give, runs it instead of
+    being ignored, and `--filter pomermaid` does the same; without
+    either, mermaid blocks stay code blocks. Given to `--lua-filter`,
+    the names are files, as in pandoc (83). Replaces decision 4.
+49. **SVG files and images for the other formats** (2026-11-23). ms
+    and mom get pomermaid's pic as a raw block, ConTeXt its MetaPost;
+    every other format gets `mermaid-images/<sha1>.svg`, the SHA-1 of
+    the block's text as the user's Python filter names its PNGs, made
+    only if it is not there, and the block becomes a paragraph with
+    that image, keeping the block's identifier and attributes.
+50. **On failure, warn and keep the code** (2026-11-23). If pomermaid
+    is not found (one warning) or ends with an error (its messages
+    and a warning), the block stays a code block and podoc goes on,
+    as the Python filter does.
+51. **Fonts from the document** (2026-11-23). For ms and mom,
+    pomermaid draws in the `fontfamily` variable or metadata field
+    (with `R` added, `TR` by default) at `pointsize` (`10` for ms,
+    `12.5` for mom, their templates' sizes; a `p` or `pt` is
+    dropped); a value that is not a groff family or a number of
+    points is warned about and the default used. ConTeXt gets
+    pomermaid's own fonts.
     - It does not imitate pandoc's skylighting markup (a `<span>`
       per token, numbered lines, colour).
 
@@ -1990,6 +2015,29 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   rackhir, artos, yishana, jherek and cymoril under `-O2` and `-OC`
   (352 case tests, 23 round trips, the unit tests; the image tests
   that need converters skipped, as none are installed there).
+
+## Phase 25: mermaid diagrams through pomermaid [done]
+
+Scheduled 2026-11-23 at the user's request (decisions 48 to 51):
+podoc runs pomermaid on `mermaid` code blocks, in `PdMermaid`.
+
+- **`PdMermaid.Draw`**, run in the filter's place in the filter
+  order. pomermaid is looked for once (`command -v`). Each diagram
+  is written to a temporary directory (`PdRun.MakeTempDir`, removed
+  afterwards) and drawn with `pomermaid -t pic|mp|svg [--font F]
+  [--size S] -o FILE`; pomermaid's messages are passed on as
+  warnings.
+- **`PdPdf`** passes `-p` to `groff`, `pdfroff` and `pdfmom` when the
+  roff has a `.PS` line, so the pic is drawn.
+- **`PdOptions`**: the two names are kept as filters, not ignored.
+- **Tests:** `tools/runmermaid`, with a stand-in pomermaid
+  (`test/mermaid/bin`), so `make test` needs neither pomermaid nor
+  its converters: ms, mom, ConTeXt, HTML and markdown, the SVG made
+  once, fonts from metadata and `-V` and bad ones, a bad diagram,
+  pomermaid missing, no filter, and `--lua-filter pomermaid`.
+  `test/mermaid-expected/<test>.out` holds each test's output,
+  warnings, status and files.
+- **Done** 2026-11-23; see the State.
 
 ## Later, not scheduled
 
@@ -3651,3 +3699,23 @@ Each subphase passes `make test` under `-O2` and `-OC`.
     and pandoc leaves as `##REF##` (decision 25), and one is markdown.
     `make test` passed under `-O2` and `-OC` (358 case tests, 23
     round trips, 10 image tests).
+- 2026-11-23: Phase 25 done: mermaid diagrams through pomermaid
+  (decisions 48 to 51). `make test` passed under `-O2` and `-OC` on
+  atla (358 case tests, 23 round trips, 10 image tests, 16 mermaid
+  tests). The case `opt-mermaid` no longer expects the "ignores the
+  filter" warning. With the real pomermaid (installed in
+  `~/.local/bin`) on a copy of Galactic-Bounty-Hunters' one-shot,
+  which has two mermaid flowcharts, with `-F
+  pandoc-mermaid-selenium-filter`: HTML wrote two SVGs in
+  `mermaid-images` and `<img>` paragraphs; ms had two `.PS` blocks,
+  ConTeXt two `\startMPcode` blocks. PDFs through `--pdf-engine=groff`,
+  `context` and `pdfmom` ended with status 0, and their diagram pages,
+  rendered at 50 dpi and looked at, show the flowchart whole, its
+  boxes, text and arrows in place. The block texts' SHA-1s match the
+  names of the PNGs the Python filter had made for that document.
+  `--pdf-engine=pdfroff` (1.23.0's, with groff 1.25.0 first in the
+  PATH) could not load `pdfmark` and left a 2.4 KB PDF with status 0,
+  the problem recorded on 2026-11-20. `make test` passed under `-O2`
+  and `-OC` on alerik, rackhir, artos, yishana, jherek and cymoril,
+  16 of 16 mermaid tests on each, after `tools/runmermaid` linked
+  `printf`, which OpenBSD's `sh` does not build in.

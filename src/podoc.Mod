@@ -23,7 +23,7 @@ MODULE podoc;
 
 IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdRst, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdMom, PdConTeXt, PdMdWriter,
-  PdInclude, PdFilters, PdPdf, PdImages, O := PdOptions, Sh := PdShared, PdCodeAlign, PdKeywords;
+  PdInclude, PdFilters, PdMermaid, PdPdf, PdImages, O := PdOptions, Sh := PdShared, PdCodeAlign, PdKeywords;
 
 CONST
   PandocVersion = "3.10"; (* the pandoc podoc follows *)
@@ -84,6 +84,8 @@ BEGIN
     ELSIF n = "general.lua" THEN PdFilters.General(d, O.filterFormat)
     ELSIF n = "toc-columns.lua" THEN PdFilters.TocColumns(d)
     ELSIF n = "combine-docs.lua" THEN PdFilters.CombineDocs(d, f.name^)
+    ELSIF (n = "pandoc-mermaid-selenium-filter") OR (n = "pomermaid") THEN
+      PdMermaid.Draw(d, O.to)
     END;
     f := f.next
   END

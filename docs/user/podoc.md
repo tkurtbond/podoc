@@ -184,9 +184,33 @@ given with the option pandoc uses for that filter:
 | `-L general.lua` | the Div and Span classes, for each output format; for mom, as for ms, with `for-format mom` |
 | `-L toc-columns.lua` | a two-column table of contents, for ConTeXt |
 | `-L combine-docs.lua` | the files listed in `combine` metadata, combined as one digest |
-| `-F pandoc-mermaid-selenium-filter` | ignored, with a warning |
+| `-F pandoc-mermaid-selenium-filter` or `-F pomermaid` | draws the `mermaid` code blocks with pomermaid (see mermaid diagrams) |
 
 Any other filter ends podoc with status 83.
+
+### mermaid diagrams
+
+With `-F pandoc-mermaid-selenium-filter` or `-F pomermaid`, each
+code block with the class `mermaid` is drawn by pomermaid, which must
+be in the PATH:
+
+- **ms and mom**: pomermaid's pic, as a raw block. groff draws it
+  with `-p`, which podoc passes when it makes the PDF; to run groff
+  on podoc's ms or mom yourself, give `-p` too. The diagram's text is
+  in the `fontfamily` variable or metadata field, with `R` added (`TR`
+  by default), at `pointsize` (10 points for ms, 12.5 for mom).
+- **ConTeXt**: pomermaid's MetaPost, in `\startMPcode`, in
+  pomermaid's own fonts.
+- **Every other format** (HTML, markdown, ...): an SVG,
+  `mermaid-images/<sha1>.svg` beside the document, named by the
+  SHA-1 of the block's text, and a paragraph with that image in the
+  block's place, with the block's identifier and attributes. An SVG
+  that is already there is used as it is. pomermaid needs `mutool`
+  or `pdftocairo` to make SVG.
+
+If pomermaid is not found, or a diagram has an error, podoc warns,
+passing on pomermaid's messages, and the block stays a code block.
+Without the filter, mermaid blocks are code blocks.
 
 ### Substitutions
 

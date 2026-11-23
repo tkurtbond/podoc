@@ -1,0 +1,22 @@
+== doc.md -t markdown -F pomermaid
+# Diagrams
+
+![](mermaid-images/e460797458bc1af50f34916d7543242b318a7f6b.svg)
+
+Text.
+
+![](mermaid-images/d396e9f93b45607ad0e4f054d69d11984aad4d95.svg){#fig
+width="50%"}
+
+``` python
+print("not a diagram")
+```
+== warnings
+status 0
+== files
+./mermaid-images/d396e9f93b45607ad0e4f054d69d11984aad4d95.svg
+./mermaid-images/e460797458bc1af50f34916d7543242b318a7f6b.svg
+== mermaid-images/d396e9f93b45607ad0e4f054d69d11984aad4d95.svg
+<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub:: graph LR --></svg>
+== mermaid-images/e460797458bc1af50f34916d7543242b318a7f6b.svg
+<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub:: flowchart TD --></svg>

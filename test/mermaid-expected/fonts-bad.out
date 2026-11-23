@@ -1,0 +1,24 @@
+== doc.md -t ms -F pomermaid -V fontfamily=H-1 -V pointsize=big
+.SH 1
+Diagrams
+.\" pomermaid stub: --font TR --size 10: flowchart TD
+.PS
+box
+.PE
+.LP
+Text.
+.\" pomermaid stub: --font TR --size 10: graph LR
+.PS
+box
+.PE
+.IP
+.nf
+\f[CR]
+print(\(dqnot a diagram\(dq)
+\f[]
+.fi
+== warnings
+podoc: [WARNING] podoc draws mermaid diagrams in TR: fontfamily 'H-1' is not a groff family
+podoc: [WARNING] podoc draws mermaid diagrams at 10 points: pointsize 'big' is not a number of points
+status 0
+== files

@@ -235,6 +235,15 @@ BEGIN
   PdIO.CloseOutput
 END Deliver;
 
+(* Whether the source t[0 .. len-1] has a pic drawing, a line ".PS" (a
+   mermaid diagram, PdMermaid), for groff's -p *)
+PROCEDURE HasPic(t: PdIO.Text; len: LONGINT): BOOLEAN;
+  VAR s: ARRAY 6 OF CHAR;
+BEGIN
+  s[0] := 0AX; s[1] := "."; s[2] := "P"; s[3] := "S"; s[4] := 0AX; s[5] := 0X;
+  RETURN Contains(t, len, s)
+END HasPic;
+
 (* Runs pdfroff or groff on the ms source *)
 PROCEDURE Roff(VAR prog, base: ARRAY OF CHAR);
   VAR c: R.Command; src, pdf: Path; t: PdIO.Text; len: LONGINT;
@@ -248,6 +257,7 @@ BEGIN
   R.Add(c, "-e"); R.Add(c, "-t"); R.Add(c, "-k"); R.Add(c, "-KUTF-8");
   IF base = "pdfroff" THEN R.Add(c, "-i") END;
   IF Contains(t, len, ".PDFPIC") THEN R.Add(c, "-U") END;
+  IF HasPic(t, len) THEN R.Add(c, "-p") END;
   AddPaper(c); AddOpts(c);
   R.AddText(c, " <"); R.Add(c, src); R.AddText(c, " >"); R.Add(c, pdf);
   IF R.Run(c) # 0 THEN
@@ -269,6 +279,7 @@ BEGIN
   c := R.New(); R.Add(c, prog);
   R.Add(c, "-t"); R.Add(c, "-k"); R.Add(c, "-KUTF-8");
   IF Contains(t, len, ".EQ") THEN R.Add(c, "-e") END;
+  IF HasPic(t, len) THEN R.Add(c, "-p") END;
   AddOpts(c); R.Add(c, src);
   R.AddText(c, " </dev/null >"); R.Add(c, pdf);
   IF R.Run(c) # 0 THEN

@@ -1,0 +1,23 @@
+== doc.md -t context --filter pomermaid
+\startsectionlevel[title={Diagrams},reference={diagrams}]
+
+% pomermaid stub:: flowchart TD
+\startMPcode
+draw fullcircle;
+\stopMPcode
+
+Text.
+
+% pomermaid stub:: graph LR
+\startMPcode
+draw fullcircle;
+\stopMPcode
+
+\starttyping
+print("not a diagram")
+\stoptyping
+
+\stopsectionlevel
+== warnings
+status 0
+== files

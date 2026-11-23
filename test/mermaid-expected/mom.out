@@ -1,0 +1,20 @@
+== doc.md -t mom -F pomermaid
+.HEADING 1 NAMED diagrams "Diagrams"
+.\" pomermaid stub: --font TR --size 12.5: flowchart TD
+.PS
+box
+.PE
+.PP
+Text.
+.\" pomermaid stub: --font TR --size 12.5: graph LR
+.PS
+box
+.PE
+.QUOTE
+.CODE
+print(\(dqnot a diagram\(dq)
+.CODE OFF
+.QUOTE OFF
+== warnings
+status 0
+== files

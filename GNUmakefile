@@ -39,6 +39,7 @@ SRCS := $(wildcard src/*.Mod)
 TESTS := $(patsubst test/%.Mod,%,$(wildcard test/*Test.Mod))
 CASES := $(wildcard test/cases/*)
 IMAGES := $(shell find test/images test/images-expected -type f)
+MERMAID := $(shell find test/mermaid test/mermaid-expected -type f)
 
 .PHONY: all test test-o2 test-oc compare install uninstall clean FORCE
 .SECONDEXPANSION:
@@ -67,9 +68,11 @@ compare: $(BUILD)/OC/podoc
 	tools/compare $(BUILD)/OC/podoc $(BUILD)/compare $(COMPARE_FORMATS)
 
 test-o2: $(TESTS:%=$(BUILD)/O2/test/%.passed) $(BUILD)/O2/cases.passed \
-  $(BUILD)/O2/roundtrip.passed $(BUILD)/O2/images.passed
+  $(BUILD)/O2/roundtrip.passed $(BUILD)/O2/images.passed \
+  $(BUILD)/O2/mermaid.passed
 test-oc: $(TESTS:%=$(BUILD)/OC/test/%.passed) $(BUILD)/OC/cases.passed \
-  $(BUILD)/OC/roundtrip.passed $(BUILD)/OC/images.passed
+  $(BUILD)/OC/roundtrip.passed $(BUILD)/OC/images.passed \
+  $(BUILD)/OC/mermaid.passed
 
 # $* is <model>/test/<Test>. A test is built from the sources, in its own
 # directory.
@@ -92,6 +95,11 @@ $(BUILD)/%/cases.passed: $(BUILD)/%/podoc $(CASES) tools/runcases
 # images: --extract-media and ms's PDFs (tools/runimages)
 $(BUILD)/%/images.passed: $(BUILD)/%/podoc $(IMAGES) tools/runimages
 	tools/runimages $(BUILD)/$*/podoc $(BUILD)/$*/images
+	touch $@
+
+# mermaid diagrams drawn with a stand-in pomermaid (tools/runmermaid)
+$(BUILD)/%/mermaid.passed: $(BUILD)/%/podoc $(MERMAID) tools/runmermaid
+	tools/runmermaid $(BUILD)/$*/podoc $(BUILD)/$*/mermaid
 	touch $@
 
 # the markdown writer's round trip (tools/roundtrip)

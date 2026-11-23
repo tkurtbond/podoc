@@ -841,8 +841,9 @@ END CheckWriter;
 (* Checks the filters, by their file names: podoc runs built-in code
    in place of the user's filters (pandoc-include, given with --filter;
    subs.lua, strip-comments.lua, general.lua, toc-columns.lua and
-   combine-docs.lua, given with --lua-filter), ignores
-   pandoc-mermaid-selenium-filter with a warning (decision 4), and ends
+   combine-docs.lua, given with --lua-filter), runs PdMermaid in place
+   of pandoc-mermaid-selenium-filter or pomermaid, given with --filter
+   (decision 48), and ends
    with pandoc's message and status for a failed filter, 83, at any
    other, or at one of these given with the other option. The filters
    left in filters are those podoc runs. *)
@@ -853,19 +854,19 @@ BEGIN
   WHILE f # NIL DO
     next := f.next; f.next := NIL;
     FileName(f.name^, n);
-    IF n = "pandoc-mermaid-selenium-filter" THEN
-      COPY("[WARNING] podoc ignores the filter ", m); Append(f.name^, m);
-      PdIO.Message(m)
-    ELSIF (n = "pandoc-include") & (f.kind = JsonFilter)
+    IF ((n = "pandoc-include") OR (n = "pandoc-mermaid-selenium-filter")
+        OR (n = "pomermaid")) & (f.kind = JsonFilter)
        OR ((n = "subs.lua") OR (n = "strip-comments.lua")
            OR (n = "general.lua") OR (n = "toc-columns.lua")
            OR (n = "combine-docs.lua")) & (f.kind = LuaFilter) THEN
       IF filters = NIL THEN filters := f ELSE lastFilter.next := f END;
       lastFilter := f
-    ELSIF n = "pandoc-include" THEN (* given to --lua-filter *)
+    ELSIF (n = "pandoc-include") OR (n = "pandoc-mermaid-selenium-filter")
+       OR (n = "pomermaid") THEN (* given to --lua-filter *)
       COPY("Error running filter '", m); Append(f.name^, m); Append("':", m);
       PdIO.Message(m);
-      PdIO.Fail("cannot open pandoc-include", "No such file or directory", PdIO.FilterError)
+      COPY("cannot open ", m); Append(n, m);
+      PdIO.Fail(m, "No such file or directory", PdIO.FilterError)
     ELSIF (n = "subs.lua") OR (n = "strip-comments.lua")
        OR (n = "general.lua") OR (n = "toc-columns.lua")
        OR (n = "combine-docs.lua") THEN (* given to --filter *)
