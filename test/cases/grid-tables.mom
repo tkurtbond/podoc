@@ -4,19 +4,24 @@
 delim(@@) tab(	);
 lw(15.6n) lw(15.6n) lw(20.4n).
 T{
+.PP
 Fruit
 T}	T{
+.PP
 Price
 T}	T{
+.PP
 Advantages
 T}
 _
 .TH
 T{
 .nr LL 15.6n
+.PP
 Bananas
 T}	T{
 .nr LL 15.6n
+.PP
 $1.34
 T}	T{
 .nr LL 20.4n
@@ -29,9 +34,11 @@ bright color
 T}
 T{
 .nr LL 15.6n
+.PP
 Oranges
 T}	T{
 .nr LL 15.6n
+.PP
 $2.10
 T}	T{
 .nr LL 20.4n
@@ -424,6 +431,7 @@ b 2
 .LIST OFF
 T}	T{
 .nr LL 12.6n
+.PP
 c c 2 c 2
 T}
 .TE

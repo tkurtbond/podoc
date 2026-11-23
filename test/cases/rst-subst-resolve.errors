@@ -1,0 +1,4 @@
+podoc: [WARNING] Reference not found for '"missing"' at rst-subst-resolve.rst line 12 column 1
+podoc: [WARNING] Reference not found for '"un"' at rst-subst-resolve.rst line 12 column 1
+podoc: [WARNING] Reference not found for '"nosub"' at rst-subst-resolve.rst line 12 column 1
+podoc: [WARNING] Circular reference 'a' at rst-subst-resolve.rst line 12 column 1

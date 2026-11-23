@@ -6,18 +6,23 @@ Sample grid table.
 delim(@@) tab(	);
 lw(15.6n) lw(15.6n) lw(20.4n).
 T{
+.LP
 Fruit
 T}	T{
+.PP
 Price
 T}	T{
+.PP
 Advantages
 T}
 _
 T{
 .nr LL 15.6n
+.PP
 Bananas
 T}	T{
 .nr LL 15.6n
+.PP
 $1.34
 T}	T{
 .nr LL 20.4n
@@ -28,9 +33,11 @@ bright color
 T}
 T{
 .nr LL 15.6n
+.LP
 Oranges
 T}	T{
 .nr LL 15.6n
+.PP
 $2.10
 T}	T{
 .nr LL 20.4n
@@ -431,6 +438,7 @@ b 2
 b 2
 T}	T{
 .nr LL 12.6n
+.LP
 c c 2 c 2
 T}
 .TE

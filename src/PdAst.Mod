@@ -727,7 +727,7 @@ END Mergeable;
    spaces or breaks one (the stronger), and two emphases of one kind
    one, their contents joined likewise. *)
 PROCEDURE Append*(VAR l: Inlines; i: Inline);
-  VAR x, rest: Inline; c: Inlines;
+  VAR x, y, rest: Inline;
 BEGIN
   IF i = NIL THEN RETURN END;
   IF l.last = NIL THEN AddInline(l, i); RETURN END;
@@ -743,10 +743,13 @@ BEGIN
   ELSIF (x.kind = Str) & (i.kind = Str) THEN
     x(StrInl).text := Ropes.Cat(x(StrInl).text, i(StrInl).text)
   ELSIF (x.kind = i.kind) & Mergeable(x.kind) THEN
-    c.first := x(ContInl).content; c.last := NIL;
-    IF c.first # NIL THEN c.last := LastInline(c.first) END;
-    Append(c, i(ContInl).content);
-    x(ContInl).content := c.first
+    (* the contents are concatenated as lists, not melded: pandoc-types'
+       Emph i1 <> Emph i2 is Emph (i1 ++ i2) *)
+    IF x(ContInl).content = NIL THEN
+      x(ContInl).content := i(ContInl).content
+    ELSE
+      y := LastInline(x(ContInl).content); y.next := i(ContInl).content
+    END
   ELSE
     AddInline(l, i); RETURN
   END;

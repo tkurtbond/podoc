@@ -303,6 +303,10 @@ END SpecialAt;
 PROCEDURE CanPrecedeOpener(r: Utf8.Rune): BOOLEAN;
   VAR c: INTEGER;
 BEGIN
+  IF (r = ORD(":")) OR (r = ORD("/")) OR (r = 27H) OR (r = 22H)
+      OR (r = ORD("<")) THEN
+    RETURN TRUE
+  END;
   c := Unicode.Category(r);
   RETURN (c = Unicode.Ps) OR (c = Unicode.Pi) OR (c = Unicode.Pf)
     OR (c = Unicode.Pd) OR (c = Unicode.So)
@@ -603,7 +607,7 @@ PROCEDURE Enclosed(open: ARRAY OF CHAR; kind: INTEGER; VAR l: A.Inlines): BOOLEA
 BEGIN
   IF ~B.Looking(B.pos, open) OR ~MI.NotAfterString() THEN RETURN FALSE END;
   B.pos := B.pos + LEN(open) - 1;
-  IF B.IsWhite(B.C(B.pos)) THEN RETURN FALSE END;
+  IF B.IsWhite(B.C(B.pos)) OR B.Looking(B.pos, open) THEN RETURN FALSE END;
   A.InitInlines(c);
   IF ~InlineContent(c) THEN RETURN FALSE END;
   LOOP
@@ -1005,6 +1009,35 @@ BEGIN
   RETURN TRUE
 END InterpretedRole;
 
+(* quotedSymbol: a start-string between an opening character and the
+   matching closing character, as in "(", "*", ")", is not inline markup *)
+PROCEDURE QuotedSymbol(VAR l: A.Inlines): BOOLEAN;
+  VAR p, n: LONGINT; ch, c2: CHAR; close: ARRAY 4 OF CHAR;
+BEGIN
+  p := B.pos; ch := B.C(p); n := 1; close[1] := 0X;
+  CASE ch OF
+  | "(": close[0] := ")"
+  | "[": close[0] := "]"
+  | "{": close[0] := "}"
+  | "<": close[0] := ">"
+  | 22X, 27X: close[0] := ch
+  | 0E2X:
+      IF (B.C(p + 1) = 80X) & (B.C(p + 2) = 98X) THEN
+        n := 3; close[0] := 0E2X; close[1] := 80X; close[2] := 99X; close[3] := 0X
+      ELSIF (B.C(p + 1) = 80X) & (B.C(p + 2) = 9CX) THEN
+        n := 3; close[0] := 0E2X; close[1] := 80X; close[2] := 9DX; close[3] := 0X
+      ELSE RETURN FALSE
+      END
+  ELSE RETURN FALSE
+  END;
+  c2 := B.C(p + n);
+  IF (c2 # "*") & (c2 # "`") & (c2 # "|") THEN RETURN FALSE END;
+  IF ~B.Looking(p + n + 1, close) THEN RETURN FALSE END;
+  MI.AddText(l, p, p + n + 1 + n);
+  B.pos := p + n + 1 + n;
+  RETURN TRUE
+END QuotedSymbol;
+
 (* inline: one inline at B.pos, appended to l; FALSE if there is none *)
 PROCEDURE Inline*(VAR l: A.Inlines): BOOLEAN;
   VAR ch: CHAR; m: Mark; ok: BOOLEAN;
@@ -1012,6 +1045,7 @@ BEGIN
   IF B.pos >= B.len THEN RETURN FALSE END;
   ch := B.C(B.pos); Save(m); ok := FALSE;
   IF (ch = " ") OR (ch = 09X) OR (ch = "[") THEN ok := Note(l) END;
+  IF ~ok THEN Restore(m); ok := QuotedSymbol(l) END;
   IF ~ok & MI.NotAfterString() THEN
     Restore(m);
     IF ch = "`" THEN

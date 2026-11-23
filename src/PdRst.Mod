@@ -14,6 +14,10 @@ CONST
   Quiet* = 0; WarnUnknown* = 1; FailUnknown* = 2; (* unknown *)
 
 TYPE
+  (* resolveReferences' seen: a key being resolved *)
+  Seen = POINTER TO SeenDesc;
+  SeenDesc = RECORD key: A.Rope; next: Seen END;
+
   Style = RECORD c: CHAR; double: BOOLEAN END;
   Note = POINTER TO NoteDesc;
   NoteDesc = RECORD
@@ -90,6 +94,7 @@ VAR
   citations: Note; (* stateCitations, unsorted until CitationsDiv *)
   citeTab: CiteTab; (* the citations by ref, or NIL for none *)
   substs: SubstTab; (* stateSubstitutions, or NIL for none *)
+  seen: Seen; (* the substitutions being resolved, innermost first *)
   incs: Inc; (* the files being included, the innermost first *)
 
 PROCEDURE^ Block(VAR l: A.Blocks): BOOLEAN;
@@ -264,23 +269,31 @@ END PutLFs;
 
 (* indentedBlock at p: its text in b; the position after it, or -1 *)
 PROCEDURE IndentedBlock(p: LONGINT; VAR b: B.Buf): LONGINT;
-  VAR n, q, r, e, cnt, lines: LONGINT;
+  VAR q, r, e, cnt, lines, min, start, pass: LONGINT;
 BEGIN
-  n := 0; q := p;
-  WHILE B.IsSpace(B.C(q)) DO INC(q); INC(n) END;
-  IF n = 0 THEN RETURN -1 END;
-  B.InitBuf(b); lines := 0;
-  LOOP
-    q := p;
-    r := B.BlankLines(q);
-    IF r >= 0 THEN q := r END;
-    IF ~B.IsSpace(B.C(q)) THEN EXIT END;
-    r := B.GobbleAtMost(q, n, cnt);
-    e := B.AnyLine(r);
-    IF e < 0 THEN EXIT END;
-    PutLFs(b, p, q);
-    B.Put(b, r, e - 1); B.PutChar(b, 0AX);
-    p := e; INC(lines)
+  IF ~B.IsSpace(B.C(p)) THEN RETURN -1 END;
+  (* pandoc 3.14 (#12071): each line loses the indentation of the least
+     indented one, so pass 0 finds that, and pass 1 makes the text *)
+  start := p; min := MAX(LONGINT);
+  FOR pass := 0 TO 1 DO
+    p := start; B.InitBuf(b); lines := 0;
+    LOOP
+      q := p;
+      r := B.BlankLines(q);
+      IF r >= 0 THEN q := r END;
+      IF ~B.IsSpace(B.C(q)) THEN EXIT END;
+      r := B.GobbleAtMost(q, MAX(LONGINT), cnt);
+      e := B.AnyLine(r);
+      IF e < 0 THEN EXIT END;
+      IF pass = 0 THEN
+        IF cnt < min THEN min := cnt END
+      ELSE
+        PutLFs(b, p, q);
+        WHILE cnt > min DO B.PutChar(b, " "); DEC(cnt) END;
+        B.Put(b, r, e - 1); B.PutChar(b, 0AX)
+      END;
+      p := e; INC(lines)
+    END
   END;
   IF lines = 0 THEN RETURN -1 END;
   RETURN B.SkipBlankLines(p)
@@ -1031,6 +1044,12 @@ BEGIN
   END;
   r := IndentedBlock(q, c);
   IF r >= 0 THEN PutBuf(b, c); q := r END;
+  (* As in pandoc, an option with no description, on its line or
+     indented below it, is not an option list item: "-clash" alone is
+     a paragraph *)
+  r := 0;
+  WHILE (r < b.len) & B.IsSpace(b.t[r]) OR (r < b.len) & (b.t[r] = 0AX) DO INC(r) END;
+  IF r = b.len THEN RETURN FALSE END;
   B.PutChar(b, 0AX); B.PutChar(b, 0AX);
   B.pos := B.SkipBlankLines(q);
   NEW(item); item.next := NIL;
@@ -1135,7 +1154,8 @@ BEGIN
   IF B.C(B.pos) = 0AX THEN q := B.BlankLines(B.pos + 1) END;
   IF q >= 0 THEN
     B.pos := q;
-    last := A.LastInline(inl);
+    last := NIL;
+    IF inl # NIL THEN last := A.LastInline(inl) END;  (* "\ " alone: none *)
     IF (last # NIL) & (last.kind = A.Str) & EndsColons(last(A.StrInl).text) THEN
       last(A.StrInl).text := Ropes.Substring(last(A.StrInl).text, 0,
         Ropes.Length(last(A.StrInl).text) - 1);
@@ -1934,7 +1954,8 @@ PROCEDURE CodeDirective(VAR d: Directive): A.Block;
   VAR a: A.Attr; nl: A.Rope;
 BEGIN
   a := A.NewAttr(Trim(FieldVal(d, "name")));
-  A.AddClass(a, Trim(BufR(d.top)));
+  nl := Trim(BufR(d.top));
+  IF Ropes.Length(nl) > 0 THEN A.AddClass(a, nl) END;
   nl := FieldVal(d, "number-lines");
   IF HasField(d, "number-lines") THEN A.AddClass(a, A.S("numberLines")) END;
   AddWords(a, Trim(FieldVal(d, "class")));
@@ -2194,7 +2215,8 @@ BEGIN
   END;
   IF literal THEN
     a := A.NewAttr(TrimR(FieldVal(d, "name")));
-    A.AddClass(a, TrimR(lang));
+    lang := TrimR(lang);
+    IF (lang # NIL) & (Ropes.Length(lang) > 0) THEN A.AddClass(a, lang) END;
     IF HasField(d, "number-lines") THEN A.AddClass(a, A.S("numberLines")) END;
     AddWords(a, FieldVal(d, "class"));
     fl := d.fields;
@@ -2417,16 +2439,6 @@ BEGIN
   RETURN x / b
 END Ratio;
 
-(* The cell blocks b, a lone Para made Plain (plainify) *)
-PROCEDURE Plainify(b: A.Block): A.Block;
-BEGIN
-  IF (b # NIL) & (b.next = NIL) & (b IS A.InlinesBlk)
-      & (b(A.InlinesBlk).kind = A.Para) THEN
-    b := A.NewInlinesBlock(A.Plain, b(A.InlinesBlk).inlines)
-  END;
-  RETURN b
-END Plainify;
-
 (* The rows of t, from row from to row to-1, in order *)
 PROCEDURE GridRows(VAR t: G.Table; from, to: LONGINT): A.Row;
   VAR first, last, r: A.Row; c, clast: A.Cell; x: G.Cell; i, j: LONGINT;
@@ -2438,7 +2450,7 @@ BEGIN
       x := t.cells[i * t.cols + j];
       IF x # NIL THEN
         c := SH.EmptyCell(); c.rowSpan := x.rowSpan; c.colSpan := x.colSpan;
-        c.blocks := Plainify(BlocksOf(x.text));
+        c.blocks := BlocksOf(x.text);
         IF clast = NIL THEN r.cells := c ELSE clast.next := c END;
         clast := c
       END
@@ -2493,6 +2505,7 @@ BEGIN
   SH.PlaceRows(t.head.rows, g.cols);
   SH.PlaceRows(tb.body, g.cols);
   SH.PlaceRows(t.foot.rows, g.cols);
+  SH.PlainifyTable(t);
   q := B.BlankLines(B.pos); IF q >= 0 THEN B.pos := q END;
   A.AddBlock(l, t);
   RETURN TRUE
@@ -2659,7 +2672,7 @@ BEGIN
   NEW(blk, first.n);
   FOR j := 0 TO first.n - 1 DO
     RI.TrimBuf(bufs[j]); B.PutChar(bufs[j], 0AX); B.PutChar(bufs[j], 0AX);
-    blk[j] := Plainify(BlocksOf(bufs[j]))
+    blk[j] := BlocksOf(bufs[j])
   END;
   row := NewRow(first, blk^);
   RETURN q
@@ -2700,6 +2713,8 @@ BEGIN
     rlast := row; q := k
   END;
   IF tb.body = NIL THEN RETURN FALSE END;
+  (* As in pandoc, the body cells are plainified together *)
+  SH.PlainifyRows(tb.body);
   k := SimpleFooter(q);
   IF k < 0 THEN RETURN FALSE END;
   B.pos := k;
@@ -2958,7 +2973,7 @@ PROCEDURE ParseCsv(VAR b: B.Buf; VAR o: CsvOpts; VAR first, last: A.Row);
   PROCEDURE Add(VAR t: B.Buf; VAR last: A.Cell);
   BEGIN
     RI.TrimBuf(t); B.PutChar(t, 0AX); B.PutChar(t, 0AX);
-    AddCellTo(row, last, Plainify(BlocksOf(t)))
+    AddCellTo(row, last, BlocksOf(t))
   END Add;
 
   (* pCSVRow: FALSE if it fails without taking any text *)
@@ -3060,6 +3075,8 @@ BEGIN
     ParseCsv(b2, def, first, last)
   END;
   ParseCsv(b, o, first, last);
+  (* As in pandoc, all the cells, header included, plainified together *)
+  SH.PlainifyRows(first);
   RowsTable(d, first, h, l)
 END CsvTableDirective;
 
@@ -3250,7 +3267,10 @@ BEGIN
     RETURN b
   END;
   sb := FindSubst(ref);
-  IF sb = NIL THEN RETURN b END;
+  IF sb = NIL THEN
+    (* pandoc 3.14: the text of the substitution, unlinked *)
+    RETURN A.NewInlinesBlock(A.Para, i(A.LinkInl).content)
+  END;
   bl := sb.blocks;
   IF (bl # NIL) & (bl.next = NIL) THEN RETURN CopyBlock(bl) END;
   RETURN A.NewDiv(A.NewAttr(NIL), bl)
@@ -3259,7 +3279,7 @@ END Block;
 PROCEDURE (w: RefWalker) Inline*(i: A.Inline): A.Inline;
   VAR l: A.LinkInl; ref, key: A.Rope; k: RI.Key; n, prev: Note; nl: A.LinkInl;
     saved: NoteTab; b: LONGINT; c: CHAR; sb: Subst; bl: A.Block; il: A.Inlines;
-    pn: Pending;
+    pn: Pending; sn: Seen; m: Message;
 BEGIN
   IF ~(i IS A.LinkInl) OR (i.kind # A.Link) THEN RETURN i END;
   l := i(A.LinkInl);
@@ -3307,12 +3327,25 @@ BEGIN
     END;
     RETURN i
   ELSIF Prefix(l.url, "##SUBST##", ref) THEN
+    key := RI.RopeKey(Ropes.Substring(ref, 1, Ropes.Length(ref) - 2));
+    sn := seen;
+    WHILE (sn # NIL) & ~Ropes.Equal(sn.key, key) DO sn := sn.next END;
+    IF sn # NIL THEN
+      m := "Circular reference '"; CatRope(m, key); Cat(m, "'");
+      WarnAtEnd(m);
+      RETURN A.NewSpan(A.NewAttr(NIL), l.content)
+    END;
     sb := FindSubst(ref);
-    IF sb = NIL THEN RETURN i END;
+    IF sb = NIL THEN RETURN A.NewSpan(A.NewAttr(NIL), l.content) END;
     bl := sb.blocks;
     IF (bl # NIL) & (bl.next = NIL) & (bl.kind = A.Para) THEN
       i := A.CopyInlines(bl(A.InlinesBlk).inlines);
-      IF (i # NIL) & (i.next = NIL) THEN RETURN i END;
+      IF (i # NIL) & (i.next = NIL) THEN
+        (* pandoc 3.14 resolves the result again, as in |a| for |b| *)
+        NEW(sn); sn.key := key; sn.next := seen; seen := sn;
+        i := w.Inline(i); seen := sn.next;
+        RETURN i
+      END;
       RETURN A.NewSpan(A.NewAttr(NIL), i)
     END;
     A.InitInlines(il); SH.BlocksToInlines(il, bl);

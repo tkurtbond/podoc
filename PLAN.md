@@ -2638,9 +2638,9 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   markdown round trip gives the same JSON as pandoc's own round trip on
   all of them; neither is exact (pipe tables' default alignments
   become left, column widths change). pandoc's markdown reader never
-  gives a table whose writer output is a pipe table (a lone Para in a
-  grid cell becomes Plain, `plainify`; other tables' cells are
-  Plain), so `PipeTable` is unreachable from podoc's input; it was
+  gives a table whose writer output is a pipe table (a grid table's
+  lone Paras become Plain, `plainify`, when every cell is empty or a
+  lone Para (see 2026-11-23); other tables' cells are Plain), so `PipeTable` is unreachable from podoc's input; it was
   checked with a scratch build without `plainify`, against
   `pandoc -f json` on that build's JSON: alignments, a caption, `\|`
   in a cell, a headless table, dashes from relative widths past 72
@@ -3593,3 +3593,61 @@ Each subphase passes `make test` under `-O2` and `-OC`.
   test` passes under `-O2` and `-OC` on atla and the six BSD VMs
   (352 case tests, the round trips, the unit tests; on the VMs the
   image tests that need converters skipped).
+- 2026-11-23: Three reader differences from pandoc fixed, found by
+  building the user's repositories' PDFs with podoc and with pandoc
+  and comparing their ms sources (the user's request).
+  - Plainify is all or nothing, as in pandoc: a lone Para in a cell
+    becomes Plain only when every cell is empty or a lone Para. Grid
+    tables (markdown and rST) decide over the whole table, head,
+    bodies and foot (`PdShared.PlainifyTable`); rST CSV tables over
+    every row, the header included; rST simple tables over the body
+    rows, whose head cells are always Plain (`PdShared.PlainifyRows`).
+    podoc had decided cell by cell.
+  - rST option lists: an option with no description, neither on its
+    line after two spaces nor indented on the next line, is not an
+    option list item, so `-clash`, `-1D` and `-end-` alone are
+    paragraphs, as in pandoc.
+  - rST: a paragraph that is only `\ ` (empty inlines) no longer
+    halts podoc with a NIL dereference in `PdRst.Para`.
+  - The cases `grid-tables` and `rst-grid-tables` and
+    `rst-simple-tables` had expected podoc's per-cell rule; they now
+    hold pandoc 3.14's output. New cases `rst-table-plainify` and
+    `rst-option-desc` (pandoc's JSON). The user's 674 markdown and
+    rST files: 10 more give pandoc's JSON (637 of 665 that pandoc
+    reads), none fewer. `make test` passed under `-O2` and `-OC` on
+    atla (355 case tests, 23 round trips, 10 image tests).
+- 2026-11-23: The rest of the rST reader differences from pandoc
+  fixed by porting pandoc 3.14's changes to `Readers/RST.hs` (podoc
+  had followed 3.10's source; 3.14 is the installed pandoc).
+  - canPrecedeOpener also takes `: / ' " <`, so markup may start
+    after them: `<ben@example.org>`, `"ben@..."`, `x/http://...`
+    autolink, `file:`a/b`` is Str and Code, `*a*/*b*` two Emphs,
+    `S'mon__` an anonymous link (`PdRstInline.CanPrecedeOpener`).
+  - quotedSymbol: a `*`, `` ` `` or `|` between an opener and its
+    closer, as in `(*)` or `“*”`, is text (`PdRstInline.QuotedSymbol`).
+  - many1Till's notFollowedBy' end: emphasis and strong content may
+    not start with the closer, so `****` and `**a*` are text
+    (`PdRstInline.Enclosed`).
+  - pandoc-types' `Emph a <> Emph b` is `Emph (a ++ b)`: `A.Append`
+    now concatenates the contents of adjacent mergeable inlines
+    instead of melding them, so `*my **axe**!*` gives Str "my",
+    Str "axe", Str "!" as pandoc does, not Str "myaxe!".
+  - An unresolved substitution is a Span of its text inline and the
+    bare text as a paragraph, not a `##SUBST##` link; a substitution
+    whose text is one inline is resolved again (`|y|` for `|x|` for
+    `foo_`), with "Circular reference" for a loop.
+  - The code directives give no class for an empty language (pandoc
+    had `[""]`).
+  - indentedBlock strips the least indentation of its lines, not the
+    first line's (pandoc #12071): definitions, block quotes and code
+    keep their relative indentation.
+  - The cases `rst-directives`, `rst-directives2`, `rst-include`,
+    `rst-literal-lists`, `rst-subst-show`, `rst-verbose` and
+    `rst-unknown-warn` updated (pandoc 3.14's JSON; podoc's for the
+    last, whose option pandoc lacks). New cases `rst-start-strings`,
+    `rst-subst-resolve` and `rst-indented-min` (pandoc's JSON). The
+    user's 674 files: 661 give pandoc's JSON (up from 637), none
+    fewer. The 4 left: 3 are links in rST notes, which podoc resolves
+    and pandoc leaves as `##REF##` (decision 25), and one is markdown.
+    `make test` passed under `-O2` and `-OC` (358 case tests, 23
+    round trips, 10 image tests).

@@ -3,16 +3,26 @@
 \startxtablehead[head]
 \startxrowgroup[lastrow]
 \startxrow
-\startxcell[width={0.22\textwidth}] Fruit \stopxcell
-\startxcell[width={0.22\textwidth}] Price \stopxcell
-\startxcell[width={0.29\textwidth}] Advantages \stopxcell
+\startxcell[width={0.22\textwidth}] Fruit
+
+ \stopxcell
+\startxcell[width={0.22\textwidth}] Price
+
+ \stopxcell
+\startxcell[width={0.29\textwidth}] Advantages
+
+ \stopxcell
 \stopxrow
 \stopxrowgroup
 \stopxtablehead
 \startxtablebody[body]
 \startxrow
-\startxcell[width={0.22\textwidth}] Bananas \stopxcell
-\startxcell[width={0.22\textwidth}] \$1.34 \stopxcell
+\startxcell[width={0.22\textwidth}] Bananas
+
+ \stopxcell
+\startxcell[width={0.22\textwidth}] \$1.34
+
+ \stopxcell
 \startxcell[width={0.29\textwidth}] \startitemize[packed]
 \item
   built-in wrapper
@@ -24,8 +34,12 @@
 \stopxrow
 \startxrowgroup[lastrow]
 \startxrow
-\startxcell[width={0.22\textwidth}] Oranges \stopxcell
-\startxcell[width={0.22\textwidth}] \$2.10 \stopxcell
+\startxcell[width={0.22\textwidth}] Oranges
+
+ \stopxcell
+\startxcell[width={0.22\textwidth}] \$2.10
+
+ \stopxcell
 \startxcell[width={0.29\textwidth}] \startitemize[packed]
 \item
   cures scurvy
@@ -382,7 +396,9 @@ r1 bis
 \stopitemize
 
  \stopxcell
-\startxcell[width={0.18\textwidth}] c c 2 c 2 \stopxcell
+\startxcell[width={0.18\textwidth}] c c 2 c 2
+
+ \stopxcell
 \stopxrow
 \stopxrowgroup
 \stopxtablebody

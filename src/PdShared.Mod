@@ -747,6 +747,61 @@ BEGIN
   RETURN c
 END EmptyCell;
 
+(* Whether every cell in the rows r is empty or a lone Para *)
+PROCEDURE SimpleRows(r: A.Row): BOOLEAN;
+  VAR c: A.Cell;
+BEGIN
+  WHILE r # NIL DO
+    c := r.cells;
+    WHILE c # NIL DO
+      IF (c.blocks # NIL)
+          & ((c.blocks.next # NIL) OR (c.blocks.kind # A.Para)) THEN
+        RETURN FALSE
+      END;
+      c := c.next
+    END;
+    r := r.next
+  END;
+  RETURN TRUE
+END SimpleRows;
+
+PROCEDURE PlainRows(r: A.Row);
+  VAR c: A.Cell;
+BEGIN
+  WHILE r # NIL DO
+    c := r.cells;
+    WHILE c # NIL DO
+      IF c.blocks # NIL THEN c.blocks.kind := A.Plain END;
+      c := c.next
+    END;
+    r := r.next
+  END
+END PlainRows;
+
+(* The rows r plainified together: if every cell is empty or a lone
+   Para, each Para becomes Plain; otherwise none is changed *)
+PROCEDURE PlainifyRows*(r: A.Row);
+BEGIN
+  IF SimpleRows(r) THEN PlainRows(r) END
+END PlainifyRows;
+
+(* A grid table's plainify (pandoc's gridTableWith'): if every cell of
+   t, in its head, bodies and foot, is empty or a lone Para, each Para
+   becomes Plain; otherwise every cell is left as it is. *)
+PROCEDURE PlainifyTable*(t: A.TableBlk);
+  VAR tb: A.TableBody;
+BEGIN
+  IF ~SimpleRows(t.head.rows) OR ~SimpleRows(t.foot.rows) THEN RETURN END;
+  tb := t.bodies;
+  WHILE tb # NIL DO
+    IF ~SimpleRows(tb.head) OR ~SimpleRows(tb.body) THEN RETURN END;
+    tb := tb.next
+  END;
+  PlainRows(t.head.rows); PlainRows(t.foot.rows);
+  tb := t.bodies;
+  WHILE tb # NIL DO PlainRows(tb.head); PlainRows(tb.body); tb := tb.next END
+END PlainifyTable;
+
 (* normalizeHeaderSection width: the rows r, in order, clipped
    (clipRows) and placed on a grid width columns wide
    (placeRowSection), as pandoc's table builder does *)

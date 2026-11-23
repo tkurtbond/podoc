@@ -1993,7 +1993,6 @@ END PipeTable;
 (* The rows of t, from row from to row to-1, in order *)
 PROCEDURE GridRows(VAR t: G.Table; from, to: LONGINT): A.Row;
   VAR first, last, r: A.Row; c, clast: A.Cell; x: G.Cell; i, j: LONGINT;
-    b: A.Block;
 BEGIN
   first := NIL; last := NIL;
   FOR i := from TO to - 1 DO
@@ -2002,13 +2001,7 @@ BEGIN
       x := t.cells[i * t.cols + j];
       IF x # NIL THEN
         c := SH.EmptyCell(); c.rowSpan := x.rowSpan; c.colSpan := x.colSpan;
-        b := MetaBlocksOf(x.text);
-        (* plainify *)
-        IF (b # NIL) & (b.next = NIL) & (b IS A.InlinesBlk)
-            & (b(A.InlinesBlk).kind = A.Para) THEN
-          b := A.NewInlinesBlock(A.Plain, b(A.InlinesBlk).inlines)
-        END;
-        c.blocks := b;
+        c.blocks := MetaBlocksOf(x.text);
         IF clast = NIL THEN r.cells := c ELSE clast.next := c END;
         clast := c
       END
@@ -2082,6 +2075,7 @@ BEGIN
   SH.PlaceRows(t.head.rows, g.cols);
   SH.PlaceRows(tb.body, g.cols);
   SH.PlaceRows(t.foot.rows, g.cols);
+  SH.PlainifyTable(t);
   RETURN q
 END GridTable;
 
