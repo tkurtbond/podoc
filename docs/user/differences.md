@@ -56,7 +56,11 @@ the rest have not yet been.
   browser: pic for ms and mom, MetaPost for ConTeXt, and for the
   other formats `mermaid-images/<sha1>.svg` where the Python filter
   writes `.png`. A diagram that cannot be drawn stays a code block,
-  with a warning. Any other filter ends podoc with status 83.
+  with a warning. Each diagram's settings (`size`, `subgraphs`,
+  `width`, `font`) come from its attributes or from podoc's own
+  metadata, `mermaid`, which the Python filter does not read; an SVG
+  drawn with settings has their SHA-1 in its name too. Any other
+  filter ends podoc with status 83.
 - A `--wrap` value other than `auto`, `none` or `preserve` gives
   pandoc's message and status, 6.
 - `--syntax-highlighting` and `--highlight-style` are not taken.

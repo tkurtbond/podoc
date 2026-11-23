@@ -83,6 +83,11 @@ run missing "$bin" doc.md -t ms -F pomermaid
 run missing-svg "$bin" doc.md -t html -F pomermaid
 run no-filter "$stub:$bin" doc.md -t ms
 run lua-filter "$stub:$bin" doc.md -t ms --lua-filter pomermaid
+run settings-ms "$stub:$bin" settings.md -t ms -F pomermaid
+run settings-context "$stub:$bin" settings.md -t context -F pomermaid
+run settings-html "$stub:$bin" settings.md -t html -F pomermaid
+run settings-vars "$stub:$bin" doc.md -t context -F pomermaid -V mermaid-size=6 \
+  -V mermaid-width=0 -V mermaid-subgraphs=side
 
 echo "$((total - failed)) of $total mermaid tests passed"
 [ $failed -eq 0 ]

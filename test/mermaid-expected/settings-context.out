@@ -1,0 +1,33 @@
+== settings.md -t context -F pomermaid
+\start\switchtobodyfont[8pt]
+% pomermaid stub: --size 8 --subgraphs side: flowchart TD
+\startMPcode
+draw fullcircle;
+\stopMPcode
+\par\stop
+
+\start\switchtobodyfont[7pt]
+% pomermaid stub: --size 7 --subgraphs stack --width 4i: flowchart LR
+\startMPcode
+draw fullcircle;
+\stopMPcode
+\par\stop
+
+\start\switchtobodyfont[9pt]
+% pomermaid stub: --size 9 --subgraphs side: graph TD
+\startMPcode
+draw fullcircle;
+\stopMPcode
+\par\stop
+
+\start\switchtobodyfont[8pt]
+% pomermaid stub: --size 8 --subgraphs side: graph LR
+\startMPcode
+draw fullcircle;
+\stopMPcode
+\par\stop
+== warnings
+podoc: [WARNING] podoc ignores mermaid size 'huge': it is not a number of points
+podoc: [WARNING] podoc ignores mermaid subgraphs 'up': it is not stack or side
+status 0
+== files

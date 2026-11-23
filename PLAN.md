@@ -432,6 +432,32 @@ Made by the user on 2026-11-20, on the questions of §15.
     dropped); a value that is not a groff family or a number of
     points is warned about and the default used. ConTeXt gets
     pomermaid's own fonts.
+52. **Each diagram's settings** (2026-11-23). The user asked for a
+    layout that does not stack subgraphs and a way to make diagrams
+    smaller in ConTeXt and groff, then for a way to give pomermaid
+    options for particular diagrams in YAML metadata, a block or a
+    file; the user accepted this design. A diagram is named by its
+    block's identifier. Its settings `size`, `subgraphs`, `width` and
+    `font` come from, first to last: the block's attributes (not
+    `width`, which stays the image's width in HTML, as with the
+    Python filter); `mermaid.diagrams.<id>` in the metadata; the
+    variables `mermaid-size` and so on, or metadata fields of those
+    names; the metadata map `mermaid`; then decision 51's. They are
+    pomermaid's `--size`, `--subgraphs` (stack or side, pomermaid's
+    decision 71; pomermaid's default, stack, is kept), `--width` and,
+    for ms and mom only, `--font`. A value podoc cannot use is warned
+    about and the next place looked at.
+53. **ConTeXt sizes** (2026-11-23). With a size, the ConTeXt raw
+    block is wrapped in `\start\switchtobodyfont[<size>pt]` ...
+    `\par\stop`: pomermaid's MetaPost takes its em from the body
+    font, so this scales the text, boxes and spacing (seen in a PDF).
+    `--size` is passed too.
+54. **SVG names with settings** (2026-11-23). An SVG drawn with
+    settings is named by the SHA-1 of its text, a new line and its
+    options (` --size 7 --subgraphs side`), so that changed settings
+    make a new file; without settings the name is decision 49's. The
+    attributes `size`, `subgraphs` and `font` are not copied to the
+    image.
     - It does not imitate pandoc's skylighting markup (a `<span>`
       per token, numbered lines, colour).
 
@@ -3719,3 +3745,19 @@ podoc runs pomermaid on `mermaid` code blocks, in `PdMermaid`.
   and `-OC` on alerik, rackhir, artos, yishana, jherek and cymoril,
   16 of 16 mermaid tests on each, after `tools/runmermaid` linked
   `printf`, which OpenBSD's `sh` does not build in.
+- 2026-11-23, decisions 52 to 54: each diagram's settings. PdMermaid
+  looks up `size`, `subgraphs`, `width` and `font` per diagram
+  (`Lookup`, `Get`, `GetSettings`), wraps ConTeXt's sized diagrams in
+  `\switchtobodyfont`, and names SVGs with settings by their hash.
+  Four new runmermaid tests (`settings-ms`, `-context`, `-html`,
+  `-vars`, from `test/mermaid/settings.md`): the stand-in shows each
+  layer's options, an invalid attribute falling back to the metadata,
+  with warnings. `make test` passed under `-O2` and `-OC`: 358 case
+  tests, 23 round trips, 10 image tests, 20 mermaid tests. With
+  pomermaid 842db09 (`--subgraphs`, built, not installed) on a copy of
+  Galactic-Bounty-Hunters' one-shot, its fences given the ids
+  `overview` and `museum` and a metadata file with `mermaid.size: 8`
+  and `mermaid.diagrams.museum.subgraphs: side`, the ConTeXt PDF
+  (status 0; pages 3 and 9 rendered and looked at) shows both
+  diagrams at 8 pt and the museum's three floors side by side, as
+  Mermaid draws them. Not yet run on the BSDs.

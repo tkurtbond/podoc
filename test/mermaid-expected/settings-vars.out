@@ -1,0 +1,27 @@
+== doc.md -t context -F pomermaid -V mermaid-size=6 -V mermaid-width=0 -V mermaid-subgraphs=side
+\startsectionlevel[title={Diagrams},reference={diagrams}]
+
+\start\switchtobodyfont[6pt]
+% pomermaid stub: --size 6 --subgraphs side --width 0: flowchart TD
+\startMPcode
+draw fullcircle;
+\stopMPcode
+\par\stop
+
+Text.
+
+\start\switchtobodyfont[6pt]
+% pomermaid stub: --size 6 --subgraphs side --width 0: graph LR
+\startMPcode
+draw fullcircle;
+\stopMPcode
+\par\stop
+
+\starttyping
+print("not a diagram")
+\stoptyping
+
+\stopsectionlevel
+== warnings
+status 0
+== files

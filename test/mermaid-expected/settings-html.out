@@ -1,0 +1,22 @@
+== settings.md -t html -F pomermaid
+<p><img src="mermaid-images/70ed23a352ed5db28586038101dc06bae28583a5.svg" /></p>
+<p><img src="mermaid-images/b6c799346eaf97bcf12bffc384ee32c833f3e4c2.svg" id="museum" /></p>
+<p><img src="mermaid-images/91eebb28fe10b3665b30683c71e7e4c4e4785ffb.svg" id="other" style="width:50.0%" /></p>
+<p><img src="mermaid-images/7ac378af2e9cd78ebacd2a46a122f0b38167703b.svg" id="bad" /></p>
+== warnings
+podoc: [WARNING] podoc ignores mermaid size 'huge': it is not a number of points
+podoc: [WARNING] podoc ignores mermaid subgraphs 'up': it is not stack or side
+status 0
+== files
+./mermaid-images/70ed23a352ed5db28586038101dc06bae28583a5.svg
+./mermaid-images/7ac378af2e9cd78ebacd2a46a122f0b38167703b.svg
+./mermaid-images/91eebb28fe10b3665b30683c71e7e4c4e4785ffb.svg
+./mermaid-images/b6c799346eaf97bcf12bffc384ee32c833f3e4c2.svg
+== mermaid-images/70ed23a352ed5db28586038101dc06bae28583a5.svg
+<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub: --size 8 --subgraphs side: flowchart TD --></svg>
+== mermaid-images/7ac378af2e9cd78ebacd2a46a122f0b38167703b.svg
+<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub: --size 8 --subgraphs side: graph LR --></svg>
+== mermaid-images/91eebb28fe10b3665b30683c71e7e4c4e4785ffb.svg
+<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub: --size 9 --subgraphs side: graph TD --></svg>
+== mermaid-images/b6c799346eaf97bcf12bffc384ee32c833f3e4c2.svg
+<svg xmlns="http://www.w3.org/2000/svg"><!-- pomermaid stub: --size 7 --subgraphs stack --width 4i: flowchart LR --></svg>

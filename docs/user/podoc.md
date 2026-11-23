@@ -208,6 +208,41 @@ be in the PATH:
   that is already there is used as it is. pomermaid needs `mutool`
   or `pdftocairo` to make SVG.
 
+Each diagram can have its own settings, given (the first that is
+there is used):
+
+1. as the block's attributes `size`, `subgraphs` and `font`:
+   ```` ``` {#museum .mermaid size=7} ````;
+2. under `mermaid.diagrams.<id>` in the metadata, a YAML block or
+   `--metadata-file`, where `<id>` is the block's identifier;
+3. as the variables `mermaid-size`, `mermaid-subgraphs`,
+   `mermaid-width` and `mermaid-font` (`-V mermaid-size=8`), or the
+   metadata fields of those names;
+4. under `mermaid` in the metadata, for every diagram.
+
+```yaml
+mermaid:
+  size: 8
+  subgraphs: side
+  diagrams:
+    museum:
+      size: 7
+      subgraphs: stack
+      width: 4i
+```
+
+| Setting | Meaning |
+|---|---|
+| `size` | the text's size in points (`p` or `pt` may follow), pomermaid's `--size`. In ConTeXt, podoc also sets the diagram in that body font (`\switchtobodyfont`), which scales its text, boxes and spacing: a smaller size, a smaller diagram. For ms and mom it replaces `pointsize`. |
+| `subgraphs` | `stack`, pomermaid's default, each subgraph a band below those it has edges from; or `side`, the nodes ranked by the edges alone, so that subgraphs stand side by side, as in Mermaid. pomermaid's `--subgraphs`. |
+| `width` | the widest the diagram may be, a number with `i`, `c` or `p` (`0`, no limit), pomermaid's `--width`. Not a block attribute: there, as with the Python filter, `width` is the image's width in HTML. |
+| `font` | for ms and mom, the groff font of the text (`HR`), pomermaid's `--font`; it replaces `fontfamily`. |
+
+A setting podoc cannot use is warned about, and the next place is
+looked at. An SVG drawn with settings is named by the SHA-1 of its
+text and its settings, so that changing them makes a new one; the
+attributes `size`, `subgraphs` and `font` are not copied to the image.
+
 If pomermaid is not found, or a diagram has an error, podoc warns,
 passing on pomermaid's messages, and the block stays a code block.
 Without the filter, mermaid blocks are code blocks.

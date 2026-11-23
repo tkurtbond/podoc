@@ -75,7 +75,7 @@ done: `PdCode` (the scanner and the languages' reserved words),
 lists, `--code-keywords`), and `--code-style` and `--code-align` in
 the HTML, ms, mom and ConTeXt writers. Read
 `docs/research/syntax-highlighting-small.md` first.
-Phase 25, mermaid diagrams (decisions 48 to 51), is done: `PdMermaid`
+Phase 25, mermaid diagrams (decisions 48 to 54), is done: `PdMermaid`
 runs pomermaid (`~/Repos/Oberon/pomermaid`) for `-F
 pandoc-mermaid-selenium-filter` or `-F pomermaid`; its tests are
 `tools/runmermaid`, with a stand-in pomermaid in `test/mermaid/bin`.

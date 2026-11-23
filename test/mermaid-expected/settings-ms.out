@@ -1,0 +1,23 @@
+== settings.md -t ms -F pomermaid
+.\" pomermaid stub: --font TR --size 8 --subgraphs side: flowchart TD
+.PS
+box
+.PE
+.\" pomermaid stub: --font TR --size 7 --subgraphs stack --width 4i: flowchart LR
+.PS
+box
+.PE
+.\" pomermaid stub: --font HR --size 9 --subgraphs side: graph TD
+.PS
+box
+.PE
+.\" pomermaid stub: --font TR --size 8 --subgraphs side: graph LR
+.PS
+box
+.PE
+== warnings
+podoc: [WARNING] podoc ignores mermaid size 'huge': it is not a number of points
+podoc: [WARNING] podoc ignores mermaid subgraphs 'up': it is not stack or side
+podoc: [WARNING] podoc ignores mermaid font 'H-1': it is not a groff font
+status 0
+== files
