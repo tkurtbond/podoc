@@ -1,0 +1,23 @@
+#+begin_export html
+<b>x</b>
+#+end_export
+
+#+begin_html
+<i>y</i>
+#+end_html
+
+#+begin_latex
+\foo
+#+end_latex
+
+#+begin_ascii
+text
+#+end_ascii
+
+#+begin_comment
+gone
+#+end_comment
+
+#+BEGIN_EXPORT LaTeX
+\bar
+#+END_EXPORT

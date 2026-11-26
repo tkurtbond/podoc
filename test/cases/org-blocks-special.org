@@ -1,0 +1,50 @@
+#+name: n1
+#+begin_note
+Note this.
+#+end_note
+
+#+begin_WARNING
+Careful.
+#+end_WARNING
+
+#+begin_tip
+#+end_tip
+
+#+begin_IMPORTANT
+#+name: inner
+x
+#+end_IMPORTANT
+
+#+begin_caution :x 1
+y
+#+end_caution
+
+#+begin_abstract
+The abstract.
+#+end_abstract
+
+#+begin_ABSTRACT
+Not the abstract.
+#+end_ABSTRACT
+
+#+BEGIN_FOO :a 1 :b two
+x
+#+END_FOO
+
+#+begin_bar a=1 b=c
+y
+#+end_bar
+
+#+begin_baz some  args 
+z
+#+end_baz
+
+#+attr_html: :id myid :class c1 c2 :style color: red
+#+begin_qux
+w
+#+end_qux
+
+#+attr_html: no colon
+#+begin_center
+x
+#+end_center

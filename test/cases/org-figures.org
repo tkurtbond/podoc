@@ -1,0 +1,26 @@
+#+CAPTION: A figure
+#+NAME: fig1
+#+ATTR_HTML: :width 50%
+[[file:a.png]]
+
+[[./b.jpg]]
+
+#+name: n
+[[/abs/c.PNG]]
+
+[[https://x.org/d.svg]]
+
+[[//srv/a.png]]
+
+[[file:/a.png]]
+
+[[C:/a.png]]
+
+[[file://host/a.png]]
+
+[[file:C:/x.png]]
+
+[[foo:a.png]]
+
+#+caption:
+[[./e.gif]]

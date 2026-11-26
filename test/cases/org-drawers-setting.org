@@ -1,0 +1,8 @@
+#+OPTIONS: d:(not "LOGBOOK")
+:LOGBOOK:
+gone
+:END:
+
+:NOTES:
+kept
+:END:

@@ -1,0 +1,13 @@
+\begin{center}
+x = y
+\end{center}
+
+\begin{center}
+x
+\end{center}
+no blank
+\end{center}
+
+\begin{foo*}
+x
+\end{foo*}

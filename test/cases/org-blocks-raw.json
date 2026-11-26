@@ -1,0 +1,1 @@
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"RawBlock","c":["html","<b>x</b>\n"]},{"t":"RawBlock","c":["html","<i>y</i>\n"]},{"t":"RawBlock","c":["latex","\\foo\n"]},{"t":"RawBlock","c":["ascii","text\n"]},{"t":"RawBlock","c":["latex","\\bar\n"]}]}

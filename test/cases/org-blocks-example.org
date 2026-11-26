@@ -1,0 +1,21 @@
+#+begin_example -n
+  one
+	two
+#+end_example
+
+#+begin_example
+,* x
+#+end_example
+
+#+begin_example -l "(ref:%s)" +n
+x
+#+end_example
+
+#+begin_example foo
+not an example
+#+end_example
+
+#+begin_example -i
+   x
+ y
+#+end_example

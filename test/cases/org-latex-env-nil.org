@@ -1,0 +1,6 @@
+#+OPTIONS: tex:nil
+\begin{center}
+x = y
+\end{center}
+
+after

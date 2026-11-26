@@ -1,0 +1,6 @@
+#+OPTIONS: tex:verbatim
+  \begin{center}
+x  = 	y
+\end{center}
+
+after

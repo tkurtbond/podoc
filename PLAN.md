@@ -4132,3 +4132,26 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   pandoc under both models, as `org`, `org+fancy_lists` and
   `org-task_lists`, but for a table in an item. Not yet run on the
   BSDs.
+- 2026-11-26, Phase 26.3: Org blocks in `PdOrg`. Block attributes
+  (`#+name`, `#+label`, `#+caption`, `#+attr_html`, `#+attr_latex`,
+  `#+results`, any other keyword failing the block, as pandoc's
+  guard does) and figures (`cleanLinkText`'s paths, an image's
+  extension; a Figure with a caption, else a Para of the Image);
+  `#+begin_` blocks: `src` (the language and `translateLang`,
+  switches, header arguments, `jupyter-`, `#+RESULTS` and
+  `:exports`, the caption's `captioned-content` Div), `example`,
+  `quote`, `verse`, `export`, `html`, `latex`, `ascii`, `comment`,
+  the admonitions, `abstract` into the metadata, and any other name
+  as a Div with `blockParameters`; the content's indent, comma
+  escaping and `-i`; dynamic blocks; drawers, with `d:`; LaTeX
+  environments, with `tex:`; footnote definitions, kept in `notes`
+  for 27.3; and `blockLines`, a block in a list item. Fourteen case
+  tests (`org-blocks-*`, `org-drawers*`, `org-latex-env*`,
+  `org-figures`, `org-notes`, `org-lists-blocks`; JSON from pandoc
+  3.14). `make test` passed under `-O2` and `-OC`: 389 case tests,
+  23 round trips, 10 image tests, 20 mermaid tests. About 80 further
+  probes matched pandoc under both models, or differed only by
+  Phase 27's inline markup (emphasis, links, inline LaTeX and the
+  math environments) or `#+title` (28.1). Not yet checked one by
+  one against pandoc's `test/Tests/Readers/Org/Block*.hs`. Not yet
+  run on the BSDs.

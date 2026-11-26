@@ -1,0 +1,70 @@
+#+begin_src python
+def f():
+    return 1
+#+end_src
+
+#+NAME: foo
+#+CAPTION: A code block
+#+begin_src C -n 5 :exports both
+int x;
+#+end_src
+
+#+RESULTS: foo
+: 42
+
+#+begin_src python -n 5 :results x
+  a
+#+end_src
+
+#+begin_src python -l "(ref:%s)" -n :exports both
+x
+#+end_src
+
+#+begin_src sh -i
+  indented
+    more
+#+end_src
+
+#+begin_src emacs-lisp :exports results
+(+ 1 2)
+#+end_src
+
+#+RESULTS:
+: 3
+
+#+begin_src python :exports none
+hidden
+#+end_src
+
+#+RESULTS:
+: hidden too
+
+#+begin_src jupyter-python :session py :var x="a b"
+,* not a header
+,#+not meta
+,,* two
+#+end_src
+
+#+BEGIN_SRC
+no language
+#+end_SRC
+
+#+begin_src python +n 10 -r
+x
+#+end_src
+
+#+begin_src python :exports both
+x
+#+end_src
+
+#+name: bar
+#+RESULTS:
+: out
+
+#+caption: one
+#+caption: two
+#+label: lab
+#+attr_latex: :width 3cm
+#+begin_src sqlite :tangle yes :noweb
+select 1;
+#+end_src

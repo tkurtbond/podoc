@@ -1,0 +1,14 @@
+#+begin: clocktable :scope file
+table
+#+end:
+
+#+BEGIN: other
+#+END:
+
+#+BEGIN: foo bar baz
+x
+#+END:
+
+#+begin: columnview :id local :hlines 1
+x
+#+end:

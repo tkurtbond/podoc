@@ -1,0 +1,15 @@
+[fn:1] First para.
+
+Second.
+
+
+[fn:x] x
+
+[fn:a]
+#+begin_quote
+q
+#+end_quote
+
+* Head
+
+Text.

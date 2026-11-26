@@ -1,0 +1,16 @@
+:MYDRAWER:
+Some text.
+:END:
+
+:PROPERTIES:
+:x: y
+:END:
+
+:notes:
+x
+:end:
+
+:NOTES:
+not closed
+
+after
