@@ -218,6 +218,8 @@ each new code there.
   was run and what passed, with the date.
 - **Commit only when asked.** Each phase ends with a commit, made when
   the user asks.
+- **Commit on `devel`**, not `main`. Before committing, check the
+  branch and bring `devel` up to date with `main`.
 - **Temporary files** go under `/usr/local/sw/tmp`, in a directory per
   session, never `/tmp` (a RAM disk on this machine). Delete it when
   done. Large runs (whole-corpus comparisons, ConTeXt) are capped with
