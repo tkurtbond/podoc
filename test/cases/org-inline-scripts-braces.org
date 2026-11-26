@@ -1,0 +1,2 @@
+#+OPTIONS: ^:{}
+a_b a^{c} a_(d)

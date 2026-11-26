@@ -1,0 +1,11 @@
+a_b a^b a_{bc} a^{b c} a_(x) a^-1 a^* a^{} a_{b_{c}}
+
+x_{a} y^{b}^{c} 2^10 H_2O
+
+2^-λ
+
+a ^caret
+
+_underscore
+
+text_subscript_

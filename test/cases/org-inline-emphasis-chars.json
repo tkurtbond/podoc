@@ -1,0 +1,1 @@
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"this+that+"},{"t":"Space"},{"t":"Str","c":"+so+on"},{"t":"SoftBreak"},{"t":"Str","c":"seven*eight*"},{"t":"Space"},{"t":"Str","c":"nine*"},{"t":"SoftBreak"},{"t":"Strikeout","c":[{"t":"Str","c":"not+funny"}]}]}]}

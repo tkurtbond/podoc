@@ -1,0 +1,5 @@
+#+pandoc-emphasis-pre:
+#+pandoc-emphasis-post:
+this+that+ +so+on
+seven*eight* nine*
++not+funny+

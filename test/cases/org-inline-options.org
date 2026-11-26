@@ -1,0 +1,7 @@
+#+OPTIONS: *:nil ^:nil -:nil ':nil \n:t
+*b* /i/ =v= ~c~
+a_b a^{c}
+a -- b ... \- c
+"q" 'q' don't
+*c
+d*

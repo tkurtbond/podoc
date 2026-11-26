@@ -4187,3 +4187,33 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   `docs/user/differences.md`).
   Notes in table cells (`compactifyTable`'s `fixNotes`) wait for
   27.3. Not yet run on the BSDs.
+- 2026-11-26, Phase 27.1: Org text, emphasis and verbatim in
+  `PdOrgInline`. `Str`, `Space`, `SoftBreak`, `\\` as `LineBreak`
+  and `\n:t`; `*bold*`, `/italic/`, `_underline_`, `+strike+`,
+  `=verbatim=` and `~code~`, with `*:nil`, the pre and post
+  characters (and `#+pandoc-emphasis-pre`/`-post`), the forbidden
+  border characters and `emphasisAllowedNewlines`; subscripts and
+  superscripts, simple, braced and parenthesised, with `^:t`, `nil`
+  and `{}`; `--`, `---`, `...` and `\-` with `-:`; smart quotes and
+  apostrophes with `':` and `+smart`; the bare backslash as text.
+  pandoc's state is modelled: the last pre character's, forbidden
+  character's and `Str`'s positions (compared by text and offset,
+  or by line and column across `parseFromString` chunks at the same
+  depth), the emphasis stack, the new-line counter and the quote
+  context. `PdOrg`'s blocks set it as pandoc's do (Org's
+  `parseFromString` clearing the pre position, `newline`,
+  `blanklines` and `anyLine` setting it, the generic
+  `parseFromString'` of grid cells keeping the `Str` position), and
+  `Block` restores it between alternatives. Nine case tests
+  (`org-inline-*`, JSON from pandoc 3.14), among them inlines after
+  and inside each kind of block. `make test` passed under `-O2` and
+  `-OC`: 405 case tests, 23 round trips, 10 image tests, 20 mermaid
+  tests. Of the 74 inputs of pandoc's
+  `test/Tests/Readers/Org/Inline.hs`, the 33 within 27.1 match
+  pandoc; the other 41 are math, notes, links, inline code, LaTeX
+  and macros (27.2 to 27.4). The 8 of `Inline/Smart.hs` match under
+  `-f org`, `org+smart` and `org-smart`. 44 further probe files
+  match, but for two that need later phases: a headline's tags
+  (26.5) and a property drawer before the first headline, which
+  pandoc reads as metadata (28.1). The output of every probe is the
+  same under `-O2` and `-OC`. Not yet run on the BSDs.

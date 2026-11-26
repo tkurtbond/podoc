@@ -1,0 +1,72 @@
+#+begin_src c
+x
+#+end_src
+a*b* /c/
+
+#+begin_quote
+x
+#+end_quote
+*b* a*b*
+
+| a | b |
+|---+---|
+| *c* | d*e* |
+*f*
+
+- a
+- (^b) *c*
+
+#+CAPTION: *x* a_b
+[[file:a.png]]
+
+#+begin_src x
+y
+#+end_src x
+
+: fixed
+*a* x^2 a_{b}
+
+#+begin_example
+e
+#+end_example
+_u_ x^{2}
+
+[fn:1] *a* /b/
+
+-----
+*a*
+
+#+begin_verse
+ *a* b
+  /c/
+#+end_verse
+
++-----+-----+
+| *a* | b^2 |
++=====+=====+
+| c   | d   |
++-----+-----+
+
+#+begin_src c
+x
+#+end_src
+
+#+RESULTS:
+: 3
+*a*
+
+- a :: *b* c
+- d :: ~e~
+
+para "a
+b" and *c
+d* and *e
+
+f*
+
+a *b
+c
+d* =x
+y= ~z
+
+w~

@@ -1,0 +1,10 @@
+=two
+lines= and =a
+b
+c=
+
+== and =a = b= and ~x~y~
+
+a=b= and (=x=) and =a=,
+
+=Robot.rock()= ~word for word~

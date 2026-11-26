@@ -133,7 +133,7 @@ BEGIN
     p := NextLine(e); q := I.ExampleLineStart(p)
   UNTIL q < 0;
   A.AddBlock(l, A.NewCodeBlock(A.NewAttr(NIL), B.BufRope(b)));
-  B.pos := p;
+  B.pos := p; I.Newline;
   RETURN TRUE
 END Example;
 
@@ -146,6 +146,7 @@ BEGIN
   IF k = "options" THEN B.pos := M.Options(p)
   ELSE B.pos := NextLine(p)
   END;
+  I.Newline;
   RETURN TRUE
 END KeywordLine;
 
@@ -162,18 +163,18 @@ BEGIN
         OR (k = "beamer")) THEN (* rawExportLine *)
       e := B.LineEnd(q);
       A.AddBlock(l, A.NewRawBlock(A.S(k), B.Rope(q, e)));
-      B.pos := NextLine(e);
+      B.pos := NextLine(e); I.Newline;
       RETURN TRUE
     END;
     IF B.Looking(B.SkipSpaces(p), "#+print_bibliography:") THEN
       A.AddBlock(l, A.NewDiv(A.NewAttr(A.S("refs")), NIL));
-      B.pos := NextLine(p);
+      B.pos := NextLine(p); I.Newline;
       RETURN TRUE
     END;
     IF (q >= 0) & KeywordLine(k, q) THEN RETURN TRUE END
   END;
   IF I.CommentLineStart(p) >= 0 THEN
-    B.pos := NextLine(p);
+    B.pos := NextLine(p); I.Newline;
     RETURN TRUE
   END;
   RETURN FALSE
@@ -187,7 +188,7 @@ BEGIN
   IF q < 0 THEN RETURN FALSE END;
   e := B.LineEnd(q);
   A.AddBlock(l, A.NewRawBlock(A.S("org"), B.Rope(q - 2, e)));
-  B.pos := NextLine(e);
+  B.pos := NextLine(e); I.Newline;
   RETURN TRUE
 END RawOrgLine;
 
@@ -201,7 +202,7 @@ BEGIN
   i := I.Inlines();
   IF B.pos = p THEN RETURN FALSE END;
   IF B.C(B.pos) = 0AX THEN
-    INC(B.pos);
+    INC(B.pos); I.Newline;
     IF ~inList OR (I.BulletListStart(B.pos, n) < 0)
         & (I.OrderedListStart(B.pos, n) < 0) THEN
       A.AddBlock(l, A.NewInlinesBlock(A.Para, i))
@@ -409,9 +410,9 @@ PROCEDURE BufInlines(VAR b: B.Buf): A.Inline;
   VAR f: B.Frame; i: A.Inline;
 BEGIN
   B.PutChar(b, 0AX);
-  B.Enter(f, b.t, b.len);
+  I.Enter(f, b.t, b.len);
   i := I.Inlines();
-  B.Leave(f);
+  I.Leave(f);
   RETURN i
 END BufInlines;
 
@@ -421,11 +422,11 @@ PROCEDURE ParseBlocks(VAR b: B.Buf; VAR out: A.Blocks);
   VAR f: B.Frame;
 BEGIN
   B.PutChar(b, 0AX);
-  B.Enter(f, b.t, b.len);
+  I.Enter(f, b.t, b.len);
   A.InitBlocks(out);
   fresh := TRUE;
   Blocks(out);
-  B.Leave(f)
+  I.Leave(f)
 END ParseBlocks;
 
 (* keyValues: the pairs, :key value, of the current text, added to a;
@@ -516,9 +517,9 @@ BEGIN
   END;
   IF ba.hasCaption THEN ba.caption := BufInlines(cap) END;
   B.PutChar(kv, 0AX);
-  B.Enter(f, kv.t, kv.len);
+  I.Enter(f, kv.t, kv.len);
   ok := KeyValues(ba.kv);
-  B.Leave(f);
+  I.Leave(f);
   IF ~ok THEN RETURN -1 END;
   RETURN p
 END Attributes;
@@ -604,6 +605,7 @@ BEGIN
     q := r
   END;
   last := q; q := p;
+  I.NewlineAt(last); (* the content's anyLine, or ignHeaders *)
   B.InitBuf(b);
   WHILE q < last DO
     r := B.BlankLine(q);
@@ -752,9 +754,10 @@ END ResultsMarker;
 (* babelResultsBlock: blank lines and #+RESULTS:, then a block, into
    res; where it ends, or p if there is none *)
 PROCEDURE Results(p: LONGINT; VAR res: A.Blocks): LONGINT;
-  VAR q, r, saved: LONGINT;
+  VAR q, r, saved: LONGINT; s: I.State;
 BEGIN
   A.InitBlocks(res);
+  I.Save(s);
   q := B.BlankLines(p);
   IF q < 0 THEN RETURN p END;
   r := ResultsMarker(q);
@@ -767,9 +770,10 @@ BEGIN
       IF r < 0 THEN RETURN p END
     END
   END;
-  saved := B.pos; B.pos := q;
-  IF Block(res) THEN r := B.pos ELSE A.InitBlocks(res); r := p END;
-  B.pos := saved;
+  saved := B.pos; B.pos := q; I.Newline;
+  IF Block(res) THEN r := B.pos; B.pos := saved
+  ELSE A.InitBlocks(res); r := p; I.Restore(s); B.pos := saved
+  END;
   RETURN r
 END Results;
 
@@ -835,9 +839,9 @@ BEGIN
     B.InitBuf(lb);
     FOR m := k TO j - 1 DO B.PutChar(lb, b.t[m]) END;
     B.PutChar(lb, 0AX);
-    B.Enter(f, lb.t, lb.len);
+    I.Enter(f, lb.t, lb.len);
     A.Append(il, I.Inlines());
-    B.Leave(f);
+    I.Leave(f);
     NEW(x); x.inlines := MI.Trim(il); x.next := NIL;
     IF first = NIL THEN first := x ELSE last.next := x END;
     last := x;
@@ -1020,7 +1024,7 @@ BEGIN
     A.AddBlock(l, A.NewInlinesBlock(A.Para,
       A.NewLink(A.Image, a, NIL, src, ba.name)))
   END;
-  B.pos := r + 1;
+  B.pos := r + 1; I.Newline;
   RETURN TRUE
 END Figure;
 
@@ -1083,6 +1087,7 @@ BEGIN
     A.AddBlock(l, A.NewDiv(a, out.first))
   END;
   B.pos := DrawerEnd(r);
+  IF ~keep THEN I.Newline END;
   RETURN TRUE
 END Drawer;
 
@@ -1149,7 +1154,7 @@ BEGIN
   p := B.pos;
   q := I.NoteMarker(p);
   IF q < 0 THEN RETURN FALSE END;
-  B.pos := B.SkipSpaces(q);
+  B.pos := B.SkipSpaces(q); I.SetPre;
   A.InitBlocks(nl);
   IF ~Block(nl) THEN B.pos := p; RETURN FALSE END;
   LOOP
@@ -1255,12 +1260,12 @@ BEGIN
   END;
   ItemText(q, n, b);
   saved := inList; inList := TRUE;
-  B.Enter(f, b.t, b.len);
+  I.Enter(f, b.t, b.len);
   A.InitBlocks(l);
   fresh := TRUE;
   IF ParaOrPlain(l) THEN fresh := FALSE END;
   Blocks(l);
-  B.Leave(f);
+  I.Leave(f);
   inList := saved;
   IF box = "X" THEN Prepend(l, "☒")
   ELSIF box # 0X THEN Prepend(l, "☐")
@@ -1339,10 +1344,10 @@ PROCEDURE InlinesOf(from, to: LONGINT; VAR ok: BOOLEAN): A.Inline;
   VAR b: B.Buf; f: B.Frame; i: A.Inline;
 BEGIN
   B.InitBuf(b); B.Put(b, from, to);
-  B.Enter(f, b.t, b.len);
+  I.Enter(f, b.t, b.len);
   i := I.Inlines();
   ok := B.pos > 0;
-  B.Leave(f);
+  I.Leave(f);
   RETURN i
 END InlinesOf;
 
@@ -1365,11 +1370,11 @@ BEGIN
   term := InlinesOf(q, r, ok);
   IF ~ok THEN RETURN FALSE END;
   ItemText(DefinitionMarker(r), n, b);
-  B.Enter(f, b.t, b.len);
+  I.Enter(f, b.t, b.len);
   A.InitBlocks(l);
   fresh := TRUE;
   Blocks(l);
-  B.Leave(f);
+  I.Leave(f);
   NEW(item); item.term := term; item.next := NIL;
   NEW(item.defs); item.defs.blocks := l.first; item.defs.next := NIL;
   RETURN TRUE
@@ -1450,7 +1455,8 @@ BEGIN
     IF last = NIL THEN r.cells := c ELSE last.next := c END;
     last := c
   END;
-  RETURN B.pos + 1
+  INC(B.pos); I.Newline;
+  RETURN B.pos
 END ContentRow;
 
 (* tableAlignRow at p, a table's line: where it ends, past its new
@@ -1488,6 +1494,7 @@ BEGIN
     align[n] := a; width[n] := w; INC(n)
   UNTIL B.C(q) = 0AX;
   IF ~set THEN RETURN -1 END;
+  I.NewlineAt(q + 1);
   RETURN q + 1
 END AlignRow;
 
@@ -1508,7 +1515,7 @@ END CellCount;
 PROCEDURE OrgTable(p: LONGINT; VAR t: A.TableBlk): LONGINT;
   VAR head, first, last, r: A.Row; nBody, k, n, cols, q, p0: LONGINT;
     align, al: Ints; width, wd: Reals; total, x: LONGREAL; any: BOOLEAN;
-    cs, csLast: A.ColSpec; tb: A.TableBody;
+    cs, csLast: A.ColSpec; tb: A.TableBody; s: I.State;
 BEGIN
   IF I.TableStart(p) < 0 THEN RETURN -1 END;
   p0 := p; head := NIL; first := NIL; last := NIL; nBody := 0;
@@ -1521,12 +1528,14 @@ BEGIN
     ELSIF B.C(I.TableStart(p)) = "-" THEN (* tableHline *)
       q := B.AnyLine(I.TableStart(p) + 1);
       IF q < 0 THEN EXIT END;
+      I.NewlineAt(q);
       IF (CellCount(head) = 0) & (nBody = 1) THEN
         head := first; first := NIL; last := NIL; nBody := 0
       END
     ELSE
+      I.Save(s);
       q := ContentRow(p, r);
-      IF q < 0 THEN EXIT END;
+      IF q < 0 THEN I.Restore(s); EXIT END;
       IF last = NIL THEN first := r ELSE last.next := r END;
       last := r; INC(nBody)
     END;
@@ -1565,13 +1574,15 @@ END OrgTable;
 (* The blocks of a grid table cell's text (parseFromString' blocks:
    orgStateLastPreCharPos is kept) *)
 PROCEDURE CellBlocks(VAR b: B.Buf): A.Block;
-  VAR f: B.Frame; l: A.Blocks; saved: BOOLEAN;
+  VAR f: B.Frame; l: A.Blocks; saved: BOOLEAN; str: I.Pos;
 BEGIN
   saved := fresh;
+  I.ClearStr(str);
   B.Enter(f, b.t, b.len);
   A.InitBlocks(l);
   Blocks(l);
   B.Leave(f);
+  I.RestoreStr(str);
   fresh := saved;
   RETURN l.first
 END CellBlocks;
@@ -1721,25 +1732,39 @@ END Table;
 
 (* block: one block at B.pos, added to l; FALSE if there is none *)
 PROCEDURE Block(VAR l: A.Blocks): BOOLEAN;
-  VAR q: LONGINT;
+  VAR q: LONGINT; s: I.State;
+
+  (* The state as it was before an alternative that failed *)
+  PROCEDURE R(): BOOLEAN;
+  BEGIN
+    I.Restore(s); RETURN TRUE
+  END R;
+
 BEGIN
   q := B.BlankLines(B.pos);
-  IF q >= 0 THEN B.pos := q; fresh := FALSE; RETURN TRUE END;
-  IF Table(l) OR DynamicBlock(l) OR OrgBlock(l) OR Figure(l) OR Example(l)
-      OR Drawer(l) OR SpecialLine(l) THEN
+  IF q >= 0 THEN B.pos := q; I.Newline; fresh := FALSE; RETURN TRUE END;
+  I.Save(s);
+  IF Table(l) OR R() & DynamicBlock(l) OR R() & OrgBlock(l)
+      OR R() & Figure(l) OR R() & Example(l) OR R() & Drawer(l)
+      OR R() & SpecialLine(l) THEN
     fresh := FALSE; RETURN TRUE
   END;
+  I.Restore(s);
   q := I.Hline(B.pos);
   IF q >= 0 THEN
-    A.AddBlock(l, A.NewHorizontalRule()); B.pos := q; fresh := FALSE;
+    A.AddBlock(l, A.NewHorizontalRule()); B.pos := q; I.Newline;
+    fresh := FALSE;
     RETURN TRUE
   END;
-  IF DefinitionList(l) OR List(FALSE, l) OR List(TRUE, l) THEN
+  IF DefinitionList(l) OR R() & List(FALSE, l) OR R() & List(TRUE, l) THEN
     fresh := TRUE; RETURN TRUE (* its items' parseFromString *)
   END;
-  IF LatexFragment(l) OR NoteBlock(l) OR RawOrgLine(l) OR ParaOrPlain(l) THEN
+  I.Restore(s);
+  IF LatexFragment(l) OR R() & NoteBlock(l) OR R() & RawOrgLine(l)
+      OR R() & ParaOrPlain(l) THEN
     fresh := FALSE; RETURN TRUE
   END;
+  I.Restore(s);
   RETURN FALSE
 END Block;
 
@@ -1781,10 +1806,10 @@ END UniqueId;
 PROCEDURE Headline(VAR l: A.Blocks);
   VAR level: LONGINT; t: A.Inlines; i: A.Inline; id: A.Rope;
 BEGIN
-  B.pos := I.HeaderStart(B.pos, level);
+  B.pos := I.HeaderStart(B.pos, level); I.SetPre;
   A.InitInlines(t);
   WHILE (B.pos < B.len) & (B.t[B.pos] # 0AX) & I.Inline(t) DO END;
-  IF B.C(B.pos) = 0AX THEN INC(B.pos) END;
+  IF B.C(B.pos) = 0AX THEN INC(B.pos); I.Newline END;
   i := MI.Trim(t);
   id := A.S("");
   IF autoIds THEN id := UniqueId(MI.Identifier(i)) END;
@@ -1816,7 +1841,7 @@ BEGIN
   FOR i := n TO n + 1 - k DO t[i] := 0AX END;
   B.Start(t, n + 2 - k, tabStop);
   M.Reset(smart, smartQuotes, specialStrings);
-  I.fancyLists := fancyLists;
+  I.fancyLists := fancyLists; I.Reset;
   ids := NIL; inList := FALSE; fresh := FALSE;
   d := A.NewDoc(); meta := d.meta; notes := NIL;
   A.InitBlocks(l);

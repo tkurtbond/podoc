@@ -1,0 +1,13 @@
+"quoted" and 'single' and don't and "open
+
+'a 'b' c' and "a "b" c" and l'avion
+
+'...hi'
+
+D'oh! A l'/aide/!
+
+/say "yes"/
+
+Singles on the '/meat market/'
+
+Double income, no kids: "/DINK/"
