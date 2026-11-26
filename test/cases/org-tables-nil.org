@@ -1,0 +1,7 @@
+#+OPTIONS: |:nil
+#+CAPTION: x
+| a | b |
+|---|
+| c | d |
+
+text

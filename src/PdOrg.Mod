@@ -13,10 +13,11 @@ MODULE PdOrg;
    blocks (source, example, quote, verse, export and raw, comment,
    admonitions, abstract and the rest as Divs), dynamic blocks,
    drawers, LaTeX environments and footnote definitions, kept until
-   Phase 27.3 resolves their references. *)
+   Phase 27.3 resolves their references. Phase 26.4: Org tables and
+   table.el tables (PdGridTable). *)
 
 IMPORT Ropes, PdIO, A := PdAst, B := PdMdBase, MI := PdMdInline,
-  I := PdOrgInline, M := PdOrgMeta, SH := PdShared;
+  I := PdOrgInline, M := PdOrgMeta, SH := PdShared, G := PdGridTable;
 
 CONST
   Quiet* = 0; WarnUnknown* = 1; FailUnknown* = 2; (* unknown *)
@@ -50,15 +51,22 @@ TYPE
     next: Note
   END;
 
+  Ints = POINTER TO ARRAY OF INTEGER;
+  Reals = POINTER TO ARRAY OF LONGREAL;
+
 VAR
   (* the extensions *)
   autoIds*, asciiIds*, gfmIds*, citations*, specialStrings*, taskLists*,
   smart*, smartQuotes*, fancyLists*, eastAsian*: BOOLEAN;
   standalone*: BOOLEAN; (* -s *)
   unknown*: INTEGER; (* --unknown: Quiet, WarnUnknown or FailUnknown *)
+  columns*: LONGINT; (* pandoc's readerColumns, from --columns *)
 
   ids: A.StrList; (* the identifiers used so far *)
   inList: BOOLEAN; (* in a list item: the context ListItemState *)
+  fresh: BOOLEAN; (* orgStateLastPreCharPos is Nothing: nothing read
+    since a parseFromString began or ended, as at an item's start or
+    after a list *)
   meta: A.MetaMapV; (* the document's *)
   notes: Note; (* the footnotes' definitions, the last first *)
 
@@ -415,6 +423,7 @@ BEGIN
   B.PutChar(b, 0AX);
   B.Enter(f, b.t, b.len);
   A.InitBlocks(out);
+  fresh := TRUE;
   Blocks(out);
   B.Leave(f)
 END ParseBlocks;
@@ -1248,7 +1257,8 @@ BEGIN
   saved := inList; inList := TRUE;
   B.Enter(f, b.t, b.len);
   A.InitBlocks(l);
-  IF ParaOrPlain(l) THEN END;
+  fresh := TRUE;
+  IF ParaOrPlain(l) THEN fresh := FALSE END;
   Blocks(l);
   B.Leave(f);
   inList := saved;
@@ -1357,6 +1367,7 @@ BEGIN
   ItemText(DefinitionMarker(r), n, b);
   B.Enter(f, b.t, b.len);
   A.InitBlocks(l);
+  fresh := TRUE;
   Blocks(l);
   B.Leave(f);
   NEW(item); item.term := term; item.next := NIL;
@@ -1398,23 +1409,338 @@ BEGIN
   RETURN TRUE
 END DefinitionList;
 
+(* Tables *)
+
+(* align and width with room for more than n *)
+PROCEDURE Grow(VAR align: Ints; VAR width: Reals; n: LONGINT);
+  VAR a: Ints; w: Reals; k: LONGINT;
+BEGIN
+  NEW(a, 2 * n + 8); NEW(w, 2 * n + 8);
+  FOR k := 0 TO n - 1 DO a[k] := align[k]; w[k] := width[k] END;
+  align := a; width := w
+END Grow;
+
+(* A cell holding the inlines i, as B.simpleCell (B.plain i) *)
+PROCEDURE NewCell(i: A.Inline): A.Cell;
+  VAR c: A.Cell;
+BEGIN
+  c := SH.EmptyCell();
+  IF i # NIL THEN c.blocks := A.NewInlinesBlock(A.Plain, i) END;
+  RETURN c
+END NewCell;
+
+(* tableContentRow at p, a table's line: where it ends, past its new
+   line, or -1; its cells in r. Each cell is inlines up to a | or the
+   new line, trimmed (tableContentCell). *)
+PROCEDURE ContentRow(p: LONGINT; VAR r: A.Row): LONGINT;
+  VAR il: A.Inlines; c, last: A.Cell; ch: CHAR;
+BEGIN
+  NEW(r); r.attr := NIL; r.cells := NIL; r.next := NIL; last := NIL;
+  B.pos := I.TableStart(p);
+  WHILE B.C(B.pos) # 0AX DO
+    A.InitInlines(il);
+    LOOP (* manyTill inline endOfCell *)
+      ch := B.C(B.pos);
+      IF ch = "|" THEN INC(B.pos); EXIT
+      ELSIF ch = 0AX THEN EXIT
+      ELSIF ~I.Inline(il) THEN RETURN -1
+      END
+    END;
+    c := NewCell(MI.Trim(il));
+    IF last = NIL THEN r.cells := c ELSE last.next := c END;
+    last := c
+  END;
+  RETURN B.pos + 1
+END ContentRow;
+
+(* tableAlignRow at p, a table's line: where it ends, past its new
+   line, or -1 if it is not one or every cell is empty; each cell's
+   alignment and width, -1 for none, in align and width, n of them *)
+PROCEDURE AlignRow(p: LONGINT; VAR align: Ints; VAR width: Reals; VAR n: LONGINT): LONGINT;
+  VAR q, r: LONGINT; a: INTEGER; w: LONGREAL; set: BOOLEAN;
+BEGIN
+  q := I.TableStart(p); n := 0; set := FALSE;
+  REPEAT (* many1Till columnPropertyCell newline *)
+    a := A.AlignDefault; w := -1;
+    r := B.SkipSpaces(q);
+    IF B.C(r) = "<" THEN (* propCell *)
+      INC(r);
+      CASE B.C(r) OF
+        "l": a := A.AlignLeft; INC(r)
+      | "c": a := A.AlignCenter; INC(r)
+      | "r": a := A.AlignRight; INC(r)
+      ELSE
+      END;
+      IF B.IsDigit(B.C(r)) THEN
+        w := 0;
+        REPEAT w := w * 10 + (ORD(B.C(r)) - ORD("0")); INC(r) UNTIL ~B.IsDigit(B.C(r))
+      END;
+      IF B.C(r) # ">" THEN RETURN -1 END;
+      r := B.SkipSpaces(r + 1);
+      set := set OR (a # A.AlignDefault) OR (w >= 0)
+    END;
+    (* emptyOrgCell *)
+    IF B.C(r) = "|" THEN q := r + 1
+    ELSIF B.C(r) = 0AX THEN q := r
+    ELSE RETURN -1
+    END;
+    IF (align = NIL) OR (n >= LEN(align^)) THEN Grow(align, width, n) END;
+    align[n] := a; width[n] := w; INC(n)
+  UNTIL B.C(q) = 0AX;
+  IF ~set THEN RETURN -1 END;
+  RETURN q + 1
+END AlignRow;
+
+(* The number of cells of r *)
+PROCEDURE CellCount(r: A.Row): LONGINT;
+  VAR c: A.Cell; n: LONGINT;
+BEGIN
+  n := 0;
+  IF r # NIL THEN c := r.cells; WHILE c # NIL DO INC(n); c := c.next END END;
+  RETURN n
+END CellCount;
+
+(* orgTable at p: an Org table's rows, rowsToTable, normalizeTable and
+   orgToPandocTable; where it ends, or -1 if no row is read. The rows
+   are read in one pass: a rule after the only content row makes it
+   the header, other rules are dropped, and the last alignment row
+   gives the columns' alignments and widths. *)
+PROCEDURE OrgTable(p: LONGINT; VAR t: A.TableBlk): LONGINT;
+  VAR head, first, last, r: A.Row; nBody, k, n, cols, q, p0: LONGINT;
+    align, al: Ints; width, wd: Reals; total, x: LONGREAL; any: BOOLEAN;
+    cs, csLast: A.ColSpec; tb: A.TableBody;
+BEGIN
+  IF I.TableStart(p) < 0 THEN RETURN -1 END;
+  p0 := p; head := NIL; first := NIL; last := NIL; nBody := 0;
+  align := NIL; width := NIL; n := 0; al := NIL; wd := NIL;
+  LOOP (* tableRows *)
+    IF I.TableStart(p) < 0 THEN EXIT END;
+    q := AlignRow(p, al, wd, k);
+    IF q >= 0 THEN (* setProperties *)
+      align := al; width := wd; n := k; al := NIL; wd := NIL
+    ELSIF B.C(I.TableStart(p)) = "-" THEN (* tableHline *)
+      q := B.AnyLine(I.TableStart(p) + 1);
+      IF q < 0 THEN EXIT END;
+      IF (CellCount(head) = 0) & (nBody = 1) THEN
+        head := first; first := NIL; last := NIL; nBody := 0
+      END
+    ELSE
+      q := ContentRow(p, r);
+      IF q < 0 THEN EXIT END;
+      IF last = NIL THEN first := r ELSE last.next := r END;
+      last := r; INC(nBody)
+    END;
+    p := q
+  END;
+  IF p = p0 THEN RETURN -1 END; (* no row: tableRows' many reads nothing *)
+  B.pos := p;
+  (* normalizeTable *)
+  IF CellCount(head) > 0 THEN cols := CellCount(head) ELSE cols := CellCount(first) END;
+  any := FALSE; total := 0;
+  FOR k := 0 TO cols - 1 DO
+    IF (k < n) & (width[k] >= 0) THEN any := TRUE; total := total + width[k]
+    ELSE total := total + 1
+    END
+  END;
+  t := A.NewTable(NIL); csLast := NIL;
+  FOR k := 0 TO cols - 1 DO
+    NEW(cs); cs.next := NIL; cs.align := A.AlignDefault; cs.hasWidth := FALSE;
+    IF k < n THEN
+      cs.align := align[k];
+      (* 0 / 0 is NaN in pandoc: podoc gives ColWidthDefault *)
+      IF any & (width[k] >= 0) & (total > 0) THEN
+        x := width[k]; cs.width := x / total; cs.hasWidth := TRUE
+      END
+    END;
+    IF csLast = NIL THEN t.colSpecs := cs ELSE csLast.next := cs END;
+    csLast := cs
+  END;
+  IF CellCount(head) > 0 THEN head.next := NIL; t.head.rows := head END;
+  NEW(tb); tb.attr := NIL; tb.rowHeadColumns := 0; tb.head := NIL;
+  tb.body := first; tb.next := NIL; t.bodies := tb;
+  SH.PlaceRows(t.head.rows, cols); SH.PlaceRows(tb.body, cols);
+  RETURN p
+END OrgTable;
+
+(* The blocks of a grid table cell's text (parseFromString' blocks:
+   orgStateLastPreCharPos is kept) *)
+PROCEDURE CellBlocks(VAR b: B.Buf): A.Block;
+  VAR f: B.Frame; l: A.Blocks; saved: BOOLEAN;
+BEGIN
+  saved := fresh;
+  B.Enter(f, b.t, b.len);
+  A.InitBlocks(l);
+  Blocks(l);
+  B.Leave(f);
+  fresh := saved;
+  RETURN l.first
+END CellBlocks;
+
+(* The rows of the traced g, from row from to row to-1, in order *)
+PROCEDURE GridRows(VAR g: G.Table; from, to: LONGINT): A.Row;
+  VAR first, last, r: A.Row; c, clast: A.Cell; x: G.Cell; i, j: LONGINT;
+BEGIN
+  first := NIL; last := NIL;
+  FOR i := from TO to - 1 DO
+    NEW(r); r.attr := NIL; r.cells := NIL; r.next := NIL; clast := NIL;
+    FOR j := 0 TO g.cols - 1 DO
+      x := g.cells[i * g.cols + j];
+      IF x # NIL THEN
+        c := SH.EmptyCell(); c.rowSpan := x.rowSpan; c.colSpan := x.colSpan;
+        c.blocks := CellBlocks(x.text);
+        IF clast = NIL THEN r.cells := c ELSE clast.next := c END;
+        clast := c
+      END
+    END;
+    IF last = NIL THEN first := r ELSE last.next := r END;
+    last := r
+  END;
+  RETURN first
+END GridRows;
+
+(* gridTableWith blocks at p, a table.el table, and the blank lines
+   after it: where it ends, or -1 *)
+PROCEDURE GridTable(p: LONGINT; VAR t: A.TableBlk): LONGINT;
+  VAR g: G.Table; q, k, bodyEnd, total, norm: LONGINT; cs, last: A.ColSpec;
+    tb: A.TableBody; x: LONGREAL;
+BEGIN
+  IF p >= B.len THEN RETURN -1 END;
+  q := G.Trace(p, 0, g);
+  IF q < 0 THEN RETURN -1 END;
+  t := A.NewTable(NIL);
+  (* fractionalColumnWidths columns *)
+  total := 0;
+  FOR k := 0 TO g.cols - 1 DO INC(total, g.width[k] + 1) END;
+  norm := total + g.cols - 2;
+  IF norm < columns THEN norm := columns END;
+  last := NIL;
+  FOR k := 0 TO g.cols - 1 DO
+    NEW(cs); cs.next := NIL;
+    CASE g.align[k] OF
+      G.AlignLeft: cs.align := A.AlignLeft
+    | G.AlignRight: cs.align := A.AlignRight
+    | G.AlignCenter: cs.align := A.AlignCenter
+    ELSE cs.align := A.AlignDefault
+    END;
+    x := g.width[k] + 1; cs.width := x / norm; cs.hasWidth := TRUE;
+    IF last = NIL THEN t.colSpecs := cs ELSE last.next := cs END;
+    last := cs
+  END;
+  IF g.headLen > g.rows THEN g.headLen := g.rows END;
+  B.pos := q;
+  t.head.rows := GridRows(g, 0, g.headLen);
+  IF g.foot >= 0 THEN
+    bodyEnd := g.foot - 1;
+    IF bodyEnd < g.headLen THEN bodyEnd := g.headLen END;
+    IF bodyEnd > g.rows THEN bodyEnd := g.rows END
+  ELSE
+    bodyEnd := g.rows
+  END;
+  NEW(tb); tb.attr := NIL; tb.rowHeadColumns := 0; tb.head := NIL;
+  tb.body := GridRows(g, g.headLen, bodyEnd); tb.next := NIL;
+  t.bodies := tb;
+  t.foot.rows := GridRows(g, bodyEnd, g.rows);
+  SH.PlaceRows(t.head.rows, g.cols);
+  SH.PlaceRows(tb.body, g.cols);
+  SH.PlaceRows(t.foot.rows, g.cols);
+  q := B.BlankLines(q); IF q < 0 THEN q := B.pos END;
+  RETURN q
+END GridTable;
+
+(* Whether every cell of the rows r is empty, a Para or a Plain *)
+PROCEDURE SimpleRows(r: A.Row): BOOLEAN;
+  VAR c: A.Cell;
+BEGIN
+  WHILE r # NIL DO
+    c := r.cells;
+    WHILE c # NIL DO
+      IF (c.blocks # NIL) & ((c.blocks.next # NIL)
+          OR (c.blocks.kind # A.Para) & (c.blocks.kind # A.Plain)) THEN
+        RETURN FALSE
+      END;
+      c := c.next
+    END;
+    r := r.next
+  END;
+  RETURN TRUE
+END SimpleRows;
+
+(* Each cell's Para of the rows r a Plain *)
+PROCEDURE PlainRows(r: A.Row);
+  VAR c: A.Cell;
+BEGIN
+  WHILE r # NIL DO
+    c := r.cells;
+    WHILE c # NIL DO
+      IF c.blocks # NIL THEN c.blocks.kind := A.Plain END;
+      c := c.next
+    END;
+    r := r.next
+  END
+END PlainRows;
+
+(* compactifyTable: if every cell of t is empty or a lone Para or
+   Plain, each Para becomes a Plain *)
+PROCEDURE CompactifyTable(t: A.TableBlk);
+  VAR tb: A.TableBody;
+BEGIN
+  IF ~SimpleRows(t.head.rows) OR ~SimpleRows(t.foot.rows) THEN RETURN END;
+  tb := t.bodies;
+  WHILE tb # NIL DO
+    IF ~SimpleRows(tb.head) OR ~SimpleRows(tb.body) THEN RETURN END;
+    tb := tb.next
+  END;
+  PlainRows(t.head.rows); PlainRows(t.foot.rows);
+  tb := t.bodies;
+  WHILE tb # NIL DO PlainRows(tb.head); PlainRows(tb.body); tb := tb.next END
+END CompactifyTable;
+
+(* table: block attributes, then a table.el or an Org table; nothing
+   if #+OPTIONS: has |:nil. Not on a list item's first line, nor
+   after a list in one (orgStateLastPreCharPos is Nothing). *)
+PROCEDURE Table(VAR l: A.Blocks): BOOLEAN;
+  VAR p, q: LONGINT; ba: BlockAttrs; t: A.TableBlk;
+BEGIN
+  IF inList & fresh THEN RETURN FALSE END;
+  p := Attributes(B.pos, ba);
+  IF p < 0 THEN RETURN FALSE END;
+  q := GridTable(p, t);
+  IF q < 0 THEN q := OrgTable(p, t) END;
+  IF q < 0 THEN RETURN FALSE END;
+  B.pos := q;
+  IF M.tables THEN
+    t.attr := A.NewAttr(ba.name); t.attr.attrs := ba.kv.attrs;
+    IF ba.hasCaption & (ba.caption # NIL) THEN
+      t.caption.blocks := A.NewInlinesBlock(A.Plain, ba.caption)
+    END;
+    CompactifyTable(t);
+    A.AddBlock(l, t)
+  END;
+  RETURN TRUE
+END Table;
+
 (* block: one block at B.pos, added to l; FALSE if there is none *)
 PROCEDURE Block(VAR l: A.Blocks): BOOLEAN;
   VAR q: LONGINT;
 BEGIN
   q := B.BlankLines(B.pos);
-  IF q >= 0 THEN B.pos := q; RETURN TRUE END;
-  IF DynamicBlock(l) OR OrgBlock(l) OR Figure(l) OR Example(l) OR Drawer(l)
-      OR SpecialLine(l) THEN
-    RETURN TRUE
+  IF q >= 0 THEN B.pos := q; fresh := FALSE; RETURN TRUE END;
+  IF Table(l) OR DynamicBlock(l) OR OrgBlock(l) OR Figure(l) OR Example(l)
+      OR Drawer(l) OR SpecialLine(l) THEN
+    fresh := FALSE; RETURN TRUE
   END;
   q := I.Hline(B.pos);
   IF q >= 0 THEN
-    A.AddBlock(l, A.NewHorizontalRule()); B.pos := q;
+    A.AddBlock(l, A.NewHorizontalRule()); B.pos := q; fresh := FALSE;
     RETURN TRUE
   END;
-  RETURN DefinitionList(l) OR List(FALSE, l) OR List(TRUE, l)
-    OR LatexFragment(l) OR NoteBlock(l) OR RawOrgLine(l) OR ParaOrPlain(l)
+  IF DefinitionList(l) OR List(FALSE, l) OR List(TRUE, l) THEN
+    fresh := TRUE; RETURN TRUE (* its items' parseFromString *)
+  END;
+  IF LatexFragment(l) OR NoteBlock(l) OR RawOrgLine(l) OR ParaOrPlain(l) THEN
+    fresh := FALSE; RETURN TRUE
+  END;
+  RETURN FALSE
 END Block;
 
 (* blocks: blocks up to a headline or the end of the text *)
@@ -1491,7 +1817,7 @@ BEGIN
   B.Start(t, n + 2 - k, tabStop);
   M.Reset(smart, smartQuotes, specialStrings);
   I.fancyLists := fancyLists;
-  ids := NIL; inList := FALSE;
+  ids := NIL; inList := FALSE; fresh := FALSE;
   d := A.NewDoc(); meta := d.meta; notes := NIL;
   A.InitBlocks(l);
   DocumentTree(l);
@@ -1504,5 +1830,5 @@ BEGIN
   autoIds := TRUE; asciiIds := FALSE; gfmIds := FALSE; citations := TRUE;
   specialStrings := TRUE; taskLists := TRUE; smart := FALSE;
   smartQuotes := FALSE; fancyLists := FALSE; eastAsian := FALSE;
-  standalone := FALSE; unknown := Quiet
+  standalone := FALSE; unknown := Quiet; columns := 72
 END PdOrg.

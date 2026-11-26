@@ -200,6 +200,15 @@ read:
   reported at its start, where `--verbose`'s `[INFO]` lines, as in
   pandoc, give the position after it.
 
+## The Org reader
+
+- A table whose column widths add up to 0 (`| <0> |`, every column
+  given width 0) has its widths 0 / 0, NaN, in pandoc, written as
+  `null` in JSON; podoc gives those columns `ColWidthDefault`.
+- A column width in an alignment row (`<10>`, `<l10>`) is read as a
+  number exact up to 2^53; pandoc reads it as an `Int`, which wraps
+  at 2^63.
+
 ## YAML metadata
 
 podoc reads YAML with its own small reader, `PdYaml`, not libyaml.

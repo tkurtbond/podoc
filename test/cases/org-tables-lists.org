@@ -1,0 +1,40 @@
+-
+  | a | b |
+- | t |
+  | u |
+- a
+  - b
+  | t |
+- a
+  - b :: c
+  | t |
+- a
+  #+begin_center
+  | t |
+  #+end_center
+- a
+  #+begin_center
+  x
+  #+end_center
+  | t |
+- a
+  #+begin_example
+  x
+  #+end_example
+  | t |
+- a
+
+  | t |
+- a
+  #+CAPTION: cap
+  #+NAME: n
+  | t |
+- a
+  :PROPERTIES:
+  :END:
+  | t |
+  - b
+
+#+begin_center
+| t |
+#+end_center

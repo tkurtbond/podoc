@@ -516,6 +516,11 @@ Made by the user on 2026-11-20, on the questions of §15.
     2026-11-26; `d:` and `p:` keep them).
 59. **No Org writer for now** (2026-11-26). `-t org` goes to "Later",
     as the rST writer did (decision 19): no build writes Org.
+60. **Org table widths that add up to 0** (2026-11-26). When every
+    column of an Org table has width 0 (`| <0> |`), pandoc divides 0
+    by 0 and writes the widths as NaN, `null` in JSON. podoc gives
+    those columns `ColWidthDefault` instead, the user's choice, and
+    lists it in `docs/user/differences.md`.
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -4155,3 +4160,30 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   math environments) or `#+title` (28.1). Not yet checked one by
   one against pandoc's `test/Tests/Readers/Org/Block*.hs`. Not yet
   run on the BSDs.
+- 2026-11-26, Phase 26.4: Org tables in `PdOrg`. Org tables
+  (`orgTable`): content rows, each cell inlines up to `|` or the line's
+  end, trimmed; `|-` rules, the one after the only content row making
+  it the header, the others dropped; alignment rows (`<l>`, `<c>`,
+  `<r>`, `<n>`, `<l10>`), the last one giving the alignments and the
+  widths, n / the sum of the widths with 1 for each column without
+  one; `normalizeTable`'s columns, the header's or the first row's,
+  rows padded and clipped (`PdShared.PlaceRows`). table.el tables
+  through `PdGridTable`, their cells read as Org blocks and their
+  widths from `--columns` (`PdOrg.columns`). Block attributes for the
+  name, caption and `#+attr_html` pairs; `compactifyTable`; `|:nil`
+  reads the table and drops it. `#+TBLFM` and `#+TBLNAME` were
+  already raw Org lines, as in pandoc. A table is refused where
+  pandoc's `orgStateLastPreCharPos` is Nothing in a list item: at
+  the start of a `parseFromString` (an item's, a block's) and after
+  a list (`fresh`). Rows are read in one pass: a 32,000-row table
+  takes 0.08 s under either model (pandoc 0.61 s), with the same
+  JSON. Seven case tests (`org-tables*`, JSON from pandoc 3.14).
+  `make test` passed under `-O2` and `-OC`: 396 case tests, 23
+  round trips, 10 image tests, 20 mermaid tests. The 17 inputs of
+  pandoc's `test/Tests/Readers/Org/Block/Table.hs` and 27 further
+  probe files matched pandoc under both models, or differed only
+  by Phase 27's inline markup, but for widths that add up to 0
+  (pandoc's NaN, podoc's `ColWidthDefault`, decision 60;
+  `docs/user/differences.md`).
+  Notes in table cells (`compactifyTable`'s `fixNotes`) wait for
+  27.3. Not yet run on the BSDs.

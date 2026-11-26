@@ -1,0 +1,18 @@
+#+CAPTION: A caption
+#+NAME: tbl
+#+ATTR_HTML: :border 2 :id x :class y
+| one | two |
+#+TBLFM: $2=$1
+#+TBLNAME: foo
+
+#+CAPTION: two
+#+CAPTION: lines
+#+LABEL: lab
+| a |
+
+#+CAPTION:
+| a |
+
+#+NAME: n
+#+FOO: x
+| a |

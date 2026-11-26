@@ -99,6 +99,7 @@ BEGIN
   PdMarkdown.gridTables := O.gridTables;
   PdMarkdown.titleBlock := O.titleBlock;
   PdMarkdown.columns := O.columns; PdRst.columns := O.columns;
+  PdOrg.columns := O.columns;
   m := A.NewMetaMap();
   f := O.metaFiles;
   WHILE f # NIL DO
