@@ -35,7 +35,9 @@ citations; Lua filters (decision 6); VAX/VMS
 (decision 1). Plain text output, grid tables (reader and writers) and
 output wrapping came into scope on 2026-11-20 (decisions 10 to 15,
 Phases 16 and 17). mermaid diagrams came into scope on 2026-11-23,
-drawn by pomermaid (decisions 48 to 51, Phase 25).
+drawn by pomermaid (decisions 48 to 51, Phase 25). Emacs Org mode
+input came into scope on 2026-11-26 (decisions 55 to 59, Phases 26
+to 28).
 
 ## Decisions
 
@@ -460,6 +462,60 @@ Made by the user on 2026-11-20, on the questions of §15.
     image.
     - It does not imitate pandoc's skylighting markup (a `<span>`
       per token, numbered lines, colour).
+55. **An Org mode reader** (2026-11-26). After the research in
+    docs/research/org-mode-reader.md, the user asked for one: podoc
+    reads Org as pandoc 3.14's `-f org` does, its JSON matching
+    pandoc's byte for byte, except as decision 57 says. pandoc 3.14
+    is the oracle and its source, unpacked from the tarball cabal
+    built the installed pandoc from, is in
+    `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.14`; the Org
+    reader's expected files are made with 3.14, not 3.10.
+56. **All of pandoc's Org reader** (2026-11-26), not only what the
+    user's 663 `.org` files use: everything `Readers/Org/` handles,
+    held to pandoc 3.14's `test/Tests/Readers/Org/` cases, the 36
+    `test/command/*.md` files that read Org, `test/org-select-tags.org`,
+    and the user's files. The user's files are compared by a local
+    script only; nothing from them is copied into the repository.
+57. **LaTeX commands kept raw; Org entities read** (2026-11-26,
+    revised the same day). Org entities are read as pandoc reads
+    them: a `\name`, with any trailing `{}` dropped, found in
+    texmath's MathML entity table (texmath 0.13.3.5's
+    `Readers/MathML/EntityMap.hs`) is a `Str` of its character
+    (`\alpha` gives `α`, `\nbsp` U+00A0), looked up first, before
+    LaTeX. texmath's table has the same 2,125
+    names as the HTML5 table `PdEntities` holds for the markdown
+    reader, and the same characters for all but six, which the Org
+    reader takes from texmath: `epsilon` (U+03F5) and `varepsilon`
+    (U+03B5), swapped, and `DotDot`, `TripleDot`, `tdot` and
+    `DownBreve`, each a space before its combining mark (checked with
+    pandoc 3.14 on 2026-11-26). With `e:nil` it is the text
+    `\name` itself; `tex:nil` and `tex:verbatim` do not change it.
+    Where pandoc's reader turns any other LaTeX command into inlines
+    through texmath (`\textbf{x}` becomes `Strong`), podoc keeps the
+    command as `RawInline (Format "latex")`. Where a command ends is
+    podoc's general raw TeX rule (`PdMdInline.RawTeX`), not pandoc's
+    LaTeX reader. What needs no texmath stays as pandoc has it:
+    `$...$`, `\(...\)` and the other math, LaTeX environments as raw
+    blocks, and the `tex:nil` (commands dropped) and `tex:verbatim`
+    (commands as text) settings. The commands kept raw are listed in
+    docs/user/differences.md.
+58. **Reporting what the Org reader drops** (2026-11-26), as decision
+    22 for rST. podoc gives pandoc's warnings (`Ignoring unknown Org
+    export option`, a missing include) as pandoc does, and whatever
+    `[INFO]` lines pandoc gives under `--verbose`.
+    `--unknown=warn|error` reports, with file, line and column, what
+    the reader keeps unread or drops without the author asking:
+    keywords it does not know (kept as `RawBlock org`), `#+BEGIN_`
+    blocks it does not know (made `Div`s), unknown macros, and the
+    LaTeX commands decision 57 keeps raw. Not reported: what the
+    author asked to drop (`COMMENT` trees, `noexport` and excluded
+    tags, comment blocks and lines, `:nil` settings); `ARCHIVE` trees,
+    which `arch:` governs; and drawers and planning lines, which
+    pandoc's defaults drop but which are normal in files written for
+    Emacs, so that reporting them would be noise (the user's choice,
+    2026-11-26; `d:` and `p:` keep them).
+59. **No Org writer for now** (2026-11-26). `-t org` goes to "Later",
+    as the rST writer did (decision 19): no build writes Org.
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -2065,9 +2121,281 @@ podoc runs pomermaid on `mermaid` code blocks, in `PdMermaid`.
   warnings, status and files.
 - **Done** 2026-11-23; see the State.
 
+## The Org mode reader: Phases 26 to 28
+
+podoc reads Org as pandoc 3.14's `-f org` does, all of
+`Readers/Org/` (decisions 55 to 59;
+docs/research/org-mode-reader.md, read first). The output is the
+same AST the other readers build, so the writers, templates, filters
+and PDF output need no change. pandoc's reader is 3,798 lines of
+Haskell in 3.14; the estimate is 7,000 to 9,000 lines of Oberon, the
+largest addition yet, so the work is three phases: the blocks and
+the headline tree (26), the inlines (27), and metadata, includes,
+reporting and the corpus (28).
+
+The modules are:
+
+- `PdOrg`: lines, blocks, the headline tree and the passes after
+  parsing;
+- `PdOrgInline`: inline markup, links, notes, citations and macros;
+- `PdOrgMeta`: the keywords, `#+OPTIONS` (pandoc's
+  `ExportSettings`) and the metadata.
+
+They reuse `PdMdBase`'s text buffer and character classes,
+`PdMdInline`'s text building and `RawTeX`, `PdShared`, the
+identifier rules, and `PdGridTable` for table.el tables
+(`gridTableWith`).
+
+Two things in pandoc's design shape the Oberon one:
+
+- **Settings take effect where they are read.** `#+OPTIONS`,
+  `#+TODO`, `#+MACRO` and `#+LINK` change the parser's state from
+  that line on (`a_b`, then `#+OPTIONS: ^:nil`, then `c_d` gives a
+  subscript and then plain text). The reader keeps them in its state
+  as it goes, as pandoc does, and does not scan for them first.
+- **Some things are resolved at the end** (pandoc's `F`, a value
+  computed from the final state): footnote definitions, anchors and
+  `CUSTOM_ID`s for internal links, and link abbreviations. As the
+  markdown reader does for references, the reader leaves marked nodes
+  and a pass over the AST fills them in once the document is read.
+
+Each sub-phase is checked against `pandoc -f org -t json` (3.14),
+byte for byte, with and without `-s`:
+
+- **case tests:** `test/cases/<name>.org`, with expected JSON and,
+  where a construct reaches a writer in a new way (TODO and tag
+  spans, admonition `Div`s, verse blocks), ms, mom, ConTeXt, HTML and
+  markdown. `tools/runcases` learns `.org` inputs, as it learned
+  `.rst`. The expected JSON is 3.14's (decision 55).
+- **pandoc's fixtures:** the cases of `test/Tests/Readers/Org/` the
+  sub-phase covers, their Org input taken into case files and their
+  expected JSON made by running pandoc 3.14; the 36 command tests
+  that read Org; `test/org-select-tags.org`; and `test/tables.org` and
+  `test/writer.org` read as input.
+- **the user's corpus:** the 663 `.org` files under `~/Repos` and
+  `~/current`, by a local script (`tools/orgcorpus`) that reads the
+  list of files from its arguments and keeps nothing; not part of
+  `make test` (decision 56).
+
+All of this runs under `-O2` and `-OC`. Org text is indexed with
+`LONGINT`; the largest of the user's files is 490 KB.
+
+## Phase 26: Org blocks and the headline tree
+
+### Phase 26.1: The skeleton, paragraphs and settings
+
+- `-f org` and `-r org`, and `.org` inputs when there is no `-f`
+  (`PdOptions` already deduces `org`; today it ends with status 21,
+  and differences.md changes).
+- Org's extensions, with `+` and `-`: `auto_identifiers`,
+  `citations`, `special_strings` and `task_lists` on;
+  `ascii_identifiers`, `gfm_auto_identifiers`, `smart`,
+  `smart_quotes`, `fancy_lists` and `east_asian_line_breaks` off.
+  `smart` turns on smart quotes and special strings, as in
+  `optionsToParserState`.
+- The parser's lines (pandoc's `Org/Parsing.hs`): the input with
+  two final new lines (`ensureFinalNewlines 2`), meta lines
+  (`#+KEY:`), and `BlockStarts`, what ends a paragraph.
+- Paragraphs and `Plain`, blank lines, horizontal rules (five or more
+  `-`), comment lines (`# `) and fixed-width lines (`: `, a code
+  block with the class `example`).
+- `PdOrgMeta`'s settings record, with `#+OPTIONS` read into it from
+  where it appears. Each setting's effect comes with its construct,
+  in the sub-phase that reads it; an unknown option gives pandoc's
+  warning.
+- Text only, for now: inline markup is Phase 27. Until then the
+  case tests hold plain words.
+
+### Phase 26.2: Lists
+
+- Bullet lists (`-`, `+`, and `*` when indented), ordered lists
+  (`1.`, `1)`; with `fancy_lists`, `a.` and `A.` too), the counter
+  cookie `[@5]`.
+- Definition lists (`- term :: definition`), and pandoc's rule for a
+  list that mixes them with plain items.
+- Checkboxes `[ ]`, `[X]`, `[-]` with `task_lists`, as ☐ and ☒.
+- Indentation: list items' continuation lines and nested blocks,
+  `listContinuation`, the blank lines between and after items as
+  pandoc counts them, and `compactify`.
+
+### Phase 26.3: Blocks
+
+- Block attributes: `#+NAME`, `#+CAPTION` (short and long),
+  `#+ATTR_HTML` and the other `#+ATTR_`, `#+LABEL`; figures from an
+  image link with them (`figure`).
+- `#+BEGIN_` ... `#+END_` blocks, case-insensitively:
+  - `src`: the language, header arguments (`:exports`, `:results`,
+    `:tangle`, ...) as attributes, and the switches (`-n` and `+n`,
+    with a start, as line numbers; `-l "format"`; `-i`; any other
+    `-x` or `+x`, as pandoc keeps it); `#+RESULTS` blocks after them and
+    `:exports` (`code`, `results`, `both`, `none`); comma escaping
+    as 3.14 has it (runs of commas before `*` and `#+`);
+  - `example`, `quote`, and `verse` (a line block, each line's
+    leading spaces as U+00A0);
+  - `export`, `html`, `latex`, `ascii` as raw blocks, `comment`
+    dropped;
+  - the admonitions `note`, `warning`, `tip`, `caution`,
+    `important`, with their title `Div`;
+  - `abstract` into the metadata;
+  - any other name (`center` among them), a `Div` with that name as
+    a class and its parameters as attributes.
+- Dynamic blocks (`#+BEGIN: name params` ... `#+END:`), a `Div` with
+  the name as class; drawers, `:NAME:` ... `:END:`, kept or dropped
+  by `d:`.
+- Raw export lines (`#+HTML:`, `#+LATEX:`, `#+TEXINFO:`, `#+BEAMER:`),
+  other keywords as `RawBlock org`, `#+print_bibliography:`.
+- LaTeX environments, `\begin{name}` ... `\end{name}` at the start of
+  a line, as raw LaTeX (`latexFragment`), except the math
+  environments pandoc reads inline (`inlineEnvironmentNames`), with
+  `tex:` (decision 57).
+- Footnote definitions, `[fn:name] text` at the start of a line
+  (`noteBlock`), kept for the pass that resolves them (Phase 27.3).
+
+### Phase 26.4: Tables
+
+- Org tables: rows, `|-` rules, the header (rows before the first
+  rule), cells' inlines, short rows padded (`normalizeTable`).
+- Column property rows: alignment cookies `<l>`, `<c>`, `<r>` and
+  widths `<10>`, and pandoc's widths from them; the row is not
+  output.
+- `#+TBLFM` and `#+TBLNAME` lines; `|:nil` drops tables; a table not
+  allowed on a list item's first line.
+- table.el tables (`+-`) through `PdGridTable`.
+- Captions and names from the block attributes; 3.14's linear table
+  row parsing (a 32,000-row table in about a second in pandoc).
+
+### Phase 26.5: The headline tree
+
+- Headlines (`*` to any depth) and their identifiers (unique, with
+  `auto_identifiers`).
+- TODO keywords, from `#+TODO`, `#+SEQ_TODO` and `#+TYP_TODO`
+  (`|` separating the done states), as `Span`s with the classes
+  `todo` or `done` and the keyword; `todo:nil`.
+- Priorities `[#A]`; tags `:a:b:` as `tag` `Span`s with `SmallCaps`
+  and U+00A0 between; `tags:nil`.
+- Property drawers (`propertiesToAttr`): `:CUSTOM_ID:` or `:ID:` as
+  the identifier, `:CLASS:` as classes, `:UNNUMBERED:` as the class
+  `unnumbered`, the other properties as attributes; planning lines
+  (`SCHEDULED`, `DEADLINE`, `CLOSED`) dropped, or kept with `p:t`.
+- `COMMENT` headlines and their trees dropped; `ARCHIVE` trees by
+  `arch:` (`nil`, `t`, `headline`).
+- `#+SELECT_TAGS` and `#+EXCLUDE_TAGS` (`noexport`), as
+  `org-select-tags.org` tests.
+- `H:` (and `#+OPTIONS: H:n`): headlines below the level become
+  list items, as `headlineToBlocks` does.
+- **Phase 26 done when** every block case of pandoc's Org tests
+  passes, with inline markup left to Phase 27 where a case needs it.
+
+## Phase 27: Org inlines
+
+### Phase 27.1: Text, emphasis and verbatim
+
+- `Str`, `Space`, `SoftBreak`, and `\\` at the end of a line as
+  `LineBreak`; `\n:t` for hard breaks.
+- Emphasis: `*bold*`, `/italic/`, `_underline_`, `+strike+`,
+  `=verbatim=` (`Code` with the class `verbatim`), `~code~`, with
+  pandoc's pre- and post-characters, forbidden border characters and
+  the limit of one new line inside (`emphasisAllowedNewlines`); `*:nil`.
+- Subscripts and superscripts, `a_b`, `a^{bc}`, with `^:` (`t`,
+  `nil`, `{}`; 3.14's `^:nil` turning off both forms).
+- Special strings (`--`, `---`, `...`, `\-`) and smart quotes, with
+  `-:` and `':`; the bare backslash 3.14 reads as text.
+
+### Phase 27.2: Links, images and targets
+
+- `[[target][description]]` and `[[target]]`, plain links (pandoc's
+  URI schemes) and angle links `<https://...>`.
+- Images: a link to an image file (3.14 counts `.pdf` as one), and an
+  image as a link's description.
+- `file:` links, with search options; internal links to a headline
+  (`*Heading`), a `CUSTOM_ID` (`#id`), and a target; `<<target>>`
+  anchors; resolved at the end against the document's anchors
+  (`orgStateAnchorIds`).
+- `#+LINK` abbreviations, applied at the end: `%s` replaced by the
+  rest of the link, `%h` by the same URL-encoded, and with neither,
+  the rest appended.
+
+### Phase 27.3: Notes, citations, macros, snippets and inline code
+
+- Footnote references `[fn:name]`, inline notes `[fn::text]` and
+  `[fn:name:text]` (3.14 allowing `-` and `_` in names), resolved
+  against the definitions of Phase 26.3; `f:nil`.
+- Citations with `citations`: org-cite `[cite/style:pre @key suf;
+  ...]` and the org-ref forms (`cite:key`, `[[cite:key]]`), as pandoc's
+  `Cite`s; `#+BIBLIOGRAPHY`, `#+NOCITE`.
+- `#+MACRO` definitions and `{{{name(arg, ...)}}}`, `$1` to `$9`,
+  nested to pandoc's depth of 15; an unknown macro stays text.
+- Export snippets `@@format:text@@`.
+- Inline source `src_lang[args]{code}`, with `:exports`, as pandoc
+  gives it (3.14 has no `call_` inline).
+
+### Phase 27.4: Math and LaTeX
+
+- `$x$`, `$$x$$`, `\(x\)`, `\[x\]`, with Org's border rules for `$`
+  (`mathPostChars`, `mathForbiddenBorderChars`).
+- Org entities, as pandoc reads them (decision 57): `\name` or
+  `\name{}` looked up first, in `PdEntities` with texmath's six
+  exceptions, as a `Str` of its character; `e:nil` leaves the text
+  `\name`; `tex:nil` and `tex:verbatim` do not change them.
+- Other LaTeX commands as `RawInline latex`, ending as
+  `PdMdInline.RawTeX` ends them (decision 57); `tex:nil` drops them,
+  `tex:verbatim` makes them text. The difference, commands pandoc
+  turns into inlines through texmath, goes into
+  docs/user/differences.md.
+- **Phase 27 done when** every inline case of pandoc's Org tests
+  passes, except those decision 57 changes, each listed.
+
+## Phase 28: Org metadata, includes, reporting and the corpus
+
+### Phase 28.1: Metadata
+
+- `#+TITLE`, `#+SUBTITLE`, `#+AUTHOR`, `#+EMAIL`, `#+DATE`,
+  `#+DESCRIPTION`, `#+KEYWORDS`, `#+LANGUAGE` (as `lang`),
+  `#+INSTITUTE`, `#+CREATOR`, with `author:`, `email:`, `creator:`
+  and `date:`.
+- The export keywords: `#+LATEX_CLASS` (`documentclass`),
+  `#+LATEX_CLASS_OPTIONS` (`classoption`), `#+LATEX_HEADER` and
+  `_EXTRA` (`header-includes`, raw LaTeX), `#+HTML_HEAD` and
+  `_EXTRA`; `toc:` and `num:` as pandoc keeps or ignores them.
+- `-s` and the templates: the metadata reaches every writer's
+  template as rST's and markdown's does; checked with `-s` for each
+  writer.
+
+### Phase 28.2: `#+INCLUDE`
+
+- `#+INCLUDE: "file"`, relative to the including file, parsed in the
+  includer's state; `example`, `export`, `export FORMAT` and `src
+  LANG`; `:lines "a-b"`; `:minlevel`, shifting headlines and making
+  those that fall below 1 paragraphs.
+- Included files that include others, guarded against recursion;
+  pandoc's warning and exit status for a file that is not there, as
+  `PdRst`'s `include` does.
+
+### Phase 28.3: Reporting
+
+- pandoc's warnings, given as pandoc gives them, and `--verbose`
+  (decision 58).
+- `--unknown=warn|error` for Org, with file, line and column, for
+  the cases decision 58 lists; `error` ends with status 64. Listed in
+  docs/user/differences.md and documented in docs/user/podoc.md.
+
+### Phase 28.4: The corpus, documentation and other systems
+
+- `tools/orgcorpus`: all of the user's 663 files match pandoc 3.14's
+  JSON, apart from decision 57's differences, each kind counted.
+- The 36 command tests and pandoc's fixtures, all run; the remaining
+  differences listed.
+- Speed and memory against pandoc in `tools/bench` (an `org` set),
+  the largest file under a `systemd-run` cap; results in
+  docs/developer/performance.md.
+- docs/user/podoc.md (`-f org`, the extensions, `--unknown`),
+  differences.md, AGENTS.md and the research document's status.
+- `make test` on the BSDs.
+
 ## Later, not scheduled
 
 - An rST writer, `-t rst` (decision 19).
+- An Org writer, `-t org` (decision 59).
 - Full YAML through polibfyaml, as `make YAML=libfyaml` (decision 2).
 - Embedded Lua 5.4 and a `pandoc` module written in Lua (§8), if a
   filter appears that native code does not cover (decision 6).
@@ -3761,3 +4089,10 @@ podoc runs pomermaid on `mermaid` code blocks, in `PdMermaid`.
   (status 0; pages 3 and 9 rendered and looked at) shows both
   diagrams at 8 pt and the museum's three floors side by side, as
   Mermaid draws them. Not yet run on the BSDs.
+- 2026-11-26: The Org mode reader researched
+  (docs/research/org-mode-reader.md) and decided (decisions 55 to
+  59); Phases 26 to 28 planned, their details checked against
+  pandoc 3.14's `Readers/Org/`. The pandoc 3.14 source unpacked from
+  the cabal cache's tarball into
+  `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.14`. No code yet;
+  Phase 26.1 next.

@@ -85,7 +85,8 @@ See PLAN.md's State.
 
 | What | Where |
 |---|---|
-| pandoc 3.10 source (the installed binary is 3.14 since 2026-11-22; there is no 3.14 source here) | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.10` |
+| pandoc 3.14 source (the installed binary since 2026-11-22) | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.14` |
+| pandoc 3.10 source | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.10` |
 | pandoc 3.1.11.1 source | `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.1.11.1` |
 | doctemplates source | `/usr/local/sw/src/lang/Haskell/pandoc/doctemplates` |
 | The markdown reader | `src/Text/Pandoc/Readers/Markdown.hs`, `Parsing/` |
