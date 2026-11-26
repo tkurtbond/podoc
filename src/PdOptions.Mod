@@ -24,6 +24,12 @@ CONST
   LuaFilter* = 0; (* --lua-filter *)
   JsonFilter* = 1; (* -F, --filter *)
 
+  (* Org's extensions, the bits of orgExts *)
+  OrgAutoIds* = 0; OrgAsciiIds* = 1; OrgGfmIds* = 2; OrgCitations* = 3;
+  OrgSpecialStrings* = 4; OrgTaskLists* = 5; OrgSmart* = 6;
+  OrgSmartQuotes* = 7; OrgFancyLists* = 8; OrgEastAsian* = 9;
+  OrgExtNames = "auto_identifiers ascii_identifiers gfm_auto_identifiers citations special_strings task_lists smart smart_quotes fancy_lists east_asian_line_breaks";
+
   DefaultTabStop = 4;
   Version = "0.1";
 
@@ -54,6 +60,8 @@ VAR
   rst*: BOOLEAN; (* the reader is rst *)
   autoIds*: BOOLEAN; (* rst's auto_identifiers *)
   lhs*: BOOLEAN; (* rst's literate_haskell *)
+  org*: BOOLEAN; (* the reader is org *)
+  orgExts*: SET; (* org's extensions that are on: OrgAutoIds ... *)
   gridTables*: BOOLEAN; (* the grid_tables extension: TRUE unless -f
     markdown-grid_tables *)
   titleBlock*: BOOLEAN; (* the pandoc_title_block extension: TRUE unless
@@ -616,7 +624,7 @@ PROCEDURE Parse*;
 BEGIN
   parser := ArgParser.NewParser("podoc [OPTIONS] [FILES]", AddInput);
   parser.AddOption(ArgParser.MakeStringOption("f", "from",
-    "The input format: markdown or rst.", SetFrom));
+    "The input format: markdown, rst or org.", SetFrom));
   parser.AddOption(ArgParser.MakeStringOption("r", "read",
     "The same as --from.", SetFrom));
   parser.AddOption(ArgParser.MakeStringOption("t", "to",
@@ -787,10 +795,38 @@ END ExpandLhs;
    for an extension of markdown that podoc does not take. grid_tables
    sets gridTables, pandoc_title_block titleBlock; gutenberg, which pandoc's reader ignores, is
    taken and ignored. *)
+(* The name of Org's extension k, OrgAutoIds ... OrgEastAsian, the
+   k-th word of OrgExtNames *)
+PROCEDURE OrgExtName(k: INTEGER; VAR name: ARRAY OF CHAR);
+  VAR names: String; i, j: LONGINT;
+BEGIN
+  names := OrgExtNames; i := 0;
+  WHILE k > 0 DO
+    WHILE names[i] # " " DO INC(i) END;
+    INC(i); DEC(k)
+  END;
+  j := 0;
+  WHILE (names[i] # 0X) & (names[i] # " ") DO name[j] := names[i]; INC(i); INC(j) END;
+  name[j] := 0X
+END OrgExtName;
+
 PROCEDURE CheckReader;
-  VAR i, j: LONGINT; name, ext, spec: String;
+  VAR i, j: LONGINT; k: INTEGER; on: BOOLEAN; name, ext, spec: String;
 BEGIN
   i := FormatName(from, name);
+  IF name = "org" THEN
+    org := TRUE;
+    orgExts := {OrgAutoIds, OrgCitations, OrgSpecialStrings, OrgTaskLists};
+    FOR k := OrgAutoIds TO OrgEastAsian DO
+      OrgExtName(k, spec); on := k IN orgExts;
+      IF ~Extensions(from, i, spec, OrgExtNames, on, ext) THEN
+        PdIO.Message3("The extension '", ext, "' is not supported by podoc.");
+        PdIO.Exit(PdIO.UnsupportedExtension)
+      END;
+      IF on THEN INCL(orgExts, k) ELSE EXCL(orgExts, k) END
+    END;
+    RETURN
+  END;
   IF name = "rst" THEN
     rst := TRUE; autoIds := TRUE; lhs := FALSE;
     j := i; COPY(from, spec); ExpandLhs(spec, j);

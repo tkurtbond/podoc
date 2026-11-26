@@ -1,0 +1,11 @@
+Text
+#+HTML: <b>raw</b>
+  #+LaTeX: \relax
+#+beamer: x
+#+TEXINFO: @x
+#+print_bibliography:
+#+UNKNOWN: kept raw
+  #+NAME without a colon
+#+RESULTS: kept raw too
+#+RESULT: dropped
+end

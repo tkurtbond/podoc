@@ -1,0 +1,8 @@
+Text.
+: fixed width
+:   indented
+:
+  : the last
+After.
+
+:not fixed width

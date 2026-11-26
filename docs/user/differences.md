@@ -16,18 +16,23 @@ the rest have not yet been.
   error uses pandoc's exit status: 1 for a file that cannot be read or
   written, 4 for PDF output podoc cannot make or PDF to a terminal,
   6 for a bad `--wrap`, `--unknown` or
-  `--pdf-engine`, 21 for an input format other than markdown or rst, 22 for
-  an unknown output format, 23 for a markdown extension, 43 and 47
+  `--pdf-engine`, 21 for an input format other than markdown, rst or org, 22 for
+  an unknown output format, 23 for an unsupported extension, 43 and 47
   for a PDF engine that fails or is not there, 64 for a parse error or `--unknown=error`, 83 for a filter.
 - `--help` lists podoc's options in ArgParser's form, and error
   messages are podoc's own wording, starting with "podoc: ".
 - `-t source` writes the input as the reader would see it (joined,
   CRs removed, tabs expanded); pandoc has no such format.
-- podoc reads only `markdown` and `rst`. For `markdown` it turns
+- podoc reads only `markdown`, `rst` and `org`. For `markdown` it turns
   only `grid_tables` and `pandoc_title_block` on or off (`gutenberg`,
   which pandoc's reader ignores, it takes and ignores); for `rst`, only `auto_identifiers`
-  and `literate_haskell` (`lhs`). Any other extension, such as
-  `-f markdown+smart`, `-f markdown-smart` or `-f rst+smart`, ends
+  and `literate_haskell` (`lhs`); for `org`, the ten extensions
+  pandoc's Org reader has (`auto_identifiers`, `ascii_identifiers`,
+  `gfm_auto_identifiers`, `citations`, `special_strings`,
+  `task_lists`, `smart`, `smart_quotes`, `fancy_lists` and
+  `east_asian_line_breaks`). Any other extension, such as
+  `-f markdown+smart`, `-f markdown-smart`, `-f rst+smart` or
+  `-f org+pipe_tables`, ends
   podoc with exit status 23, and another format, or an input whose
   extension names one (`.tex`, ...) when there is no `-f`, with 21. Inputs
   and `-o` imply formats as in pandoc, with pandoc's warnings when an

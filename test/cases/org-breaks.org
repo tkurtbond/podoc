@@ -1,0 +1,11 @@
+line one
+line two\\
+line three \\  
+line four
+
+#+OPTIONS: \n:t
+hard
+breaks
+#+OPTIONS: \n:nil
+soft
+breaks

@@ -79,6 +79,9 @@ Phase 25, mermaid diagrams (decisions 48 to 54), is done: `PdMermaid`
 runs pomermaid (`~/Repos/Oberon/pomermaid`) for `-F
 pandoc-mermaid-selenium-filter` or `-F pomermaid`; its tests are
 `tools/runmermaid`, with a stand-in pomermaid in `test/mermaid/bin`.
+An Org mode reader, `-f org` (decisions 55 to 59), is planned as
+Phases 26 to 28; 26.1 is done: `PdOrg`, `PdOrgInline` and
+`PdOrgMeta`. Read `docs/research/org-mode-reader.md` first.
 See PLAN.md's State.
 
 ## Reference material

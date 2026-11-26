@@ -2198,7 +2198,7 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   (`#+KEY:`), and `BlockStarts`, what ends a paragraph.
 - Paragraphs and `Plain`, blank lines, horizontal rules (five or more
   `-`), comment lines (`# `) and fixed-width lines (`: `, a code
-  block with the class `example`).
+  block with no class: pandoc 3.14 gives `("",[],[])`).
 - `PdOrgMeta`'s settings record, with `#+OPTIONS` read into it from
   where it appears. Each setting's effect comes with its construct,
   in the sub-phase that reads it; an unknown option gives pandoc's
@@ -4096,3 +4096,22 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   the cabal cache's tarball into
   `/usr/local/sw/src/lang/Haskell/pandoc/pandoc-3.14`. No code yet;
   Phase 26.1 next.
+- 2026-11-26, Phase 26.1: `-f org`. `PdOrg` (blocks and the
+  headline tree), `PdOrgInline` (block starts, and text: Str, Space,
+  SoftBreak, LineBreak) and `PdOrgMeta` (the export settings and
+  `#+OPTIONS`, with pandoc's warning for an unknown option);
+  PdOptions takes Org's ten extensions, any other ending podoc with
+  status 23. Read: paragraphs and Plain, blank lines, rules,
+  fixed-width lines, comment lines, raw export lines (`#+html:` and
+  the like), `#+print_bibliography:`, unknown keywords as
+  `RawBlock org`, and `\\` and `\n:t` line breaks. Provisional:
+  known keywords other than `OPTIONS` are passed over (their
+  metadata is 28.1), and headlines are bare Headers with their
+  identifiers (26.5). Eleven case tests (`test/cases/org-*`, JSON
+  from pandoc 3.14), and `tools/runcases` reads `*.org`. `make test`
+  passed under `-O2` and `-OC`: 369 case tests, 23 round trips, 10
+  image tests, 20 mermaid tests. 46 further edge cases matched
+  pandoc under both models, or differed only by a later sub-phase's
+  construct (special strings, emphasis, lists, tables, notes, source
+  blocks, `#+title`, the empty headline's id). Not yet run on the
+  BSDs.

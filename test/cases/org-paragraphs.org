@@ -1,0 +1,7 @@
+Plain words in a paragraph,
+over two lines.
+
+A second paragraph
+  with an indented line.
+
+A last line with no new line

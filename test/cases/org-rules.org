@@ -1,0 +1,4 @@
+Before the rule.
+-----
+  ----------  
+After the rules.

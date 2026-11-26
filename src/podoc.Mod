@@ -21,7 +21,7 @@ MODULE podoc;
    The heap may grow to poc's default limit, 1 GB, or to the number of
    megabytes PODOC_HEAP_LIMIT gives. *)
 
-IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdRst, PdJson,
+IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMarkdown, PdRst, PdOrg, PdJson,
   T := PdTemplate, C := PdContext, PdHtml, PdMs, PdMom, PdConTeXt, PdMdWriter,
   PdInclude, PdFilters, PdMermaid, PdPdf, PdImages, O := PdOptions, Sh := PdShared, PdCodeAlign, PdKeywords;
 
@@ -112,6 +112,23 @@ BEGIN
     ELSE PdRst.unknown := PdRst.Quiet
     END;
     d := PdRst.Read(text, len, O.tabStop)
+  ELSIF O.org THEN
+    PdOrg.autoIds := O.OrgAutoIds IN O.orgExts;
+    PdOrg.asciiIds := O.OrgAsciiIds IN O.orgExts;
+    PdOrg.gfmIds := O.OrgGfmIds IN O.orgExts;
+    PdOrg.citations := O.OrgCitations IN O.orgExts;
+    PdOrg.specialStrings := O.OrgSpecialStrings IN O.orgExts;
+    PdOrg.taskLists := O.OrgTaskLists IN O.orgExts;
+    PdOrg.smart := O.OrgSmart IN O.orgExts;
+    PdOrg.smartQuotes := O.OrgSmartQuotes IN O.orgExts;
+    PdOrg.fancyLists := O.OrgFancyLists IN O.orgExts;
+    PdOrg.eastAsian := O.OrgEastAsian IN O.orgExts;
+    PdOrg.standalone := O.standalone;
+    IF O.unknown = "warn" THEN PdOrg.unknown := PdOrg.WarnUnknown
+    ELSIF O.unknown = "error" THEN PdOrg.unknown := PdOrg.FailUnknown
+    ELSE PdOrg.unknown := PdOrg.Quiet
+    END;
+    d := PdOrg.Read(text, len, O.tabStop)
   ELSE
     d := PdMarkdown.Read(text, len, O.tabStop)
   END;

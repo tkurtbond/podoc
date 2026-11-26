@@ -1,0 +1,4 @@
+#+OPTIONS: H:2 toc:nil num:t ^:{} arch:headline d:(not "LOGBOOK") tex:verbatim
+#+OPTIONS: zz:t e: H:3x d:("a"
+"b") ok
+Text.

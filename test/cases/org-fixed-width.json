@@ -1,0 +1,1 @@
+{"pandoc-api-version":[1,23,1,2],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"Text."}]},{"t":"CodeBlock","c":[["",[],[]],"fixed width\n  indented\n\nthe last\n"]},{"t":"Para","c":[{"t":"Str","c":"After."}]},{"t":"Para","c":[{"t":"Str","c":":not"},{"t":"Space"},{"t":"Str","c":"fixed"},{"t":"Space"},{"t":"Str","c":"width"}]}]}
