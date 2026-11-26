@@ -1,0 +1,18 @@
+- PLL :: phase-locked loop
+- TTL ::
+  transistor-transistor logic
+- PSK :: phase-shift keying
+
+  a digital modulation scheme
+
+ - Elijah Wood :: He plays Frodo
+
+- term :: def
+- plain item ends the definitions
+- t2 :: d2
+
+- std::cout is not a definition
+
+- term ::
+  - a
+  - b

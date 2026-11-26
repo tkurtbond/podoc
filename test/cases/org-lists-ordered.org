@@ -1,0 +1,19 @@
+1. One
+   1. One-One
+   2. One-Two
+2. Two
+   - Freedom
+3) [@7] Three, the cookie ignored
+
+1. [@5] Five
+2. Six
+
+1. [@c] Three
+2. Four
+
+a. a letter is text without the extension
+
+ 1. indented
+ 2. items
+10. ten
+    continued

@@ -1,0 +1,9 @@
+- [ ] nope
+- [@9] [X] yup
+- [@a][-] started
+  1. [@3][X] sure
+  2. [@b] [ ] nuh-uh
+- [x] lower case is text
+- [ ]
+- [X]
+  text after an empty checkbox

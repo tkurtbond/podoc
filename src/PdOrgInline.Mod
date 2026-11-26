@@ -197,13 +197,70 @@ PROCEDURE OrderedListStart*(p: LONGINT; VAR indent: LONGINT): LONGINT;
 BEGIN
   q := B.SkipSpaces(p); r := q;
   WHILE B.IsDigit(B.C(r)) DO INC(r) END;
-  IF (r = q) & fancyLists & B.IsLetter(B.C(r)) THEN INC(r) END;
+  ch := B.C(r);
+  IF (r = q) & fancyLists & ((ch >= "a") & (ch <= "z") OR (ch >= "A") & (ch <= "Z")) THEN
+    INC(r)
+  END;
   IF r = q THEN RETURN -1 END;
   ch := B.C(r);
   IF (ch # ".") & (ch # ")") THEN RETURN -1 END;
   indent := q - p + 1;
   RETURN AfterMarker(r + 1)
 END OrderedListStart;
+
+(* listCounterCookie at p: [@n] or [@a], and any spaces after it; the
+   number, or a letter's place in the alphabet, in n. Where it ends,
+   or -1. *)
+PROCEDURE CounterCookie(p: LONGINT; VAR n: LONGINT): LONGINT;
+  VAR q: LONGINT; ch: CHAR;
+BEGIN
+  IF ~B.Looking(p, "[@") THEN RETURN -1 END;
+  q := p + 2; ch := B.C(q);
+  IF B.IsDigit(ch) THEN
+    n := 0;
+    WHILE B.IsDigit(B.C(q)) DO
+      IF n <= (MAX(LONGINT) - 9) DIV 10 THEN
+        n := n * 10 + ORD(B.C(q)) - ORD("0")
+      END;
+      INC(q)
+    END
+  ELSIF (ch >= "a") & (ch <= "z") THEN n := ORD(ch) - ORD("a") + 1; INC(q)
+  ELSIF (ch >= "A") & (ch <= "Z") THEN n := ORD(ch) - ORD("A") + 1; INC(q)
+  ELSE RETURN -1
+  END;
+  IF B.C(q) # "]" THEN RETURN -1 END;
+  RETURN B.SkipSpaces(q + 1)
+END CounterCookie;
+
+(* A list item's marker at p, the start of a line: bulletListStart,
+   or orderedListStart if ordered, with its counter cookie. indent is
+   the marker's column plus one; start, style and delim are an ordered
+   list's attributes. Where the marker ends, or -1. *)
+PROCEDURE ListMarker*(p: LONGINT; ordered: BOOLEAN; VAR indent, start: LONGINT;
+    VAR style, delim: INTEGER): LONGINT;
+  VAR q, r, n: LONGINT; ch: CHAR;
+BEGIN
+  start := 1; style := A.DefaultStyle; delim := A.DefaultDelim;
+  IF ordered THEN
+    q := OrderedListStart(p, indent);
+    IF q < 0 THEN RETURN -1 END;
+    IF fancyLists THEN
+      r := B.SkipSpaces(p); ch := B.C(r);
+      IF B.IsDigit(ch) THEN style := A.Decimal
+      ELSIF (ch >= "a") & (ch <= "z") THEN style := A.LowerAlpha
+      ELSE style := A.UpperAlpha
+      END;
+      IF B.IsDigit(ch) THEN WHILE B.IsDigit(B.C(r)) DO INC(r) END ELSE INC(r) END;
+      IF B.C(r) = "." THEN delim := A.Period ELSE delim := A.OneParen END
+    END
+  ELSE
+    q := BulletListStart(p, indent);
+    IF q < 0 THEN RETURN -1 END
+  END;
+  r := CounterCookie(q, n);
+  IF r >= 0 THEN q := r; start := n END;
+  RETURN q
+END ListMarker;
 
 (* endOfBlock: whether a blank line or a block starts at p, the start
    of a line *)

@@ -4115,3 +4115,20 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   construct (special strings, emphasis, lists, tables, notes, source
   blocks, `#+title`, the empty headline's id). Not yet run on the
   BSDs.
+- 2026-11-26, Phase 26.2: Org lists in `PdOrg`. Bullet lists, ordered
+  lists (with `fancy_lists`, `a.`, `A)` and the rest), the counter
+  cookie `[@n]` and `[@a]` (the first item's sets the start; a
+  marker's number does not), definition lists, which a plain item
+  ends, and checkboxes, ☐ and ☒, with `task_lists`. Each item's text
+  is read as pandoc reads it, by `parseFromString` (`B.Enter`), with
+  the item's context for `paraOrPlain`; `compactify` and
+  `compactifyDL`; an item with no text is empty, as `B.plain` drops
+  an empty Plain. Not yet: a table in an item (26.4) and a
+  `#+BEGIN_` block whose lines are not indented (`blockLines`, 26.3).
+  Six case tests (`org-lists-*`, JSON from pandoc 3.14). `make test`
+  passed under `-O2` and `-OC`: 375 case tests, 23 round trips, 10
+  image tests, 20 mermaid tests. 60 further cases, 30 of them the
+  inputs of pandoc's `test/Tests/Readers/Org/Block/List.hs`, matched
+  pandoc under both models, as `org`, `org+fancy_lists` and
+  `org-task_lists`, but for a table in an item. Not yet run on the
+  BSDs.
