@@ -190,8 +190,10 @@ reinstall after upgrading poc.
   `docs/developer/memory-use-problem.md`.
 - `make install` installs the `-OC` podoc and `subs2yaml` (`PREFIX`,
   `~/.local` by default; `MODEL`, `DESTDIR`); `make uninstall`.
-- Tested on Fedora (atla), FreeBSD (alerik), NetBSD (artos, terhali;
-  yishana, i386) and OpenBSD (erekose, i386); on the
+- Tested on Fedora (atla) and, in VMs on atla, FreeBSD 15.1 (alerik,
+  amd64; rackhir, arm64), NetBSD 11.0 (artos, amd64; yishana, i386)
+  and OpenBSD 7.9 (jherek, amd64; cymoril, i386). Earlier runs, in
+  PLAN.md, also used terhali (NetBSD) and erekose (OpenBSD). On the
   VMs, copy clean checkouts (`git archive`) of podoc and its libraries
   to a scratch directory, `gmake`, and remove it afterwards.
 - The reader is checked against `pandoc -f markdown -t json`, byte for
