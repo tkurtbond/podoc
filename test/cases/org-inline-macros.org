@@ -1,0 +1,14 @@
+#+MACRO: greet Hello, $1!
+#+MACRO: swap $2-$1 [$0] <$9>
+#+macro: plain *plain text*
+#+MACRO: rec {{{rec}}}x
+#+MACRO: twice $1 and $1
+
+{{{greet(World)}}} {{{greet(a\,b)}}} {{{swap(a,b,c)}}} {{{swap(one)}}}
+x{{{plain}}}y {{{twice(/it/)}}} {{{rec}}} {{{greet}}} {{{none}}}
+{{{greet(un
+ended}}} {{{greet(two
+lines)}}}
+
+#+MACRO: greet Bye, $1.
+{{{greet(now)}}}

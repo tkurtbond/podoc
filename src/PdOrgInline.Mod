@@ -18,6 +18,13 @@ MODULE PdOrgInline;
    placeholder Span (PendAttr) and Resolve replaces it once the
    document's anchors and #+LINK formats are known.
 
+   Phase 27.3 reads footnote references and inline notes, resolved
+   the same way against PdOrg's note definitions (AddNote); org-cite
+   and org-ref citations, under the citations extension; #+MACRO
+   definitions (AddMacro) and {{{macro(args)}}} calls, the expansion
+   read again as inlines; export snippets @@format:text@@; and inline
+   source src_lang[options]{code}.
+
    pandoc's parser state is kept in st: the positions of the last pre
    character, forbidden character and Str, the emphasis characters
    open and the new lines allowed. PdOrg's blocks set it as pandoc's
@@ -35,6 +42,10 @@ CONST
     linkToInlinesF *)
   ExplicitImage = 1; (* [[target][image]]: formatted only *)
   Internal = 2; (* [[target]], not a URL: internalLink *)
+  NoteRef = 3; (* [fn:name] or [1]: referencedNote *)
+
+  (* org-cite styles that change a citation *)
+  NilStyle = 0; TextStyle = 1; NoAuthorStyle = 2; OtherStyle = 3;
 
   (* #+LINK formats *)
   FmtPlain = 0; FmtUrl = 1; FmtAppend = 2;
@@ -83,17 +94,54 @@ TYPE
     next: Format
   END;
 
+  (* orgStateNotes': a footnote's definition, its key fn:name or a
+     number, and its blocks *)
+  Note = POINTER TO NoteDesc;
+  NoteDesc = RECORD
+    ref: A.Rope;
+    blocks: A.Block;
+    next: Note
+  END;
+
+  (* A #+MACRO definition, orgStateMacros: its text, parts of it
+     with the number of the argument after each, 0 after the last *)
+  Part = POINTER TO PartDesc;
+  PartDesc = RECORD
+    text: B.Buf;
+    n: LONGINT;
+    next: Part
+  END;
+  Macro = POINTER TO MacroDesc;
+  MacroDesc = RECORD
+    name: A.Rope;
+    parts: Part;
+    next: Macro
+  END;
+
+  (* A macro's argument *)
+  Arg = POINTER TO ArgDesc;
+  ArgDesc = RECORD
+    text: B.Buf;
+    next: Arg
+  END;
+
   Resolver = POINTER TO ResolverDesc;
-  ResolverDesc = RECORD (A.WalkerDesc) END;
+  ResolverDesc = RECORD (A.WalkerDesc)
+    notes: BOOLEAN (* FALSE inside a referenced note's contents *)
+  END;
 
 VAR
   fancyLists*: BOOLEAN; (* the extension fancy_lists *)
+  citations*: BOOLEAN; (* the extension citations *)
   st: State;
   here: Pos; (* B.pos's line and column, last counted *)
   preChars, postChars: B.Buf; (* UTF-8: the characters allowed
     before and after emphasis *)
   defPre, defPost: B.Buf; (* pandoc's defaults for them *)
   formats: Format; (* the newest first *)
+  notes: Note; (* the newest first *)
+  macros: Macro; (* the newest first *)
+  macroDepth: INTEGER; (* orgStateMacroDepth *)
 
 (* Block starts. Each takes the start of a line, p, and returns where
    what it matched ends, or -1. *)
@@ -422,8 +470,16 @@ PROCEDURE Reset*;
 BEGIN
   st.pre.id := -1; st.forb.id := -1; st.str.id := -1; st.stack := NIL;
   st.count := -1; st.quote := NoQuote; st.anchors := NIL; here.id := -1;
-  preChars := defPre; postChars := defPost; formats := NIL
+  preChars := defPre; postChars := defPost; formats := NIL; notes := NIL;
+  macros := NIL; macroDepth := 0
 END Reset;
+
+(* addToNotesTable: ref, fn:name or a number, is defined as blocks *)
+PROCEDURE AddNote*(ref: A.Rope; blocks: A.Block);
+  VAR n: Note;
+BEGIN
+  NEW(n); n.ref := ref; n.blocks := blocks; n.next := notes; notes := n
+END AddNote;
 
 (* Saves the state, and B.pos, in s. *)
 PROCEDURE Save*(VAR s: State);
@@ -1298,6 +1354,604 @@ BEGIN
   PutPart(out, fm.after, 0, fm.after.len)
 END ApplyFormat;
 
+(* orgArgWord: letters, digits, - and _; where it ends, or -1 *)
+PROCEDURE ArgWord*(p: LONGINT): LONGINT;
+  VAR q: LONGINT;
+BEGIN
+  q := p;
+  WHILE (q < B.len) & ((B.t[q] = "-") OR (B.t[q] = "_") OR MI.AlnumAt(q)) DO
+    q := MI.RuneEnd(q)
+  END;
+  IF q = p THEN RETURN -1 END;
+  RETURN q
+END ArgWord;
+
+(* orgArgKey: spaces, a colon and an orgArgWord, the key, which starts
+   at from; where it ends, or -1 *)
+PROCEDURE ArgKey*(p: LONGINT; VAR from: LONGINT): LONGINT;
+BEGIN
+  p := B.SkipSpaces(p);
+  IF B.C(p) # ":" THEN RETURN -1 END;
+  from := p + 1;
+  RETURN ArgWord(p + 1)
+END ArgKey;
+
+(* Whether t[from .. to-1] is s *)
+PROCEDURE IsText(from, to: LONGINT; s: ARRAY OF CHAR): BOOLEAN;
+  VAR i: LONGINT;
+BEGIN
+  i := 0;
+  WHILE (i < LEN(s)) & (s[i] # 0X) DO INC(i) END;
+  RETURN (to - from = i) & B.Looking(from, s)
+END IsText;
+
+(* translateLang: pandoc's name for an Org language, or NIL if it is
+   the same *)
+PROCEDURE TranslateLang*(from, to: LONGINT): A.Rope;
+BEGIN
+  IF IsText(from, to, "C") THEN RETURN A.S("c")
+  ELSIF IsText(from, to, "emacs-lisp") OR IsText(from, to, "lisp") THEN
+    RETURN A.S("commonlisp")
+  ELSIF IsText(from, to, "js") THEN RETURN A.S("javascript")
+  ELSIF IsText(from, to, "R") THEN RETURN A.S("r")
+  ELSIF IsText(from, to, "sh") THEN RETURN A.S("bash")
+  ELSIF IsText(from, to, "sqlite") THEN RETURN A.S("sql")
+  END;
+  RETURN NIL
+END TranslateLang;
+
+(* inlineCodeBlock: src_lang[options]{code}, a Code, or nothing if
+   its first exports option is neither code nor both *)
+PROCEDURE InlineCode(VAR l: A.Inlines): BOOLEAN;
+  VAR q, r, e, from, v: LONGINT; a: A.Attr; lang, key, val: A.Rope;
+    exports, seen: BOOLEAN; ch: CHAR;
+BEGIN
+  IF ~B.Looking(B.pos, "src_") THEN RETURN FALSE END;
+  q := ArgWord(B.pos + 4);
+  IF q < 0 THEN RETURN FALSE END;
+  a := A.NewAttr(NIL);
+  lang := TranslateLang(B.pos + 4, q);
+  IF lang = NIL THEN A.AddClass(a, B.Rope(B.pos + 4, q))
+  ELSE
+    A.AddClass(a, lang);
+    A.AddKeyVal(a, A.S("org-language"), B.Rope(B.pos + 4, q))
+  END;
+  exports := TRUE; seen := FALSE; r := q;
+  IF B.C(r) = "[" THEN
+    INC(r);
+    LOOP
+      IF (r < B.len) & (B.t[r] = "]") THEN INC(r); EXIT END;
+      e := ArgKey(r, from);
+      IF e < 0 THEN RETURN FALSE END;
+      key := B.Rope(from, e);
+      v := B.SkipSpaces(e); r := v;
+      LOOP
+        ch := B.C(r);
+        IF (r >= B.len) OR (ch = 09X) OR (ch = 0AX) OR (ch = 0DX)
+            OR (ch = " ") OR (ch = "]") THEN EXIT
+        END;
+        INC(r)
+      END;
+      IF (r = v) OR (B.t[v] = ":") THEN val := A.S("yes"); r := e
+      ELSE val := B.Rope(v, r); r := B.SkipSpaces(r)
+      END;
+      A.AddKeyVal(a, key, val);
+      IF ~seen & IsText(from, e, "exports") THEN
+        seen := TRUE;
+        exports := Ropes.EqualString(val, "code")
+          OR Ropes.EqualString(val, "both")
+      END
+    END
+  END;
+  IF B.C(r) # "{" THEN RETURN FALSE END;
+  e := r + 1;
+  IF (e >= B.len) OR (B.t[e] = 0AX) OR (B.t[e] = 0DX) OR (B.t[e] = "}") THEN
+    RETURN FALSE
+  END;
+  INC(e);
+  LOOP
+    ch := B.C(e);
+    IF (e >= B.len) OR (ch = 0AX) OR (ch = 0DX) THEN RETURN FALSE
+    ELSIF ch = "}" THEN EXIT
+    END;
+    INC(e)
+  END;
+  IF exports THEN A.Append(l, A.NewCode(a, B.Rope(r + 1, e))) END;
+  B.pos := e + 1;
+  RETURN TRUE
+END InlineCode;
+
+(* exportSnippet: @@format:text@@, a RawInline *)
+PROCEDURE ExportSnippet(VAR l: A.Inlines): BOOLEAN;
+  VAR p, q, r: LONGINT;
+BEGIN
+  p := B.pos;
+  IF ~B.Looking(p, "@@") THEN RETURN FALSE END;
+  q := p + 2;
+  WHILE (q < B.len) & (MI.AlnumAt(q) OR (B.t[q] = "-")) DO
+    q := MI.RuneEnd(q)
+  END;
+  IF (q = p + 2) OR (B.C(q) # ":") THEN RETURN FALSE END;
+  r := q + 1;
+  WHILE (r + 1 < B.len) & ~B.Looking(r, "@@") DO INC(r) END;
+  IF r + 1 >= B.len THEN RETURN FALSE END;
+  A.Append(l, A.NewRawInline(B.Rope(p + 2, q), B.Rope(q + 1, r)));
+  B.pos := r + 2;
+  RETURN TRUE
+END ExportSnippet;
+
+(* #+MACRO: the line from p, after the key: a name, spaces and the
+   text, with $1, $2 and so on for its arguments (macroDefinition).
+   FALSE, nothing changed, if there is no name. *)
+PROCEDURE AddMacro*(p: LONGINT): BOOLEAN;
+  VAR q: LONGINT; ch: CHAR; m: Macro; pt, last: Part;
+BEGIN
+  q := p;
+  LOOP
+    ch := B.C(q);
+    IF (q >= B.len) OR (ch = " ") OR (ch = 09X) OR (ch = 0AX)
+        OR (ch = 0DX) THEN EXIT
+    END;
+    INC(q)
+  END;
+  IF q = p THEN RETURN FALSE END;
+  NEW(m); m.name := B.Rope(p, q); m.parts := NIL; last := NIL;
+  q := B.SkipSpaces(q);
+  LOOP
+    NEW(pt); B.InitBuf(pt.text); pt.n := 0; pt.next := NIL;
+    IF last = NIL THEN m.parts := pt ELSE last.next := pt END;
+    last := pt;
+    LOOP
+      ch := B.C(q);
+      IF (q >= B.len) OR (ch = 0AX) OR (ch = 0DX) THEN EXIT
+      ELSIF (ch = "$") & B.IsDigit(B.C(q + 1)) & (q + 1 < B.len) THEN EXIT
+      END;
+      B.PutChar(pt.text, ch); INC(q)
+    END;
+    IF (q >= B.len) OR (B.t[q] # "$") THEN EXIT END;
+    INC(q);
+    WHILE (q < B.len) & B.IsDigit(B.t[q]) DO
+      IF pt.n < 1000000 THEN pt.n := pt.n * 10 + ORD(B.t[q]) - ORD("0") END;
+      INC(q)
+    END;
+    IF pt.n < 1 THEN pt.n := 1 END (* drop (n - 1) of the arguments *)
+  END;
+  m.next := macros; macros := m;
+  RETURN TRUE
+END AddMacro;
+
+(* macro: {{{name}}} or {{{name(arguments)}}}, a macro defined, its
+   text, with the arguments, read as inlines *)
+PROCEDURE MacroCall(VAR l: A.Inlines): BOOLEAN;
+  VAR p, q, i: LONGINT; ch: CHAR; m: Macro; args, a, last, sel, s: Arg;
+    pt: Part; name: A.Rope; text: B.Buf; f: B.Frame; cl: A.Inlines;
+BEGIN
+  p := B.pos;
+  IF (macroDepth >= 15) OR ~B.Looking(p, "{{{") THEN RETURN FALSE END;
+  q := p + 3;
+  WHILE (q < B.len) & MI.AlnumAt(q) DO q := MI.RuneEnd(q) END;
+  name := B.Rope(p + 3, q);
+  args := NIL;
+  IF B.Looking(q, "}}}") THEN INC(q, 3)
+  ELSIF B.C(q) = "(" THEN
+    INC(q); last := NIL;
+    LOOP
+      NEW(a); B.InitBuf(a.text); a.next := NIL;
+      IF last = NIL THEN args := a ELSE last.next := a END;
+      last := a;
+      LOOP
+        IF q >= B.len THEN RETURN FALSE END;
+        ch := B.t[q];
+        IF B.Looking(q, ")}}}") OR (ch = ",") THEN EXIT
+        ELSIF (ch = "\") & ((B.C(q + 1) = ",") OR (B.C(q + 1) = "\"))
+            & (q + 1 < B.len) THEN
+          B.PutChar(a.text, B.t[q + 1]); INC(q, 2)
+        ELSE B.PutChar(a.text, ch); INC(q)
+        END
+      END;
+      IF B.t[q] = "," THEN INC(q)
+      ELSE INC(q, 4); EXIT
+      END
+    END
+  ELSE RETURN FALSE
+  END;
+  m := macros;
+  WHILE (m # NIL) & ~Ropes.Equal(m.name, name) DO m := m.next END;
+  IF m = NIL THEN RETURN FALSE END;
+  (* the parts alternate with the arguments their numbers name, those
+     there are *)
+  sel := NIL; last := NIL; pt := m.parts;
+  WHILE pt # NIL DO
+    IF pt.n > 0 THEN
+      a := args; i := 1;
+      WHILE (a # NIL) & (i < pt.n) DO a := a.next; INC(i) END;
+      IF a # NIL THEN
+        NEW(s); s.text := a.text; s.next := NIL;
+        IF last = NIL THEN sel := s ELSE last.next := s END;
+        last := s
+      END
+    END;
+    pt := pt.next
+  END;
+  B.InitBuf(text); pt := m.parts;
+  WHILE pt # NIL DO
+    PutPart(text, pt.text, 0, pt.text.len);
+    IF sel # NIL THEN PutPart(text, sel.text, 0, sel.text.len); sel := sel.next END;
+    pt := pt.next
+  END;
+  B.PutChar(text, 0X); DEC(text.len);
+  B.pos := q;
+  INC(macroDepth);
+  Enter(f, text.t, text.len);
+  A.InitInlines(cl);
+  WHILE Inline(cl) DO END;
+  Leave(f);
+  DEC(macroDepth);
+  A.Append(l, cl.first);
+  RETURN TRUE
+END MacroCall;
+
+(* Citations *)
+
+(* B.text: the text from .. to-1 as Strs, Spaces and SoftBreaks *)
+PROCEDURE BText(from, to: LONGINT): A.Inline;
+  VAR l: A.Inlines; q: LONGINT; nl: BOOLEAN;
+
+  PROCEDURE IsSpace(ch: CHAR): BOOLEAN;
+  BEGIN
+    RETURN (ch = " ") OR (ch = 09X) OR (ch = 0AX) OR (ch = 0DX)
+  END IsSpace;
+
+BEGIN
+  A.InitInlines(l);
+  WHILE from < to DO
+    q := from; nl := FALSE;
+    WHILE (q < to) & IsSpace(B.t[q]) DO
+      IF (B.t[q] = 0AX) OR (B.t[q] = 0DX) THEN nl := TRUE END;
+      INC(q)
+    END;
+    IF q > from THEN
+      IF nl THEN A.AddInline(l, A.NewSimple(A.SoftBreak))
+      ELSE A.AddInline(l, A.NewSimple(A.Space))
+      END
+    ELSE
+      WHILE (q < to) & ~IsSpace(B.t[q]) DO INC(q) END;
+      A.AddInline(l, A.NewStr(B.Rope(from, q)))
+    END;
+    from := q
+  END;
+  RETURN l.first
+END BText;
+
+(* The list a followed by the list b *)
+PROCEDURE Concat(a, b: A.Inline): A.Inline;
+  VAR x: A.Inline;
+BEGIN
+  IF a = NIL THEN RETURN b END;
+  x := A.LastInline(a); x.next := b;
+  RETURN a
+END Concat;
+
+(* Whether a letter starts at p *)
+PROCEDURE LetterAt(p: LONGINT): BOOLEAN;
+  VAR c: Utf8.Rune; q: LONGINT;
+BEGIN
+  IF p >= B.len THEN RETURN FALSE END;
+  q := MI.RuneAt(p, c);
+  RETURN (c < 80H) & B.IsLetter(B.t[p]) OR (c >= 80H) & Unicode.IsLetter(c)
+END LetterAt;
+
+(* orgCiteStyle: the style named by t[from .. to-1], or -1 *)
+PROCEDURE CiteStyle(from, to: LONGINT): INTEGER;
+BEGIN
+  IF IsText(from, to, "t") OR IsText(from, to, "text") THEN RETURN TextStyle
+  ELSIF IsText(from, to, "na") OR IsText(from, to, "noauthor") THEN
+    RETURN NoAuthorStyle
+  ELSIF IsText(from, to, "nil") THEN RETURN NilStyle
+  ELSIF IsText(from, to, "a") OR IsText(from, to, "author")
+      OR IsText(from, to, "n") OR IsText(from, to, "nocite")
+      OR IsText(from, to, "ft") OR IsText(from, to, "note")
+      OR IsText(from, to, "nb") OR IsText(from, to, "numeric") THEN
+    RETURN OtherStyle
+  END;
+  RETURN -1
+END CiteStyle;
+
+(* orgCiteVariants at p: where they end, or -1 *)
+PROCEDURE CiteVariants(p: LONGINT): LONGINT;
+  PROCEDURE Full(p: LONGINT): BOOLEAN;
+  BEGIN
+    RETURN B.Looking(p, "bare") OR B.Looking(p, "caps") OR B.Looking(p, "full")
+  END Full;
+  PROCEDURE One(ch: CHAR): BOOLEAN;
+  BEGIN
+    RETURN (ch = "b") OR (ch = "c") OR (ch = "f")
+  END One;
+BEGIN
+  IF Full(p) THEN
+    INC(p, 4);
+    WHILE (B.C(p) = "-") & Full(p + 1) DO INC(p, 5) END
+  ELSIF (p < B.len) & One(B.t[p]) THEN
+    WHILE (p < B.len) & One(B.t[p]) DO INC(p) END
+  ELSE p := -1
+  END;
+  RETURN p
+END CiteVariants;
+
+(* spnl at p: spaces, and a new line and spaces if no blank line
+   follows; where it ends, or -1 *)
+PROCEDURE Spnl(p: LONGINT): LONGINT;
+BEGIN
+  p := B.SkipSpaces(p);
+  IF (p < B.len) & (B.t[p] = 0AX) THEN
+    INC(p);
+    IF B.C(B.SkipSpaces(p)) = 0AX THEN RETURN -1 END;
+    p := B.SkipSpaces(p)
+  END;
+  RETURN p
+END Spnl;
+
+(* rawAffix at p: characters but ^ ; [ ] and, in a prefix, @, and
+   balanced brackets; where it ends *)
+PROCEDURE RawAffix(p: LONGINT; prefix: BOOLEAN): LONGINT;
+  VAR ch: CHAR; q: LONGINT;
+BEGIN
+  LOOP
+    IF p >= B.len THEN EXIT END;
+    ch := B.t[p];
+    IF ch = "[" THEN
+      q := RawAffix(p + 1, prefix);
+      IF (q < B.len) & (B.t[q] = "]") THEN p := q + 1 ELSE EXIT END
+    ELSIF (ch = "^") OR (ch = ";") OR (ch = "]") OR prefix & (ch = "@") THEN
+      EXIT
+    ELSE INC(p)
+    END
+  END;
+  RETURN p
+END RawAffix;
+
+(* citePrefix (trimmed) and citeSuffix: t[from .. to-1] read as
+   inlines *)
+PROCEDURE Affix(from, to: LONGINT; trim: BOOLEAN): A.Inline;
+  VAR b: B.Buf; f: B.Frame; cl: A.Inlines;
+BEGIN
+  B.InitBuf(b); B.Put(b, from, to); B.PutChar(b, 0X); DEC(b.len);
+  Enter(f, b.t, b.len);
+  A.InitInlines(cl);
+  WHILE Inline(cl) DO END;
+  Leave(f);
+  IF trim THEN RETURN MI.Trim(cl) END;
+  RETURN cl.first
+END Affix;
+
+(* Whether an orgCiteKeyChar starts at p *)
+PROCEDURE CiteKeyChar(p: LONGINT): BOOLEAN;
+  VAR ch: CHAR;
+BEGIN
+  IF p >= B.len THEN RETURN FALSE END;
+  ch := B.t[p];
+  CASE ch OF
+    ".", ":", "?", "!", "`", "'", "/", "*", "@", "+", "|", "(", ")", "{",
+    "}", "<", ">", "&", "_", "^", "$", "#", "%", "~", "-": RETURN TRUE
+  ELSE RETURN MI.AlnumAt(p)
+  END
+END CiteKeyChar;
+
+(* citeItem at p: a prefix, @key and a suffix, in c; where it ends,
+   or -1 *)
+PROCEDURE CiteItem(p: LONGINT; VAR c: A.Citation): LONGINT;
+  VAR q, k, e: LONGINT;
+BEGIN
+  q := RawAffix(p, TRUE);
+  IF B.C(q) # "@" THEN RETURN -1 END;
+  k := q + 1;
+  WHILE CiteKeyChar(k) DO k := MI.RuneEnd(k) END;
+  IF k = q + 1 THEN RETURN -1 END;
+  e := RawAffix(k, FALSE);
+  c := A.NewCitation(B.Rope(q + 1, k), A.NormalCitation, 0);
+  c.prefix := Affix(p, q, TRUE);
+  c.suffix := Affix(k, e, FALSE);
+  RETURN e
+END CiteItem;
+
+(* orgCite: [cite/style/variants:items], into cs *)
+PROCEDURE OrgCite(VAR cs: A.Citation): BOOLEAN;
+  VAR q, r: LONGINT; sty: INTEGER; gp, gs, i: A.Inline; c, last: A.Citation;
+BEGIN
+  q := B.pos;
+  IF ~B.Looking(q, "[cite") THEN RETURN FALSE END;
+  INC(q, 5); sty := NilStyle;
+  IF B.C(q) = "/" THEN
+    r := q + 1;
+    WHILE LetterAt(r) DO r := MI.RuneEnd(r) END;
+    IF r > q + 1 THEN sty := CiteStyle(q + 1, r) ELSE sty := -1 END;
+    IF sty >= 0 THEN q := r ELSE sty := NilStyle END
+  END;
+  IF B.C(q) = "/" THEN
+    r := CiteVariants(q + 1);
+    IF r >= 0 THEN q := r END
+  END;
+  IF (q >= B.len) OR (B.t[q] # ":") THEN RETURN FALSE END;
+  q := Spnl(q + 1);
+  IF q < 0 THEN RETURN FALSE END;
+  gp := NIL; gs := NIL;
+  r := RawAffix(q, TRUE);
+  IF (r < B.len) & (B.t[r] = ";") THEN
+    gp := Affix(q, r, TRUE); q := r + 1
+  END;
+  q := CiteItem(q, cs);
+  IF q < 0 THEN RETURN FALSE END;
+  last := cs;
+  WHILE (q < B.len) & (B.t[q] = ";") DO
+    r := CiteItem(B.SkipSpaces(q + 1), c);
+    IF r < 0 THEN
+      r := RawAffix(q + 1, FALSE);
+      gs := Affix(q + 1, r, FALSE); q := r
+    ELSE last.next := c; last := c; q := r
+    END
+  END;
+  q := Spnl(q);
+  IF (q < 0) OR (B.C(q) # "]") OR (q >= B.len) THEN RETURN FALSE END;
+  B.pos := q + 1;
+  last.suffix := Concat(last.suffix, gs);
+  cs.prefix := Concat(gp, cs.prefix);
+  IF sty = TextStyle THEN
+    cs.mode := A.AuthorInText;
+    i := cs.suffix;
+    WHILE (i # NIL) & (i.kind = A.Space) DO i := i.next END;
+    cs.suffix := i
+  ELSIF sty = NoAuthorStyle THEN cs.mode := A.SuppressAuthor
+  END;
+  RETURN TRUE
+END OrgCite;
+
+(* orgRefCiteMode at p: where it ends, after its colon, or -1 *)
+PROCEDURE RefCiteMode(p: LONGINT; VAR mode: INTEGER): LONGINT;
+BEGIN
+  IF B.Looking(p, "cite:") THEN mode := A.AuthorInText; RETURN p + 5
+  ELSIF B.Looking(p, "citep:") THEN mode := A.NormalCitation; RETURN p + 6
+  ELSIF B.Looking(p, "citep*:") THEN mode := A.NormalCitation; RETURN p + 7
+  ELSIF B.Looking(p, "citet:") THEN mode := A.AuthorInText; RETURN p + 6
+  ELSIF B.Looking(p, "citet*:") THEN mode := A.AuthorInText; RETURN p + 7
+  ELSIF B.Looking(p, "citeyear:") THEN
+    mode := A.SuppressAuthor; RETURN p + 9
+  END;
+  RETURN -1
+END RefCiteMode;
+
+(* Whether ch is one of orgRefCiteKey's special characters *)
+PROCEDURE RefKeySpecial(ch: CHAR): BOOLEAN;
+BEGIN
+  RETURN (ch = "-") OR (ch = "_") OR (ch = ":") OR (ch = "\") OR (ch = ".")
+    OR (ch = "/")
+END RefKeySpecial;
+
+(* Whether a character of an orgRefCiteKey starts at p *)
+PROCEDURE RefKeyChar(p: LONGINT): BOOLEAN;
+BEGIN
+  RETURN (p < B.len) & (RefKeySpecial(B.t[p]) OR MI.AlnumAt(p))
+END RefKeyChar;
+
+(* orgRefCiteKey at p, a citation of the mode, in c; where it ends,
+   or -1. The key ends before any special characters followed by a
+   character not in keys. *)
+PROCEDURE RefCiteKey(p: LONGINT; mode: INTEGER; VAR c: A.Citation): LONGINT;
+  VAR from, r: LONGINT;
+BEGIN
+  IF B.C(p) = "&" THEN INC(p) END;
+  from := p;
+  LOOP
+    r := p;
+    WHILE (r < B.len) & RefKeySpecial(B.t[r]) DO INC(r) END;
+    IF ~RefKeyChar(r) THEN EXIT END;
+    p := MI.RuneEnd(p)
+  END;
+  IF p = from THEN RETURN -1 END;
+  c := A.NewCitation(B.Rope(from, p), mode, 0);
+  RETURN p
+END RefCiteKey;
+
+(* normalOrgRefCite: mode:key,key...; linkLikeOrgRefCite:
+   [[mode:key][prefix::suffix]] *)
+PROCEDURE RefCite(VAR cs: A.Citation): BOOLEAN;
+  VAR q, r: LONGINT; mode: INTEGER; c, last: A.Citation; cl: A.Inlines;
+    spc: BOOLEAN; suf: A.Inline;
+BEGIN
+  q := RefCiteMode(B.pos, mode);
+  IF q >= 0 THEN
+    q := RefCiteKey(q, mode, cs);
+    IF q < 0 THEN RETURN FALSE END;
+    last := cs;
+    LOOP
+      IF B.C(q) # "," THEN EXIT END;
+      r := RefCiteKey(q + 1, mode, c);
+      IF r < 0 THEN EXIT END;
+      last.next := c; last := c; q := r
+    END;
+    B.pos := q;
+    RETURN TRUE
+  END;
+  IF ~B.Looking(B.pos, "[[") THEN RETURN FALSE END;
+  q := RefCiteMode(B.pos + 2, mode);
+  IF q < 0 THEN RETURN FALSE END;
+  q := RefCiteKey(q, mode, cs);
+  IF (q < 0) OR ~B.Looking(q, "][") THEN RETURN FALSE END;
+  B.pos := q + 2;
+  A.InitInlines(cl);
+  WHILE ~B.Looking(B.pos, "::") DO
+    IF ~Inline(cl) THEN RETURN FALSE END
+  END;
+  INC(B.pos, 2);
+  cs.prefix := MI.Trim(cl);
+  spc := (B.C(B.pos) = " ") OR (B.C(B.pos) = 09X) & (B.pos < B.len);
+  IF spc THEN INC(B.pos) END;
+  A.InitInlines(cl);
+  WHILE ~B.Looking(B.pos, "]]") DO
+    IF ~Inline(cl) THEN RETURN FALSE END
+  END;
+  INC(B.pos, 2);
+  suf := MI.Trim(cl);
+  IF spc THEN suf := Concat(A.NewSimple(A.Space), suf) END;
+  cs.suffix := suf;
+  RETURN TRUE
+END RefCite;
+
+(* cite: an org-cite or org-ref citation, its text as written its
+   content; only with the extension citations *)
+PROCEDURE Cite(VAR l: A.Inlines): BOOLEAN;
+  VAR p: LONGINT; s: State; cs: A.Citation;
+BEGIN
+  IF ~citations THEN RETURN FALSE END;
+  p := B.pos; Save(s);
+  IF ~OrgCite(cs) THEN
+    Restore(s);
+    IF ~RefCite(cs) THEN Restore(s); RETURN FALSE END
+  END;
+  A.Append(l, A.NewCite(cs, BText(p, B.pos)));
+  RETURN TRUE
+END Cite;
+
+(* footnote: an inline note, [fn:name:text] or [fn::text], or a
+   reference to a note, [fn:name] or [1]; nothing under f:nil *)
+PROCEDURE Footnote(VAR l: A.Inlines): BOOLEAN;
+  VAR p, q: LONGINT; s: State; cl: A.Inlines; para: A.Block;
+    note, t: A.Inline; ref: B.Buf;
+BEGIN
+  p := B.pos;
+  IF B.Looking(p, "[fn:") THEN (* inlineNote *)
+    q := p + 4;
+    WHILE (q < B.len) & (MI.AlnumAt(q) OR (B.t[q] = "-") OR (B.t[q] = "_")) DO
+      q := MI.RuneEnd(q)
+    END;
+    IF B.C(q) = ":" THEN
+      Save(s);
+      B.pos := q + 1;
+      A.InitInlines(cl);
+      WHILE (B.pos < B.len) & (B.t[B.pos] # "]") & Inline(cl) DO END;
+      IF (B.C(B.pos) = "]") & (B.pos < B.len) & (cl.first # NIL) THEN
+        INC(B.pos);
+        para := A.NewInlinesBlock(A.Para, MI.Trim(cl));
+        IF q > p + 4 THEN
+          AddNote(Ropes.Cat(A.S("fn:"), B.Rope(p + 4, q)),
+            A.DeepCopyBlocks(para))
+        END;
+        IF M.footnotes THEN A.Append(l, A.NewNote(para)) END;
+        RETURN TRUE
+      END;
+      Restore(s)
+    END
+  END;
+  q := NoteMarker(p); (* referencedNote *)
+  IF q < 0 THEN RETURN FALSE END;
+  B.pos := q;
+  IF M.footnotes THEN
+    B.InitBuf(ref); B.Put(ref, p + 1, q - 1);
+    t := NIL; note := Pending(NoteRef, ref, t);
+    A.Append(l, note)
+  END;
+  RETURN TRUE
+END Footnote;
+
 (* internalLink: a link to an anchor of the document, or an Emph in a
    spurious-link Span if there is none *)
 PROCEDURE InternalLink(link: A.Rope; title: A.Inline): A.Inline;
@@ -1332,11 +1986,32 @@ BEGIN
   RETURN InternalLink(r, content)
 END Resolved;
 
+(* referencedNote, resolved: the note defined as ref, its contents
+   resolved without notes, or the text [ref] *)
+PROCEDURE NoteFor(w: Resolver; VAR ref: B.Buf): A.Inline;
+  VAR n: Note; r: A.Rope; v: Resolver; b: A.Block;
+BEGIN
+  r := B.BufRope(ref); n := NIL;
+  IF w.notes THEN
+    n := notes;
+    WHILE (n # NIL) & ~Ropes.Equal(n.ref, r) DO n := n.next END
+  END;
+  IF n = NIL THEN
+    RETURN A.NewStr(Ropes.Cat(Ropes.Cat(A.S("["), r), A.S("]")))
+  END;
+  NEW(v); v.notes := FALSE;
+  b := A.WalkBlocks(v, A.DeepCopyBlocks(n.blocks));
+  RETURN A.NewNote(b)
+END NoteFor;
+
 PROCEDURE (w: Resolver) Inline*(i: A.Inline): A.Inline;
+  VAR a: PendAttr;
 BEGIN
   IF (i IS A.SpanInl) & (i(A.SpanInl).attr # NIL)
       & (i(A.SpanInl).attr IS PendAttr) THEN
-    RETURN Resolved(i(A.SpanInl).attr(PendAttr), i(A.SpanInl).content)
+    a := i(A.SpanInl).attr(PendAttr);
+    IF a.how = NoteRef THEN RETURN NoteFor(w, a.target) END;
+    RETURN Resolved(a, i(A.SpanInl).content)
   END;
   RETURN i
 END Inline;
@@ -1344,9 +2019,12 @@ END Inline;
 (* Resolves the links of the document d, read last, against its
    anchors and #+LINK formats, as pandoc's F monad does at the end *)
 PROCEDURE Resolve*(d: A.Doc);
-  VAR w: Resolver;
+  VAR w: Resolver; old: BOOLEAN;
 BEGIN
-  NEW(w); A.WalkDoc(w, d)
+  old := A.mergeWalk; A.mergeWalk := TRUE; (* a note's [ref] joins the
+    text around it *)
+  NEW(w); w.notes := TRUE; A.WalkDoc(w, d);
+  A.mergeWalk := old
 END Resolve;
 
 (* inline: one inline at B.pos, added to l; FALSE, with B.pos and the
@@ -1359,16 +2037,22 @@ BEGIN
   ch := B.t[p];
   IF ~IsStrEnd(ch) THEN (* a tab, not a special character, is part of
       a word *)
-    IF ~((ch < 80X) & B.IsLetter(ch) & PlainLink(l)) THEN Str(l) END
+    IF (ch = "c") & Cite(l) THEN
+    ELSIF (ch < 80X) & B.IsLetter(ch) & PlainLink(l) THEN
+    ELSIF (ch = "s") & InlineCode(l) THEN
+    ELSE Str(l)
+    END
   ELSIF ch = " " THEN (* whitespace *)
     WHILE B.IsSpace(B.C(p)) DO INC(p) END;
     B.pos := p; Newline;
     A.Append(l, A.NewSimple(A.Space))
   ELSIF (ch = "\") & Linebreak(l) THEN
-  ELSIF (ch = "[") & (ExplicitLink(l) OR SelfLink(l)) THEN
+  ELSIF (ch = "[") & (Cite(l) OR Footnote(l) OR ExplicitLink(l) OR SelfLink(l)) THEN
   ELSIF (ch = "<") & (AngleLink(l) OR Anchor(l)) THEN
   ELSIF ch = 0AX THEN RETURN Endline(l)
   ELSIF ch = 0DX THEN RETURN FALSE
+  ELSIF (ch = "@") & ExportSnippet(l) THEN
+  ELSIF (ch = "{") & MacroCall(l) THEN
   ELSIF (ch = "_") & Script(A.Subscript, l)
       OR (ch = "^") & Script(A.Superscript, l)
       OR Emphasis(ch, l)
@@ -1391,7 +2075,7 @@ BEGIN
 END Inlines;
 
 BEGIN
-  fancyLists := FALSE;
+  fancyLists := FALSE; citations := TRUE;
   (* -\t ('"{ and U+200B; -\t\n .,:!?;'")}[ and U+200B *)
   Chars(defPre, "- ('{", TRUE, FALSE);
   Chars(defPost, "- .,:!?;')}[", TRUE, TRUE);

@@ -1,0 +1,6 @@
+Inline source: src_sh{echo hi}, src_emacs-lisp[:exports code]{(+ 1 2)},
+src_C[:a :b c :d]{int x;} and src_python[:exports results]{1+1}, hidden;
+src_R[:exports none :exports code]{x} hidden too.
+
+Not source: src_{x} src_x{} src_x{}} src_x[:a ]{y} src_x[]{y} src_x{a
+b} srcx_y{z} xsrc_y{z}.

@@ -1,0 +1,3 @@
+Export snippets: a@@html:<b>@@b@@html:</b>@@ and @@latex:\LaTeX{}@@, one
+over a line @@my-fmt:a
+b@@, and not ones: @@:x@@ @@x y:z@@ @@x:unended

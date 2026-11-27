@@ -1,0 +1,12 @@
+Inline notes[fn:: An *inline* note.] and named ones[fn:named: Named
+note.], referenced again[fn:named] and by number[1].
+
+A definition below[fn:def] and one missing[fn:missing].
+
+[fn:def] The definition, with a reference to [fn:other] inside.
+
+[fn:other] Another.
+
+[1] Numbered note.
+
+Not notes: [fn:] [fn: x] [fn:a b].

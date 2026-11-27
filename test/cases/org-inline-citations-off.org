@@ -1,0 +1,10 @@
+Org-cite: [cite:@doe99], [cite:see @doe99 p. 3; @roe02 ch. 2],
+[cite/t:@doe99 p. 4], [cite/na/b:@doe99], [cite/text/bare-caps:@x],
+[cite/foo:@x], [cite:Global ;@a; @b; global suffix],
+[cite: @a [bracketed] *strong*], [cite:
+  @a
+  ] and [cite:@a;@b;].
+
+Org-ref: cite:doe99, citep:a,b citet*:&x:y. citeyear:k/ cite:-- and
+citep*:a.b.c., [[citep:key][see::p. 4]], [[cite:k][::]],
+[[citet:k][*a* :: b]] and citesee:x.

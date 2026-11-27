@@ -48,12 +48,6 @@ TYPE
     kv: A.Attr (* the pairs of #+attr_html: *)
   END;
 
-  (* a footnote's definition *)
-  Note = POINTER TO RECORD
-    ref: A.Rope; (* 1 or fn:name *)
-    blocks: A.Block;
-    next: Note
-  END;
 
   (* a property of a headline's drawer, key in lower case *)
   Prop = POINTER TO RECORD
@@ -111,7 +105,6 @@ VAR
     since a parseFromString began or ended, as at an item's start or
     after a list *)
   meta: A.MetaMapV; (* the document's *)
-  notes: Note; (* the footnotes' definitions, the last first *)
 
 (* Lines *)
 
@@ -192,6 +185,7 @@ BEGIN
   IF ~InList(k, Keywords) THEN RETURN FALSE END;
   IF k = "options" THEN B.pos := M.Options(p)
   ELSIF (k = "link") & ~I.LinkFormat(p) THEN RETURN FALSE
+  ELSIF (k = "macro") & ~I.AddMacro(p) THEN RETURN FALSE
   ELSIF (k = "todo") OR (k = "seq_todo") OR (k = "typ_todo") THEN
     IF ~TodoSequence(p) THEN RETURN FALSE END
   ELSIF (k = "select_tags") OR (k = "exclude_tags") THEN
@@ -345,35 +339,13 @@ BEGIN
   END
 END LowerKey;
 
-(* orgArgWord: letters, digits, - and _; where it ends, or -1 *)
-PROCEDURE ArgWord(p: LONGINT): LONGINT;
-  VAR q: LONGINT;
-BEGIN
-  q := p;
-  WHILE (q < B.len) & ((B.t[q] = "-") OR (B.t[q] = "_") OR MI.AlnumAt(q)) DO
-    q := MI.RuneEnd(q)
-  END;
-  IF q = p THEN RETURN -1 END;
-  RETURN q
-END ArgWord;
-
-(* orgArgKey: spaces, a colon and an orgArgWord, the key, which starts
-   at from; where it ends, or -1 *)
-PROCEDURE ArgKey(p: LONGINT; VAR from: LONGINT): LONGINT;
-BEGIN
-  p := B.SkipSpaces(p);
-  IF B.C(p) # ":" THEN RETURN -1 END;
-  from := p + 1;
-  RETURN ArgWord(p + 1)
-END ArgKey;
-
 (* orgParamValue's endOfValue at p *)
 PROCEDURE ValueEnd(p: LONGINT): BOOLEAN;
   VAR q, f: LONGINT;
 BEGIN
   q := B.SkipSpaces(p);
   IF (B.C(q) = 0AX) OR (B.C(q) = 0DX) THEN RETURN TRUE END;
-  RETURN (q > p) & (ArgKey(q, f) >= 0)
+  RETURN (q > p) & (I.ArgKey(q, f) >= 0)
 END ValueEnd;
 
 (* orgParamValue: a value, t[from .. to-1], quoted or up to a key or
@@ -383,7 +355,7 @@ PROCEDURE ParamValue(p: LONGINT; VAR from, to: LONGINT): LONGINT;
   VAR q, f: LONGINT; ch: CHAR;
 BEGIN
   q := B.SkipSpaces(p);
-  IF ArgKey(q, f) >= 0 THEN RETURN -1 END;
+  IF I.ArgKey(q, f) >= 0 THEN RETURN -1 END;
   ch := B.C(q);
   IF ch = 22X THEN
     from := q + 1; q := from;
@@ -410,7 +382,7 @@ END ParamValue;
 PROCEDURE BlockOption(p: LONGINT; a: A.Attr): LONGINT;
   VAR q, r, f, vf, vt: LONGINT;
 BEGIN
-  q := ArgKey(p, f);
+  q := I.ArgKey(p, f);
   IF q < 0 THEN RETURN -1 END;
   r := ParamValue(q, vf, vt);
   IF r >= 0 THEN
@@ -438,7 +410,7 @@ BEGIN
   t := A.NewAttr(NIL); q := p;
   LOOP
     IF B.C(q) = 0AX THEN AddPairs(a, t); RETURN q + 1 END;
-    r := ArgKey(q, f);
+    r := I.ArgKey(q, f);
     IF r < 0 THEN EXIT END;
     q := ParamValue(r, vf, vt);
     IF q < 0 THEN EXIT END;
@@ -448,9 +420,9 @@ BEGIN
   LOOP
     IF B.C(q) = 0AX THEN AddPairs(a, t); RETURN q + 1 END;
     WHILE (q < B.len) & B.IsWhite(B.t[q]) DO INC(q) END;
-    f := q; r := ArgWord(q);
+    f := q; r := I.ArgWord(q);
     IF (r < 0) OR (B.C(r) # "=") THEN EXIT END;
-    vf := r + 1; vt := ArgWord(vf);
+    vf := r + 1; vt := I.ArgWord(vf);
     IF vt < 0 THEN EXIT END;
     A.AddKeyVal(t, B.Rope(f, r), B.Rope(vf, vt));
     q := vt
@@ -750,29 +722,14 @@ BEGIN
   RETURN r
 END Switches;
 
-(* translateLang: pandoc's name for an Org language, or NIL if it is
-   the same *)
-PROCEDURE TranslateLang(from, to: LONGINT): A.Rope;
-BEGIN
-  IF Is(from, to, "C") THEN RETURN A.S("c")
-  ELSIF Is(from, to, "emacs-lisp") OR Is(from, to, "lisp") THEN
-    RETURN A.S("commonlisp")
-  ELSIF Is(from, to, "js") THEN RETURN A.S("javascript")
-  ELSIF Is(from, to, "R") THEN RETURN A.S("r")
-  ELSIF Is(from, to, "sh") THEN RETURN A.S("bash")
-  ELSIF Is(from, to, "sqlite") THEN RETURN A.S("sql")
-  END;
-  RETURN NIL
-END TranslateLang;
-
 (* codeHeaderArgs: the language, switches and options, into a; where
    the line ends, past its new line, or -1 *)
 PROCEDURE CodeHeaderArgs(p: LONGINT; a: A.Attr; VAR noTrim: BOOLEAN): LONGINT;
   VAR q, r: LONGINT; lang: A.Rope;
 BEGIN
-  q := B.SkipSpaces(p); r := ArgWord(q);
+  q := B.SkipSpaces(p); r := I.ArgWord(q);
   IF r < 0 THEN RETURN -1 END;
-  lang := TranslateLang(q, r);
+  lang := I.TranslateLang(q, r);
   IF lang = NIL THEN A.AddClass(a, B.Rope(q, r))
   ELSE
     A.AddClass(a, lang);
@@ -923,7 +880,7 @@ BEGIN
   LowerKey(ts, te, k);
   A.InitBlocks(out); e := -1;
   IF k = "export" THEN
-    q := B.SkipSpaces(te); r := ArgWord(q);
+    q := B.SkipSpaces(te); r := I.ArgWord(q);
     IF r >= 0 THEN
       fmt := CaseRope(q, r, FALSE); r := IgnHeaders(r);
       IF r >= 0 THEN
@@ -1030,7 +987,7 @@ BEGIN
   INC(q, 6);
   WHILE (q < B.len) & B.IsWhite(B.t[q]) DO INC(q) END;
   a := A.NewAttr(NIL);
-  r := ArgWord(q);
+  r := I.ArgWord(q);
   IF r >= 0 THEN A.AddClass(a, B.Rope(q, r)); q := r END;
   r := BlockParameters(q, a);
   IF r < 0 THEN RETURN FALSE END;
@@ -1142,7 +1099,7 @@ END LatexFragment;
 (* noteBlock: a footnote's definition, [fn:name] or [1] and its
    blocks, kept for its references *)
 PROCEDURE NoteBlock(VAR l: A.Blocks): BOOLEAN;
-  VAR p, q, n, r: LONGINT; nl: A.Blocks; note: Note;
+  VAR p, q, n, r: LONGINT; nl: A.Blocks;
 BEGIN
   p := B.pos;
   q := I.NoteMarker(p);
@@ -1159,8 +1116,7 @@ BEGIN
     END;
     IF ~Block(nl) THEN B.pos := p; RETURN FALSE END
   END;
-  NEW(note); note.ref := B.Rope(p + 1, q - 1); note.blocks := nl.first;
-  note.next := notes; notes := note;
+  I.AddNote(B.Rope(p + 1, q - 1), nl.first);
   RETURN TRUE
 END NoteBlock;
 
@@ -2457,7 +2413,7 @@ BEGIN
   FOR i := n TO n + 1 - k DO t[i] := 0AX END;
   B.Start(t, n + 2 - k, tabStop);
   M.Reset(smart, smartQuotes, specialStrings);
-  I.fancyLists := fancyLists; I.Reset;
+  I.fancyLists := fancyLists; I.citations := citations; I.Reset;
   NEW(idTable);
   FOR i := 0 TO IdTableSize - 1 DO idTable[i] := NIL END;
   markers := NewDefaultMarkers(); customTodo := FALSE;
@@ -2465,13 +2421,13 @@ BEGIN
   excludeTags := NIL; AddStr(excludeTags, last, A.S("noexport"));
   selectSet := FALSE; excludeSet := FALSE;
   inList := FALSE; fresh := FALSE;
-  d := A.NewDoc(); meta := d.meta; notes := NIL;
+  d := A.NewDoc(); meta := d.meta;
   root := DocumentTree();
   A.InitBlocks(l);
   TreeBlocks(root, l);
   d.blocks := l.first;
   I.Resolve(d);
-  idTable := NIL; meta := NIL; notes := NIL; markers := NIL;
+  idTable := NIL; meta := NIL; markers := NIL;
   selectTags := NIL; excludeTags := NIL;
   RETURN d
 END Read;

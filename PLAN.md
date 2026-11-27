@@ -2327,7 +2327,8 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   against the definitions of Phase 26.3; `f:nil`.
 - Citations with `citations`: org-cite `[cite/style:pre @key suf;
   ...]` and the org-ref forms (`cite:key`, `[[cite:key]]`), as pandoc's
-  `Cite`s; `#+BIBLIOGRAPHY`, `#+NOCITE`.
+  `Cite`s. (`#+BIBLIOGRAPHY` and `#+NOCITE` are metadata lines in
+  pandoc's `Meta.hs`, so they moved to 28.1 on 2026-11-26.)
 - `#+MACRO` definitions and `{{{name(arg, ...)}}}`, `$1` to `$9`,
   nested to pandoc's depth of 15; an unknown macro stays text.
 - Export snippets `@@format:text@@`.
@@ -2357,7 +2358,8 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
 - `#+TITLE`, `#+SUBTITLE`, `#+AUTHOR`, `#+EMAIL`, `#+DATE`,
   `#+DESCRIPTION`, `#+KEYWORDS`, `#+LANGUAGE` (as `lang`),
   `#+INSTITUTE`, `#+CREATOR`, with `author:`, `email:`, `creator:`
-  and `date:`.
+  and `date:`; `#+BIBLIOGRAPHY` (a list) and `#+NOCITE` (inlines),
+  moved from 27.3.
 - The export keywords: `#+LATEX_CLASS` (`documentclass`),
   `#+LATEX_CLASS_OPTIONS` (`classoption`), `#+LATEX_HEADER` and
   `_EXTRA` (`header-includes`, raw LaTeX), `#+HTML_HEAD` and
@@ -4287,3 +4289,35 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   an emoji's alias in an identifier (docs/user/differences.md,
   "Later"); a `#+title` that has the same identifier as a headline
   (`intro-1`) waits for 28.1. Not yet run on the BSDs.
+- 2026-11-26, Phase 27.3: notes, citations, macros, export snippets
+  and inline source in `PdOrgInline`. Footnote references
+  `[fn:name]` and `[1]`, inline notes `[fn::text]` and
+  `[fn:name:text]`, resolved at the end against the definitions
+  (`PdOrg`'s note blocks now go to `I.AddNote`); a missing note is
+  the text `[fn:name]`, merged with the `Str`s around it (`Resolve`
+  walks with `A.mergeWalk`); `f:nil`. Citations, with `citations`:
+  org-cite `[cite/style/variants:prefix; @key suffix; ...]`, the
+  styles that change a citation (`text`, `noauthor`), the global
+  prefix and suffix, the affixes' balanced brackets; org-ref
+  `mode:key,key` and `[[mode:key][pre::suf]]`; the `Cite`'s content
+  is the raw text as pandoc's `B.text` makes it. `#+MACRO`
+  definitions and `{{{name(args)}}}`: `$N` placeholders (below 1 as
+  1), a missing argument shifting the rest as pandoc's
+  `alternate` does, `\,` and `\\` in arguments, depth 15, an unknown
+  macro left as text. Export snippets `@@format:text@@` (over lines
+  and paragraphs) as `RawInline`. Inline source
+  `src_lang[options]{code}`: options as pandoc's `blockOption`s, a
+  bad one failing the whole, the first `:exports` deciding,
+  `org-language` when the language is translated. `#+BIBLIOGRAPHY`
+  and `#+NOCITE` set only metadata, so they moved to 28.1; the body
+  around them already matches. Seven case tests
+  (`org-inline-notes`, `-notes-nil`, `-snippets`, `-src`, `-macros`,
+  `-citations`, `-citations-off`; JSON from pandoc 3.14). `make test`
+  passed under `-O2` and `-OC`: 428 case tests, 23 round trips, 10
+  image tests, 20 mermaid tests. 306 probes (pandoc 3.14's
+  `Inline.hs` inputs, 125, with its note, header, directive and meta
+  inputs and 51 of my own) give the same results under both models:
+  260 match pandoc byte for byte; the other 46 are math and LaTeX
+  (27.4: `\cite`, `$x$`, and `\c` in a macro's expansion, which is a
+  LaTeX command) and metadata (28.1: `#+title`, `tex:`). Not yet run
+  on the BSDs.

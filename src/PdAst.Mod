@@ -802,6 +802,144 @@ BEGIN
   END
 END AddBlock;
 
+(* Deep copies *)
+
+PROCEDURE^ DeepCopyBlocks*(b: Block): Block;
+
+(* A copy of the list of inlines i and of everything in them: their
+   inlines, the citations of cites and the blocks of notes. Attributes
+   are shared. *)
+PROCEDURE DeepCopyInlines*(i: Inline): Inline;
+  VAR first, n: Inline; c, nc: Citation; cl: Citation; ci: CiteInl;
+BEGIN
+  first := CopyInlines(i); n := first;
+  WHILE n # NIL DO
+    IF n IS ContInl THEN
+      n(ContInl).content := DeepCopyInlines(n(ContInl).content);
+      IF n IS CiteInl THEN
+        ci := n(CiteInl); c := ci.citations; ci.citations := NIL; cl := NIL;
+        WHILE c # NIL DO
+          NEW(nc); nc^ := c^; nc.next := NIL;
+          nc.prefix := DeepCopyInlines(c.prefix);
+          nc.suffix := DeepCopyInlines(c.suffix);
+          IF cl = NIL THEN ci.citations := nc ELSE cl.next := nc END;
+          cl := nc; c := c.next
+        END
+      END
+    ELSIF n IS NoteInl THEN
+      n(NoteInl).blocks := DeepCopyBlocks(n(NoteInl).blocks)
+    END;
+    n := n.next
+  END;
+  RETURN first
+END DeepCopyInlines;
+
+PROCEDURE CopyBlockList(l: BlockList): BlockList;
+  VAR first, last, n: BlockList;
+BEGIN
+  first := NIL; last := NIL;
+  WHILE l # NIL DO
+    NEW(n); n.blocks := DeepCopyBlocks(l.blocks); n.next := NIL;
+    IF last = NIL THEN first := n ELSE last.next := n END;
+    last := n; l := l.next
+  END;
+  RETURN first
+END CopyBlockList;
+
+PROCEDURE CopyCaption(VAR c: Caption);
+BEGIN
+  c.short := DeepCopyInlines(c.short); c.blocks := DeepCopyBlocks(c.blocks)
+END CopyCaption;
+
+PROCEDURE CopyRows(r: Row): Row;
+  VAR first, last, n: Row; c, cf, clast, nc: Cell;
+BEGIN
+  first := NIL; last := NIL;
+  WHILE r # NIL DO
+    NEW(n); n^ := r^; n.next := NIL;
+    c := r.cells; cf := NIL; clast := NIL;
+    WHILE c # NIL DO
+      NEW(nc); nc^ := c^; nc.next := NIL; nc.blocks := DeepCopyBlocks(c.blocks);
+      IF clast = NIL THEN cf := nc ELSE clast.next := nc END;
+      clast := nc; c := c.next
+    END;
+    n.cells := cf;
+    IF last = NIL THEN first := n ELSE last.next := n END;
+    last := n; r := r.next
+  END;
+  RETURN first
+END CopyRows;
+
+(* A copy of the list of blocks b and of everything in them, as
+   DeepCopyInlines copies inlines. Attributes and column specifications
+   are shared. *)
+PROCEDURE DeepCopyBlocks*(b: Block): Block;
+  VAR l: Blocks; n, x: Block; h: HeaderBlk; ib: InlinesBlk; lb: LineBlk;
+    cb: CodeBlk; rb: RawBlk; db: DivBlk; fb: FigureBlk; bb: BlocksBlk;
+    ob: OrderedBlk; li: ListBlk; dl: DefListBlk; tb: TableBlk;
+    il, ilf, ill, nil: InlineList; d, df, dlast, nd: DefItem;
+    t, tf, tlast, nt: TableBody;
+BEGIN
+  InitBlocks(l);
+  WHILE b # NIL DO
+    WITH
+      b: HeaderBlk DO NEW(h); h^ := b^; n := h
+    | b: InlinesBlk DO NEW(ib); ib^ := b^; n := ib
+    | b: LineBlk DO
+        NEW(lb); lb^ := b^; n := lb;
+        il := b.lines; ilf := NIL; ill := NIL;
+        WHILE il # NIL DO
+          NEW(nil); nil.inlines := DeepCopyInlines(il.inlines); nil.next := NIL;
+          IF ill = NIL THEN ilf := nil ELSE ill.next := nil END;
+          ill := nil; il := il.next
+        END;
+        lb.lines := ilf
+    | b: CodeBlk DO NEW(cb); cb^ := b^; n := cb
+    | b: RawBlk DO NEW(rb); rb^ := b^; n := rb
+    | b: DivBlk DO NEW(db); db^ := b^; n := db
+    | b: FigureBlk DO NEW(fb); fb^ := b^; CopyCaption(fb.caption); n := fb
+    | b: BlocksBlk DO NEW(bb); bb^ := b^; n := bb
+    | b: OrderedBlk DO NEW(ob); ob^ := b^; n := ob
+    | b: ListBlk DO NEW(li); li^ := b^; n := li
+    | b: DefListBlk DO
+        NEW(dl); dl^ := b^; n := dl;
+        d := b.items; df := NIL; dlast := NIL;
+        WHILE d # NIL DO
+          NEW(nd); nd.term := DeepCopyInlines(d.term);
+          nd.defs := CopyBlockList(d.defs); nd.next := NIL;
+          IF dlast = NIL THEN df := nd ELSE dlast.next := nd END;
+          dlast := nd; d := d.next
+        END;
+        dl.items := df
+    | b: TableBlk DO
+        NEW(tb); tb^ := b^; n := tb;
+        CopyCaption(tb.caption);
+        tb.head.rows := CopyRows(b.head.rows);
+        tb.foot.rows := CopyRows(b.foot.rows);
+        t := b.bodies; tf := NIL; tlast := NIL;
+        WHILE t # NIL DO
+          NEW(nt); nt^ := t^; nt.next := NIL;
+          nt.head := CopyRows(t.head); nt.body := CopyRows(t.body);
+          IF tlast = NIL THEN tf := nt ELSE tlast.next := nt END;
+          tlast := nt; t := t.next
+        END;
+        tb.bodies := tf
+    ELSE NEW(x); x^ := b^; n := x
+    END;
+    IF n IS InlinesBlk THEN
+      n(InlinesBlk).inlines := DeepCopyInlines(n(InlinesBlk).inlines)
+    ELSIF n IS BlocksBlk THEN
+      n(BlocksBlk).blocks := DeepCopyBlocks(n(BlocksBlk).blocks)
+    ELSIF n IS ListBlk THEN
+      n(ListBlk).items := CopyBlockList(n(ListBlk).items)
+    END;
+    n.next := NIL;
+    AddBlock(l, n);
+    b := b.next
+  END;
+  RETURN l.first
+END DeepCopyBlocks;
+
 (* Metadata *)
 
 (* A new, empty map. *)

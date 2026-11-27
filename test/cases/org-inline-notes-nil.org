@@ -1,0 +1,4 @@
+#+OPTIONS: f:nil
+Text[fn:: Inline.] and a reference[fn:x].
+
+[fn:x] Defined.
