@@ -1,0 +1,6 @@
+#+author: X
+#+email: x@example.com
+#+creator: Emacs
+#+date: 2026
+#+OPTIONS: author:nil email:nil
+#+options: creator:t date:nil toc:2 num:nil title:nil

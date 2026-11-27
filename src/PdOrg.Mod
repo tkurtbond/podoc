@@ -3,7 +3,7 @@ MODULE PdOrg;
 (* The Org reader, -f org, as pandoc 3.14's Readers/Org reads Org:
    its blocks (Blocks.hs), the document's tree (DocumentTree.hs) and
    the passes after parsing. Inlines are PdOrgInline's, the export
-   settings and the metadata PdOrgMeta's.
+   settings PdOrgMeta's.
 
    Phase 26.1: paragraphs and Plain, blank lines, horizontal rules,
    fixed-width lines, comment lines, raw export lines, keywords and
@@ -16,7 +16,11 @@ MODULE PdOrg;
    table.el tables (PdGridTable). Phase 26.5: the headline tree, with
    TODO keywords, priorities, tags, planning, property drawers,
    COMMENT, ARCHIVE, select and exclude tags and H:. Phase 27.2: #+LINK formats, and
-   PdOrgInline.Resolve's pass over the document for links. *)
+   PdOrgInline.Resolve's pass over the document for links. Phase 28.1:
+   the metadata keywords (Meta.hs's keywordHandlers: #+TITLE,
+   #+AUTHOR, #+LATEX_HEADER and the rest), joined as collectLines and
+   collectAsList join them, and author:, email: and creator:
+   (metaExport). *)
 
 IMPORT Ropes, Utf8, Unicode, PdIO, A := PdAst, B := PdMdBase, MI := PdMdInline,
   I := PdOrgInline, M := PdOrgMeta, SH := PdShared, G := PdGridTable;
@@ -31,6 +35,14 @@ CONST
   Keywords = " author bibliography creator date description email exclude_tags header-includes html_head html_head_extra institute keywords language latex_class latex_class_options latex_header latex_header_extra link macro nocite options pandoc-emphasis-post pandoc-emphasis-pre result select_tags seq_todo subtitle title todo typ_todo ";
 
 TYPE
+  (* the attribute of a Span that stands for the SoftBreak between two
+     lines of a metadata key, until the links are resolved, so that
+     the walk that resolves them does not merge it with a break next
+     to it *)
+  LineSepAttr = POINTER TO RECORD (A.AttrDesc) END;
+  (* the walk that turns them into SoftBreaks *)
+  LineSepWalker = POINTER TO RECORD (A.WalkerDesc) END;
+
   Key = ARRAY KeySize OF CHAR;
 
   (* a block attribute's line: #+key: value, value t[from .. to-1] *)
@@ -176,14 +188,161 @@ END Example;
 PROCEDURE ^ TodoSequence(p: LONGINT): BOOLEAN;
 PROCEDURE ^ TagList(p: LONGINT; select: BOOLEAN): BOOLEAN;
 
-(* keywordLine: a keyword pandoc knows, after #+ and the key.
-   #+OPTIONS, #+pandoc-emphasis-pre and -post, #+LINK, the TODO
-   sequences and #+select_tags and #+exclude_tags are read;
-   the rest of the others' lines are passed over, for later phases. *)
+(* Metadata (Phase 28.1) *)
+
+(* A SoftBreak between lines of metadata, kept apart by a Span *)
+PROCEDURE LineSep(): A.Inline;
+  VAR a: LineSepAttr;
+BEGIN
+  NEW(a); a.id := A.S(""); a.classes := NIL; a.attrs := NIL;
+  RETURN A.NewSpan(a, NIL)
+END LineSep;
+
+PROCEDURE (w: LineSepWalker) Inline*(i: A.Inline): A.Inline;
+BEGIN
+  IF (i IS A.SpanInl) & (i(A.SpanInl).attr # NIL)
+      & (i(A.SpanInl).attr IS LineSepAttr) THEN
+    RETURN A.NewSimple(A.SoftBreak)
+  END;
+  RETURN i
+END Inline;
+
+(* The list a, then the list b, as Haskell's ++ joins them: nothing
+   merged *)
+PROCEDURE Cat(a, b: A.Inline): A.Inline;
+  VAR z: A.Inline;
+BEGIN
+  IF a = NIL THEN RETURN b END;
+  z := A.LastInline(a); z.next := b;
+  RETURN a
+END Cat;
+
+(* collectInlines: the inlines of v, a copy *)
+PROCEDURE CollectInlines(v: A.MetaValue): A.Inline;
+  VAR l: A.Inlines; r: A.Inline; it: A.MetaItem;
+BEGIN
+  r := NIL;
+  IF v IS A.MetaInlinesV THEN
+    r := A.DeepCopyInlines(v(A.MetaInlinesV).inlines)
+  ELSIF v IS A.MetaStringV THEN r := A.NewStr(v(A.MetaStringV).s)
+  ELSIF v IS A.MetaBlocksV THEN
+    A.InitInlines(l); SH.BlocksToInlines(l, v(A.MetaBlocksV).blocks);
+    r := l.first
+  ELSIF v IS A.MetaListV THEN (* intercalate [SoftBreak] *)
+    it := v(A.MetaListV).items;
+    WHILE it # NIL DO
+      IF it # v(A.MetaListV).items THEN r := Cat(r, LineSep()) END;
+      r := Cat(r, CollectInlines(it.value));
+      it := it.next
+    END
+  END;
+  RETURN r
+END CollectInlines;
+
+(* collectLines: key's inlines, a SoftBreak if there are any, then
+   i, as the MetaInlines of key *)
+PROCEDURE CollectLines(key: ARRAY OF CHAR; i: A.Inline);
+  VAR v: A.MetaValue; c: A.Inline;
+BEGIN
+  v := A.GetMeta(meta, key); c := NIL;
+  IF v # NIL THEN c := CollectInlines(v) END;
+  IF c # NIL THEN c := Cat(c, LineSep()) END;
+  A.SetMeta(meta, A.S(key), A.NewMetaInlines(Cat(c, i)))
+END CollectLines;
+
+(* collectAsList: key's list, or its value as a list of one, with v
+   added *)
+PROCEDURE CollectAsList(key: ARRAY OF CHAR; v: A.MetaValue);
+  VAR cur: A.MetaValue; l: A.MetaListV;
+BEGIN
+  cur := A.GetMeta(meta, key);
+  IF (cur # NIL) & (cur IS A.MetaListV) THEN l := cur(A.MetaListV)
+  ELSE
+    l := A.NewMetaList();
+    IF cur # NIL THEN A.AddMetaItem(l, cur) END;
+    A.SetMeta(meta, A.S(key), l)
+  END;
+  A.AddMetaItem(l, v)
+END CollectAsList;
+
+(* lineOfInlines at p: the inlines up to a new line, which is read,
+   trimmed; FALSE, with B.pos and the state as they were, if an
+   inline fails before it *)
+PROCEDURE LineOfInlines(p: LONGINT; VAR i: A.Inline): BOOLEAN;
+  VAR s: I.State; l: A.Inlines;
+BEGIN
+  I.Save(s); B.pos := p; I.SetPre;
+  A.InitInlines(l);
+  WHILE B.C(B.pos) # 0AX DO
+    IF (B.pos >= B.len) OR ~I.Inline(l) THEN I.Restore(s); RETURN FALSE END
+  END;
+  INC(B.pos);
+  i := MI.Trim(l);
+  RETURN TRUE
+END LineOfInlines;
+
+(* anyLine at p: the text up to the new line, both read *)
+PROCEDURE AnyLine(p: LONGINT): A.Rope;
+  VAR e: LONGINT;
+BEGIN
+  e := B.LineEnd(p); B.pos := NextLine(e);
+  RETURN B.Rope(p, e)
+END AnyLine;
+
+(* The metadata keywords of keywordHandlers, key k, its value at p:
+   FALSE if k is not one, or its line fails *)
+PROCEDURE MetaKeyword(VAR k: Key; p: LONGINT): BOOLEAN;
+  VAR i: A.Inline; r: A.Rope; b: B.Buf; j: LONGINT;
+BEGIN
+  IF (k = "title") OR (k = "subtitle") OR (k = "author")
+      OR (k = "description") OR (k = "keywords") OR (k = "institute")
+      OR (k = "nocite") OR (k = "header-includes") OR (k = "date") THEN
+    IF ~LineOfInlines(p, i) THEN RETURN FALSE END;
+    IF k = "date" THEN A.SetMeta(meta, A.S("date"), A.NewMetaInlines(i))
+    ELSE CollectLines(k, i)
+    END
+  ELSIF (k = "creator") OR (k = "email") THEN
+    A.SetMeta(meta, A.S(k), A.NewMetaString(AnyLine(p)))
+  ELSIF k = "language" THEN
+    A.SetMeta(meta, A.S("lang"), A.NewMetaString(AnyLine(p)))
+  ELSIF k = "latex_class" THEN
+    A.SetMeta(meta, A.S("documentclass"), A.NewMetaString(AnyLine(p)))
+  ELSIF k = "latex_class_options" THEN (* without [ and ] *)
+    B.InitBuf(b); j := p;
+    WHILE B.C(j) # 0AX DO
+      IF (B.C(j) # "[") & (B.C(j) # "]") THEN B.Put(b, j, j + 1) END;
+      INC(j)
+    END;
+    B.pos := NextLine(j);
+    A.SetMeta(meta, A.S("classoption"), A.NewMetaString(B.BufRope(b)))
+  ELSIF k = "bibliography" THEN
+    CollectAsList("bibliography", A.NewMetaString(AnyLine(p)))
+  ELSIF (k = "html_head") OR (k = "html_head_extra") THEN
+    r := AnyLine(p);
+    CollectAsList("header-includes",
+      A.NewMetaInlines(A.NewRawInline(A.S("html"), r)))
+  ELSIF (k = "latex_header") OR (k = "latex_header_extra") THEN
+    r := AnyLine(p);
+    CollectAsList("header-includes",
+      A.NewMetaInlines(A.NewRawInline(A.S("latex"), r)))
+  ELSE RETURN FALSE
+  END;
+  RETURN TRUE
+END MetaKeyword;
+
+(* keywordLine: a keyword pandoc knows, after #+ and the key: the
+   metadata keywords, #+OPTIONS, #+pandoc-emphasis-pre and -post,
+   #+LINK, #+MACRO, the TODO sequences and #+select_tags and
+   #+exclude_tags are read; #+result's line is passed over. *)
 PROCEDURE KeywordLine(VAR k: Key; p: LONGINT): BOOLEAN;
 BEGIN
   IF ~InList(k, Keywords) THEN RETURN FALSE END;
-  IF k = "options" THEN B.pos := M.Options(p)
+  IF MetaKeyword(k, p) THEN
+  ELSIF (k = "title") OR (k = "subtitle") OR (k = "author")
+      OR (k = "description") OR (k = "keywords") OR (k = "institute")
+      OR (k = "nocite") OR (k = "header-includes") OR (k = "date") THEN
+    RETURN FALSE (* lineOfInlines failed *)
+  ELSIF k = "options" THEN B.pos := M.Options(p)
   ELSIF (k = "link") & ~I.LinkFormat(p) THEN RETURN FALSE
   ELSIF (k = "macro") & ~I.AddMacro(p) THEN RETURN FALSE
   ELSIF (k = "todo") OR (k = "seq_todo") OR (k = "typ_todo") THEN
@@ -2403,7 +2562,7 @@ END TreeBlocks;
    tabStop. *)
 PROCEDURE Read*(text: PdIO.Text; n: LONGINT; tabStop: INTEGER): A.Doc;
   VAR t: B.Text; i, k: LONGINT; d: A.Doc; l: A.Blocks; root: Headline;
-    last: A.StrList;
+    last: A.StrList; sep: LineSepWalker;
 BEGIN
   (* ensureFinalNewlines 2 *)
   k := 0;
@@ -2426,7 +2585,12 @@ BEGIN
   A.InitBlocks(l);
   TreeBlocks(root, l);
   d.blocks := l.first;
+  (* metaExport *)
+  IF ~M.withAuthor THEN A.DeleteMeta(meta, "author") END;
+  IF ~M.withCreator THEN A.DeleteMeta(meta, "creator") END;
+  IF ~M.withEmail THEN A.DeleteMeta(meta, "email") END;
   I.Resolve(d);
+  NEW(sep); A.WalkMetaValue(sep, d.meta);
   idTable := NIL; meta := NIL; markers := NIL;
   selectTags := NIL; excludeTags := NIL;
   RETURN d

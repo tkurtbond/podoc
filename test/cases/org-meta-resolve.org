@@ -1,0 +1,7 @@
+#+title: x[fn:1] [[wp:Org][Org]] [[tt]] {{{m}}} @@html:<b>@@
+#+link: wp https://en.wikipedia.org/wiki/%s
+#+macro: m macro text
+
+<<tt>> Target.
+
+[fn:1] A note.

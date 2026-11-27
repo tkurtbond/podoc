@@ -1,0 +1,19 @@
+#+TITLE: The /Title/
+#+SUBTITLE: A subtitle
+#+AUTHOR: Ann One
+#+AUTHOR: Bob Two
+#+EMAIL: ann@example.com
+#+DATE: 2026-11-26
+#+DESCRIPTION: A description
+#+KEYWORDS: org, pandoc
+#+LANGUAGE: de-DE
+#+INSTITUTE: ACME
+#+CREATOR: Emacs
+#+LATEX_CLASS: report
+#+LATEX_CLASS_OPTIONS: [a4paper]
+#+LATEX_HEADER: \usepackage{tikz}
+#+HTML_HEAD: <meta name="x" content="y">
+
+* Intro
+
+Text.

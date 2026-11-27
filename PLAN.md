@@ -4356,3 +4356,35 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   models: 434 case tests, 23 round trips, 20 mermaid tests, and the
   image tests its converters allow (9 on FreeBSD and NetBSD, 7 on
   OpenBSD; the rest skipped).
+- 2026-11-26, Phase 28.1: Org metadata in `PdOrg`, as pandoc 3.14's
+  `Meta.hs` reads it. `#+TITLE`, `#+SUBTITLE`, `#+AUTHOR`,
+  `#+DESCRIPTION`, `#+KEYWORDS`, `#+INSTITUTE`, `#+NOCITE` and
+  `#+HEADER-INCLUDES` are lines of inlines (`lineOfInlines`, read in
+  place, so emphasis or math may run on to the next line), each
+  added to the key's inlines after a SoftBreak (`collectLines`);
+  `#+DATE` replaces. `#+EMAIL`, `#+CREATOR`, `#+LANGUAGE` (`lang`),
+  `#+LATEX_CLASS` (`documentclass`) and `#+LATEX_CLASS_OPTIONS`
+  (`classoption`, without `[` and `]`) are strings, the last one
+  winning. `#+BIBLIOGRAPHY` strings, `#+LATEX_HEADER` and `_EXTRA`
+  (raw LaTeX) and `#+HTML_HEAD` and `_EXTRA` (raw HTML) go into a
+  list (`collectAsList`; `header-includes` mixes both ways as pandoc
+  does). `author:nil`, `email:nil` and `creator:nil` drop their key at
+  the end (`metaExport`), the root property drawer's keys too;
+  `date:`, `title:`, `toc:` and `num:` are ignored, as by pandoc.
+  pandoc joins the lines with Haskell's `++`, which merges nothing,
+  while the walk that resolves links merges inlines as the Inlines
+  monoid does: the SoftBreaks between lines are held as marked Spans
+  until the links are resolved (an empty `#+title:` line gives two
+  SoftBreaks, as in pandoc). Links, notes, macros and anchors in
+  metadata resolve as in the text. Nine case tests:
+  `org-meta`, `-lines`, `-export`, `-headers`, `-properties`,
+  `-resolve` (JSON from pandoc 3.14) and `org-meta-standalone`
+  (`-s`, its markdown, plain and ConTeXt output byte for byte as
+  pandoc 3.14's). With `-s`, the HTML and ms output differ from
+  pandoc 3.14's only where podoc's templates are pandoc 3.10's (the
+  version line and the HTML style sheet). `make test` passed under
+  `-O2` and `-OC`: 443 case tests, 23 round trips, 10 image tests,
+  20 mermaid tests. 492 probes give the same results under both
+  models; all match pandoc but the 10 decision-57 ones of Phase
+  27.4. The 21 metadata probes that differed before now match, as do
+  46 new ones. Not yet run on the BSDs.

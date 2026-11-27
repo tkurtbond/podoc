@@ -1,0 +1,9 @@
+:PROPERTIES:
+:title: From the drawer
+:author: P
+:END:
+#+title: From a keyword
+#+author: K
+#+subtitle: Kept
+
+Text.

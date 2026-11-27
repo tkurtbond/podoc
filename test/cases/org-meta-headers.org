@@ -1,0 +1,15 @@
+#+header-includes: one
+#+latex_header: \usepackage{a}
+#+html_head: <meta>
+#+header-includes: two
+#+latex_header_extra: \usepackage{b}
+#+html_head_extra: <link>
+#+bibliography: a.bib
+#+bibliography: b.bib
+#+nocite: @a
+#+nocite: @b
+#+latex_class: this will not be used
+#+latex_class: report
+#+latex_class_options: [a4paper,[b]12pt]
+#+language: en 
+#+creator:   
