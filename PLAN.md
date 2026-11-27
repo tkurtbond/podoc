@@ -4348,3 +4348,11 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   125 inputs of pandoc 3.14's `test/Tests/Readers/Org/Inline.hs`,
   123 match; the 2 others are decision
   57's `\dots` and `\textit{Emphasised}`. Not yet run on the BSDs.
+- 2026-11-26, Phases 26 and 27 on the BSDs: commit 19c15b0, from a
+  `git archive`, built with `gmake` and tested with `gmake test`
+  under `-O2` and `-OC` on FreeBSD 15.1 (alerik, amd64; rackhir,
+  arm64), NetBSD 11.0 (artos, amd64; yishana, i386) and OpenBSD 7.9
+  (jherek, amd64; cymoril, i386). Every host passed under both
+  models: 434 case tests, 23 round trips, 20 mermaid tests, and the
+  image tests its converters allow (9 on FreeBSD and NetBSD, 7 on
+  OpenBSD; the rest skipped).
