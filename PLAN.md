@@ -2448,6 +2448,18 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   `+ascii_identifiers`: an emoji replaced by its alias, from the
   emojis package's table, as pandoc does (found 2026-11-26, Phase
   26.5).
+- Nested includes, Org `#+INCLUDE` and rST `include`: pandoc looks
+  up a nested include relative to the including file's name as it
+  was written in the include line, not the directory the file was
+  actually found in; podoc copies this. Check later whether that is
+  what pandoc means to do, or a pandoc bug to report and stop
+  copying (found 2026-11-26, Phase 28.2).
+- Org `--unknown=warn` reports Emacs-only keywords (`#+STARTUP`,
+  `#+TAGS`, `#+PROPERTY`, `#+COLUMNS`, `#+CATEGORY`) as unknown, as
+  decision 58 says (the user's choice, 2026-11-26). In the user's
+  files they are most of the unknown keywords reported. Check later
+  whether reporting them is still reasonable, or whether they should
+  be left out, as drawers and planning lines are.
 - The ms writer: TeX math to `eqn` (texmath's `writeEqn`), and
   syntax highlighting.
 - Templates: the pipes `left`, `right` and `center` (block layout);
@@ -4449,3 +4461,34 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   give the same JSON and status as pandoc under both models. `make
   test` passed under `-O2` and `-OC`: 447 case tests, 23 round trips,
   10 image tests, 20 mermaid tests. Not yet run on the BSDs.
+- 2026-11-26, Phase 28.3: reporting for the Org reader (decision 58).
+  pandoc 3.14's Org reader gives two warnings, an unknown export
+  option and a missing include file; podoc already gave both, and
+  the probe (`--verbose`, org to JSON) showed pandoc's reader adds
+  no `[INFO]` lines. With `-t html|ms|context|plain`, pandoc's
+  writers add "Not rendering" lines, which no podoc writer gives for
+  any reader, and its LaTeX reader `Skipped '\foo' at chunk line 1`
+  lines for commands decision 57 keeps raw; both are listed in
+  differences.md. `--unknown=warn|error` (`PdOrgInline.Unknown`)
+  reports unknown keywords (`RawOrgLine`), unknown `#+BEGIN_` blocks
+  (the generic `Div`), undefined macros (`MacroCall`) and the LaTeX
+  commands kept raw (`InlineLaTeX`), each once, at its start, with
+  the file, line and column in characters; `error` stops at the
+  first with status 64. Positions in nested texts follow an origin
+  stack that `PdOrgInline.Push` (under `Enter`) records for each
+  text: exact in list and definition items, block and drawer
+  contents, verse lines, link descriptions, citation affixes,
+  `charsInBalanced`, table cells and included files (their names
+  without a leading `./`); a macro's expansion reports the call, and
+  a second `#+CAPTION:` the first; other texts the place the reader
+  had reached in the enclosing one. Two case tests,
+  `org-unknown-warn` (with `test/cases/org-unknown/inc.org`) and
+  `org-unknown-error` (status 64). `--unknown=warn` over the 759
+  `.org` files under `~/Repos` and `~/current` (the 663 and podoc's
+  own tests) ended only the two include loop tests (64), with the
+  same 301 lines under both models: 135 unknown keywords (`#+STARTUP`
+  29, `#+TAGS` 14, `#+PROPERTY` 13, `#+COLUMNS` 7, `#+TITLE` with no
+  colon, ...), 138 LaTeX commands, 14 blocks, 6 macros. Also: the
+  nested include directory question went to "Later". `make test`
+  passed under `-O2` and `-OC`: 449 case tests, 23 round trips, 10
+  image tests, 20 mermaid tests. Not yet run on the BSDs.

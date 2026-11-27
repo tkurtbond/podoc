@@ -76,14 +76,15 @@ the rest have not yet been.
   language or a missing `:` in `--code-keywords` end podoc with
   status 6, and a `--code-keywords` file that cannot be read with 1.
 - `--unknown=warn|error` is podoc's own (see The reStructuredText
-  reader). A value other than `warn` or `error` ends podoc with status 6.
+  reader and The Org reader). A value other than `warn` or `error` ends podoc with status 6.
 - `--reference-location` is used only by the mom writer, where
   `document` makes notes endnotes; the other writers ignore it. A
   value other than `block`, `section` or `document` gives pandoc's
   message and status, 6.
 - `--quiet` and `--log` are not taken. `--verbose` gives only the
   reStructuredText reader's `[INFO]` lines, not pandoc's others
-  (the files it reads, the template it uses, ...).
+  (the files it reads, the template it uses, the writers' "Not
+  rendering" lines for raw blocks and inlines, ...).
 
 ## Input
 
@@ -238,10 +239,23 @@ read:
     is raw LaTeX in podoc; pandoc gives `Emph [Str "x"]`;
   - a `%` inside a command's braces is not a comment to podoc:
     `\foo{x%y}` is raw LaTeX in podoc, the text `\foo{x%y}` in pandoc.
+  - `--verbose` gives none of the `[INFO] Skipped '\foo' at chunk
+    line 1 column 5` lines pandoc's LaTeX reader logs for these
+    commands, often twice, at positions in the command's own text.
 
   `$x$`, `\(x\)`, `\[x\]`, `$$x$$` and inline math environments
   (`\begin{equation}`) are math or raw LaTeX as in pandoc, and
   `tex:nil` and `tex:verbatim` behave as in pandoc.
+- The warnings pandoc's Org reader gives (an unknown export option, a
+  missing include file) are pandoc's, after podoc's `podoc: `.
+- `--unknown=warn` and `--unknown=error` are podoc's own: they report
+  unknown keywords, unknown `#+BEGIN_` blocks, undefined macros and
+  the LaTeX commands kept raw, each where it starts: the file, as
+  podoc read it or as an `#+INCLUDE:` found it, and the line and
+  column, in characters, there. A place is reported once, though the
+  reader may read it more than once. Inside a block with more than
+  one `#+CAPTION:`, and in a macro's expansion, the place given is
+  that of the first caption or of the macro call.
 
 ## YAML metadata
 

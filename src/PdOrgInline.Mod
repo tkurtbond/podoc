@@ -32,14 +32,19 @@ MODULE PdOrgInline;
    LaTeX command as RawInline latex, ending where PdMdInline.RawTeXEnd
    ends it, as tex:t, tex:nil and tex:verbatim say (decision 57).
 
+   Phase 28.3: --unknown (Unknown) reports undefined macros and the
+   LaTeX commands kept raw, and PdOrg's unknown keywords and blocks,
+   at their places in the files (Loc), which Push records for each
+   text entered from what Origin and FileOrigin say.
+
    pandoc's parser state is kept in st: the positions of the last pre
    character, forbidden character and Str, the emphasis characters
    open and the new lines allowed. PdOrg's blocks set it as pandoc's
    do, through Newline, SetPre, Enter and Leave (Org's
    parseFromString), and Save and Restore where an alternative fails. *)
 
-IMPORT Utf8, Unicode, Ropes, A := PdAst, B := PdMdBase, MI := PdMdInline,
-  M := PdOrgMeta, PdEntities;
+IMPORT Utf8, Unicode, Ropes, PdIO, PdSource, A := PdAst, B := PdMdBase,
+  MI := PdMdInline, M := PdOrgMeta, PdEntities;
 
 CONST
   NoQuote = 0; InSingle = 1; InDouble = 2; (* the quote context *)
@@ -56,6 +61,19 @@ CONST
 
   (* #+LINK formats *)
   FmtPlain = 0; FmtUrl = 1; FmtAppend = 2;
+
+  (* --unknown *)
+  Quiet* = 0; WarnUnknown* = 1; FailUnknown* = 2;
+
+  (* Where a text Enter entered came from, for --unknown's places *)
+  MaxDepth = 64;
+  OrgUnknown* = 0; (* not known: where the text it was entered from
+    had got to *)
+  OrgOffset* = 1; (* a copy of that text from a *)
+  OrgLines* = 2; (* its lines, line for line: the first from a, the
+    others with b columns taken from their starts *)
+  OrgAt* = 3; (* made from what is at a *)
+  OrgFile* = 4; (* the file name, from its line a *)
 
 TYPE
   (* A position: Nothing if id < 0 *)
@@ -132,6 +150,13 @@ TYPE
     next: Arg
   END;
 
+  (* A place --unknown has reported *)
+  Report = POINTER TO RECORD
+    line, col: LONGINT;
+    name: A.Rope;
+    next: Report
+  END;
+
   Resolver = POINTER TO ResolverDesc;
   ResolverDesc = RECORD (A.WalkerDesc)
     notes: BOOLEAN (* FALSE inside a referenced note's contents *)
@@ -149,6 +174,17 @@ VAR
   notes: Note; (* the newest first *)
   macros: Macro; (* the newest first *)
   macroDepth: INTEGER; (* orgStateMacroDepth *)
+  unknown*: INTEGER; (* --unknown: Quiet, WarnUnknown or FailUnknown *)
+  main*: B.Text; (* the document's text, as PdSource read it *)
+  mainLen*: LONGINT;
+  (* each text Enter entered, by B.depth: the one it was entered from
+     and where that had got to, and where it came from *)
+  orgParent: ARRAY MaxDepth OF B.Text;
+  orgPos, orgA, orgB: ARRAY MaxDepth OF LONGINT;
+  orgKind: ARRAY MaxDepth OF INTEGER;
+  orgName: ARRAY MaxDepth OF A.Rope;
+  nextKind: INTEGER; nextA, nextB: LONGINT; nextName: A.Rope;
+  reported: Report; (* the places --unknown has reported *)
 
 (* Block starts. Each takes the start of a line, p, and returns where
    what it matched ends, or -1. *)
@@ -478,7 +514,8 @@ BEGIN
   st.pre.id := -1; st.forb.id := -1; st.str.id := -1; st.stack := NIL;
   st.count := -1; st.quote := NoQuote; st.anchors := NIL; here.id := -1;
   preChars := defPre; postChars := defPost; formats := NIL; notes := NIL;
-  macros := NIL; macroDepth := 0
+  macros := NIL; macroDepth := 0;
+  nextKind := OrgUnknown; nextName := NIL; reported := NIL
 END Reset;
 
 (* addToNotesTable: ref, fn:name or a number, is defined as blocks *)
@@ -527,11 +564,151 @@ BEGIN
   st.pre.id := -1
 END ClearPre;
 
+(* Where the text the next Enter or Push enters came from: kind, one
+   of OrgUnknown, OrgOffset, OrgLines and OrgAt, with a and b *)
+PROCEDURE Origin*(kind: INTEGER; a, b: LONGINT);
+BEGIN
+  nextKind := kind; nextA := a; nextB := b; nextName := NIL
+END Origin;
+
+(* The text the next Enter or Push enters is the file name's, from its
+   line line; a leading ./ is left out *)
+PROCEDURE FileOrigin*(name: ARRAY OF CHAR; line: LONGINT);
+  VAR i: LONGINT;
+BEGIN
+  nextKind := OrgFile; nextA := line; nextB := 0; nextName := A.S(name);
+  i := 0;
+  WHILE (name[i] = ".") & (name[i + 1] = "/") DO INC(i, 2) END;
+  IF i > 0 THEN
+    nextName := Ropes.Substring(nextName, i, Ropes.Length(nextName) - i)
+  END
+END FileOrigin;
+
+(* B.Enter, the text's origin recorded as Origin or FileOrigin gave it *)
+PROCEDURE Push*(VAR f: B.Frame; text: B.Text; n: LONGINT);
+  VAR d: INTEGER; t: B.Text; p: LONGINT;
+BEGIN
+  t := B.t; p := B.pos;
+  B.Enter(f, text, n);
+  d := B.depth;
+  IF d < MaxDepth THEN
+    orgParent[d] := t; orgPos[d] := p; orgKind[d] := nextKind;
+    orgA[d] := nextA; orgB[d] := nextB; orgName[d] := nextName
+  END;
+  nextKind := OrgUnknown; nextName := NIL
+END Push;
+
+(* The input's name, and the line and column, counted from 1 in
+   characters, of p in B.t, following the texts entered back to the
+   document or an included file *)
+PROCEDURE Loc*(p: LONGINT; VAR name: ARRAY OF CHAR; VAR line, col: LONGINT);
+  VAR d, i, k, ls, c: LONGINT; t, pt: B.Text;
+BEGIN
+  d := B.depth; t := B.t;
+  IF d >= MaxDepth THEN (* where the deepest recorded had got to *)
+    WHILE d >= MaxDepth DO DEC(d) END;
+    p := orgPos[d]; t := orgParent[d]; DEC(d)
+  END;
+  LOOP
+    IF (d > 0) & (orgKind[d] = OrgFile) OR (d <= 0) THEN EXIT END;
+    pt := orgParent[d];
+    CASE orgKind[d] OF
+    | OrgOffset: p := orgA[d] + p
+    | OrgAt: p := orgA[d]
+    | OrgLines:
+      k := 1; ls := 0; i := 0;
+      WHILE (i < p) & (i < LEN(t^)) DO
+        IF t[i] = 0AX THEN INC(k); ls := i + 1 END;
+        INC(i)
+      END;
+      c := p - ls; i := orgA[d];
+      IF k = 1 THEN p := i + c
+      ELSE
+        WHILE (k > 1) & (i < LEN(pt^)) & (pt[i] # 0X) DO
+          IF pt[i] = 0AX THEN DEC(k) END;
+          INC(i)
+        END;
+        p := i + orgB[d] + c
+      END
+    ELSE p := orgPos[d]
+    END;
+    t := pt; DEC(d)
+  END;
+  IF p < 0 THEN p := 0 END;
+  IF d > 0 THEN (* an included file's text *)
+    Ropes.ToString(orgName[d], name);
+    line := orgA[d]; i := 0;
+    WHILE (i < p) & (i < LEN(t^)) DO
+      IF t[i] = 0AX THEN INC(line) END;
+      INC(i)
+    END
+  ELSE
+    t := main;
+    IF p >= mainLen THEN p := mainLen - 1 END;
+    IF p < 0 THEN p := 0 END;
+    PdSource.Locate(main^, p, name, line)
+  END;
+  ls := p;
+  WHILE (ls > 0) & (t[ls - 1] # 0AX) DO DEC(ls) END;
+  col := 1;
+  FOR i := ls TO p - 1 DO
+    IF (ORD(t[i]) < 80H) OR (ORD(t[i]) >= 0C0H) THEN INC(col) END
+  END
+END Loc;
+
+(* Appends s to m, as far as it goes *)
+PROCEDURE AppendTo(VAR m: ARRAY OF CHAR; s: ARRAY OF CHAR);
+  VAR i, j: LONGINT;
+BEGIN
+  i := 0; WHILE m[i] # 0X DO INC(i) END;
+  j := 0;
+  WHILE (s[j] # 0X) & (i < LEN(m) - 1) DO m[i] := s[j]; INC(i); INC(j) END;
+  m[i] := 0X
+END AppendTo;
+
+(* Appends n, not negative, to m *)
+PROCEDURE AppendNum(VAR m: ARRAY OF CHAR; n: LONGINT);
+  VAR d: ARRAY 24 OF CHAR; i, k: LONGINT;
+BEGIN
+  i := 0;
+  REPEAT d[i] := CHR(ORD("0") + n MOD 10); n := n DIV 10; INC(i) UNTIL n = 0;
+  k := 0; WHILE m[k] # 0X DO INC(k) END;
+  WHILE (i > 0) & (k < LEN(m) - 1) DO DEC(i); m[k] := d[i]; INC(k) END;
+  m[k] := 0X
+END AppendNum;
+
+(* Reports, as --unknown asks, what at p in B.t the reader does not
+   know or keeps unread: what, then 'r' quoted, then the place. Each
+   place is reported once, though the parser may read it again. *)
+PROCEDURE Unknown*(what: ARRAY OF CHAR; r: A.Rope; p: LONGINT);
+  VAR m: ARRAY 1024 OF CHAR; name: ARRAY 512 OF CHAR; s: ARRAY 256 OF CHAR;
+    line, col: LONGINT; x: Report;
+BEGIN
+  IF unknown = Quiet THEN RETURN END;
+  Loc(p, name, line, col);
+  x := reported;
+  WHILE (x # NIL) & ~((x.line = line) & (x.col = col)
+      & Ropes.Equal(x.name, A.S(name))) DO
+    x := x.next
+  END;
+  IF x # NIL THEN RETURN END;
+  NEW(x); x.line := line; x.col := col; x.name := A.S(name);
+  x.next := reported; reported := x;
+  COPY(what, m); AppendTo(m, " '");
+  Ropes.ToString(r, s); AppendTo(m, s); AppendTo(m, "' at ");
+  IF (name # "") & (name # "-") THEN AppendTo(m, name); AppendTo(m, " ") END;
+  AppendTo(m, "line "); AppendNum(m, line);
+  AppendTo(m, " column "); AppendNum(m, col);
+  IF unknown = FailUnknown THEN PdIO.Fail("", m, PdIO.ParseError)
+  ELSE PdIO.Warn(m)
+  END
+END Unknown;
+
 (* Org's parseFromString: enters the text, of n bytes, as B.Enter
    does, the last pre character's position Nothing *)
 PROCEDURE Enter*(VAR f: B.Frame; text: B.Text; n: LONGINT);
 BEGIN
-  B.Enter(f, text, n); ClearPre
+  Push(f, text, n); ClearPre
 END Enter;
 
 (* Leaves the text Enter entered, the last pre character's position
@@ -909,6 +1086,7 @@ BEGIN
   B.Put(b, p + 1, q);
   IF open = "(" THEN B.PutChar(b, ")") END;
   B.pos := q + 1;
+  IF open = "(" THEN Origin(OrgOffset, p, 0) ELSE Origin(OrgOffset, p + 1, 0) END;
   Enter(f, b.t, b.len);
   WHILE Inline(l) DO END;
   Leave(f);
@@ -1096,7 +1274,7 @@ END IsImage;
 PROCEDURE EnterBuf(VAR f: B.Frame; VAR b: B.Buf);
 BEGIN
   B.PutChar(b, 0X); DEC(b.len);
-  B.Enter(f, b.t, b.len)
+  Push(f, b.t, b.len)
 END EnterBuf;
 
 (* linkTarget at p: [, one or more characters but new lines and
@@ -1173,6 +1351,7 @@ BEGIN
   END;
   IF B.C(r + 1) # "]" THEN Restore(s); RETURN FALSE END;
   B.pos := r + 2;
+  Origin(OrgOffset, q, 0); (* a new line made a space, byte for byte *)
   Enter(f, d.t, d.len);
   src := CleanLink(0, d.len, ok);
   image := ok & IsImage(0, d.len);
@@ -1564,7 +1743,7 @@ BEGIN
   END;
   m := macros;
   WHILE (m # NIL) & ~Ropes.Equal(m.name, name) DO m := m.next END;
-  IF m = NIL THEN RETURN FALSE END;
+  IF m = NIL THEN Unknown("Unknown macro", name, p); RETURN FALSE END;
   (* the parts alternate with the arguments their numbers name, those
      there are *)
   sel := NIL; last := NIL; pt := m.parts;
@@ -1589,6 +1768,7 @@ BEGIN
   B.PutChar(text, 0X); DEC(text.len);
   B.pos := q;
   INC(macroDepth);
+  Origin(OrgAt, p, 0);
   Enter(f, text.t, text.len);
   A.InitInlines(cl);
   WHILE Inline(cl) DO END;
@@ -1723,6 +1903,7 @@ PROCEDURE Affix(from, to: LONGINT; trim: BOOLEAN): A.Inline;
   VAR b: B.Buf; f: B.Frame; cl: A.Inlines;
 BEGIN
   B.InitBuf(b); B.Put(b, from, to); B.PutChar(b, 0X); DEC(b.len);
+  Origin(OrgOffset, from, 0);
   Enter(f, b.t, b.len);
   A.InitInlines(cl);
   WHILE Inline(cl) DO END;
@@ -2283,6 +2464,9 @@ BEGIN
   END;
   IF Entity(p, e, l) THEN
   ELSIF M.latex = M.TexExport THEN
+    IF n <= p + 1 THEN n := p + 2 END;
+    IF n > e THEN n := e END;
+    Unknown("Raw LaTeX command", B.Rope(p, n), p);
     A.Append(l, A.NewRawInline(A.S("latex"), B.Rope(p, e)))
   ELSIF M.latex = M.TexVerbatim THEN A.Append(l, A.NewStr(B.Rope(p, e)))
   END;

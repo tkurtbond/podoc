@@ -90,7 +90,7 @@ when no files are named. `podoc --help` lists the options:
 | `--columns N` | the line length, 72 by default; it also sets table column widths, as in pandoc |
 | `--tab-stop N`, `-p` | tabs |
 | `--verbose` | informative messages: for `rst`, pandoc's `[INFO]` lines for what the reader skips |
-| `--unknown warn\|error` | for `rst`, report unknown directives and roles, and options the reader skips, as warnings, or stop at the first with status 64 (podoc's own) |
+| `--unknown warn\|error` | for `rst`, report unknown directives and roles, and options the reader skips; for `org`, unknown keywords, blocks and macros, and LaTeX commands kept raw; as warnings, or stop at the first with status 64 (podoc's own) |
 
 The formats are inferred from the file names as pandoc infers them:
 `-o book.html` writes HTML, and `-o book.pdf` makes PDF. For PDF,
@@ -159,6 +159,16 @@ silence, or reports them only with `--verbose`. podoc's
 `--unknown=warn` reports each as a warning, with its position, and
 `--unknown=error` stops at the first with status 64, so a document
 can be checked for what neither program will render.
+
+The Org reader's `--unknown=warn` reports, with file, line and
+column, what it keeps unread or makes into something no writer may
+render: a keyword it does not know (`#+FOO: x`, kept as raw Org), a
+`#+BEGIN_` block it does not know (`#+BEGIN_center`, made a `Div`),
+a macro never defined (`{{{name}}}`, left as text) and a LaTeX command
+kept raw (`\textsc{x}`). What the author asked to drop is not
+reported: `COMMENT` trees, `noexport` and excluded tags, comment
+blocks and lines, `:nil` settings, `ARCHIVE` trees, and drawers and
+planning lines. `--unknown=error` stops at the first with status 64.
 
 ## Templates
 

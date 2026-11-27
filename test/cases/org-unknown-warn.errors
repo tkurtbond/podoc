@@ -1,0 +1,23 @@
+podoc: [WARNING] Unknown keyword '#+FOO' at org-unknown-warn.org line 3 column 1
+podoc: [WARNING] Unknown macro 'nope' at org-unknown-warn.org line 4 column 27
+podoc: [WARNING] Raw LaTeX command '\textsc' at org-unknown-warn.org line 4 column 42
+podoc: [WARNING] Raw LaTeX command '\foo' at org-unknown-warn.org line 6 column 12
+podoc: [WARNING] Unknown macro 'missing' at org-unknown-warn.org line 7 column 13
+podoc: [WARNING] Unknown block '#+BEGIN_center' at org-unknown-warn.org line 9 column 1
+podoc: [WARNING] Raw LaTeX command '\bar' at org-unknown-warn.org line 10 column 12
+podoc: [WARNING] Raw LaTeX command '\baz' at org-unknown-warn.org line 14 column 7
+podoc: [WARNING] Raw LaTeX command '\qux' at org-unknown-warn.org line 17 column 8
+podoc: [WARNING] Raw LaTeX command '\tab' at org-unknown-warn.org line 22 column 8
+podoc: [WARNING] Raw LaTeX command '\dl' at org-unknown-warn.org line 26 column 16
+podoc: [WARNING] Raw LaTeX command '\dl' at org-unknown-warn.org line 27 column 8
+podoc: [WARNING] Raw LaTeX command '\capcmd' at org-unknown-warn.org line 32 column 16
+podoc: [WARNING] Raw LaTeX command '\vcmd' at org-unknown-warn.org line 37 column 9
+podoc: [WARNING] Raw LaTeX command '\lcmd' at org-unknown-warn.org line 40 column 26
+podoc: [WARNING] Raw LaTeX command '\ncmd' at org-unknown-warn.org line 44 column 17
+podoc: [WARNING] Raw LaTeX command '\bcmd' at org-unknown-warn.org line 50 column 12
+podoc: [WARNING] Raw LaTeX command '\dcmd' at org-unknown-warn.org line 53 column 5
+podoc: [WARNING] Unknown macro 'nope' at org-unknown-warn.org line 56 column 9
+podoc: [WARNING] Raw LaTeX command '\here' at org-unknown-warn.org line 56 column 20
+podoc: [WARNING] Unknown keyword '#+BAR' at org-unknown/inc.org line 2 column 1
+podoc: [WARNING] Raw LaTeX command '\cmd' at org-unknown/inc.org line 3 column 6
+podoc: [WARNING] Raw LaTeX command '\indrawer' at org-unknown-warn.org line 63 column 6

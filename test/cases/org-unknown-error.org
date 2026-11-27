@@ -1,0 +1,5 @@
+Fine \alpha text.
+
+#+begin_quote
+Then {{{undefined}}} and \later
+#+end_quote

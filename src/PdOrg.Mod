@@ -21,13 +21,16 @@ MODULE PdOrg;
    #+AUTHOR, #+LATEX_HEADER and the rest), joined as collectLines and
    collectAsList join them, and author:, email: and creator:
    (metaExport). Phase 28.2: #+INCLUDE (include and
-   insertIncludedFile). *)
+   insertIncludedFile). Phase 28.3: --unknown reports unknown
+   keywords and #+BEGIN_ blocks (PdOrgInline.Unknown), each nested
+   text's origin given to PdOrgInline.Origin for their places. *)
 
 IMPORT Ropes, Utf8, Unicode, PdIO, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
   I := PdOrgInline, M := PdOrgMeta, SH := PdShared, G := PdGridTable;
 
 CONST
-  Quiet* = 0; WarnUnknown* = 1; FailUnknown* = 2; (* unknown *)
+  Quiet* = I.Quiet; WarnUnknown* = I.WarnUnknown;
+  FailUnknown* = I.FailUnknown; (* unknown *)
   KeySize = 64;
   IdTableSize = 4093; (* the buckets of the identifiers' table, a
     prime, as PdMarkdown's *)
@@ -134,6 +137,7 @@ VAR
   meta: A.MetaMapV; (* the document's *)
   incs: Inc; (* the files being included, the innermost first *)
   main: B.Text; mainLen: LONGINT; (* the document's text *)
+  rawA, rawB: LONGINT; (* RawContent's origin, for I.Origin(I.OrgLines) *)
 
 (* Lines *)
 
@@ -408,11 +412,14 @@ END SpecialLine;
 
 (* rawOrgLine: any other #+ line, a RawBlock org of it from its #+ *)
 PROCEDURE RawOrgLine(VAR l: A.Blocks): BOOLEAN;
-  VAR q, e: LONGINT;
+  VAR q, e, k: LONGINT;
 BEGIN
   q := I.MetaLineStart(B.pos);
   IF q < 0 THEN RETURN FALSE END;
   e := B.LineEnd(q);
+  k := q;
+  WHILE (k < e) & (B.t[k] # ":") & ~B.IsWhite(B.t[k]) DO INC(k) END;
+  I.Unknown("Unknown keyword", B.Rope(q - 2, k), q - 2);
   A.AddBlock(l, A.NewRawBlock(A.S("org"), B.Rope(q - 2, e)));
   B.pos := NextLine(e); I.Newline;
   RETURN TRUE
@@ -679,8 +686,8 @@ END KeyValues;
    attributes a block may have, into ba; where they end, or -1 if one
    of the lines is another keyword or #+attr_html: is not pairs *)
 PROCEDURE Attributes(p: LONGINT; VAR ba: BlockAttrs): LONGINT;
-  VAR q, r, v, e: LONGINT; first, last, x: AttrLine; cap, kv: B.Buf;
-    f: B.Frame; ok: BOOLEAN;
+  VAR q, r, v, e, capFrom: LONGINT; first, last, x: AttrLine; cap, kv: B.Buf;
+    f: B.Frame; ok: BOOLEAN; capKind: INTEGER;
 BEGIN
   first := NIL; last := NIL;
   LOOP (* many stringyMetaAttribute *)
@@ -712,7 +719,9 @@ BEGIN
     IF (x.key = "name") OR (x.key = "label") THEN
       ba.name := B.Rope(x.from, x.to)
     ELSIF x.key = "caption" THEN
-      IF ba.hasCaption THEN B.PutChar(cap, " ") END;
+      IF ba.hasCaption THEN B.PutChar(cap, " "); capKind := I.OrgAt
+      ELSE capKind := I.OrgOffset; capFrom := x.from
+      END;
       B.Put(cap, x.from, x.to); ba.hasCaption := TRUE
     ELSIF x.key = "attr_html" THEN
       IF kv.len > 0 THEN B.PutChar(kv, " ") END;
@@ -720,7 +729,9 @@ BEGIN
     END;
     x := x.next
   END;
-  IF ba.hasCaption THEN ba.caption := BufInlines(cap) END;
+  IF ba.hasCaption THEN
+    I.Origin(capKind, capFrom, 0); ba.caption := BufInlines(cap)
+  END;
   B.PutChar(kv, 0AX);
   I.Enter(f, kv.t, kv.len);
   ok := KeyValues(ba.kv);
@@ -810,6 +821,11 @@ BEGIN
     q := r
   END;
   last := q; q := p;
+  rawA := p; rawB := 0;
+  IF trim & (min # MAX(LONGINT)) THEN
+    rawB := min;
+    IF B.BlankLine(p) < 0 THEN rawA := p + min END
+  END;
   I.NewlineAt(last); (* the content's anyLine, or ignHeaders *)
   B.InitBuf(b);
   WHILE q < last DO
@@ -1009,12 +1025,12 @@ END SrcBlock;
 (* verseBlock: a LineBlock of the lines from p, each line's indent
    kept as no-break spaces, into out; where it ends, or -1 *)
 PROCEDURE Verse(p, ts, te: LONGINT; VAR out: A.Blocks): LONGINT;
-  VAR e, i, j, k, m: LONGINT; b, nb, lb: B.Buf; f: B.Frame; il: A.Inlines;
+  VAR e, i, j, k, m, ls: LONGINT; b, nb, lb: B.Buf; f: B.Frame; il: A.Inlines;
     first, last, x: A.InlineList;
 BEGIN
   e := RawContent(p, FALSE, ts, te, TRUE, b);
   IF e < 0 THEN RETURN -1 END;
-  first := NIL; last := NIL; i := 0;
+  first := NIL; last := NIL; i := 0; ls := p; (* the line's start *)
   WHILE i < b.len DO
     j := i;
     WHILE b.t[j] # 0AX DO INC(j) END;
@@ -1029,6 +1045,10 @@ BEGIN
     B.InitBuf(lb);
     FOR m := k TO j - 1 DO B.PutChar(lb, b.t[m]) END;
     B.PutChar(lb, 0AX);
+    IF ls < e THEN (* the text after the content line's indent *)
+      I.Origin(I.OrgOffset, B.SkipSpaces(ls), 0);
+      ls := NextLine(B.LineEnd(ls))
+    END;
     I.Enter(f, lb.t, lb.len);
     A.Append(il, I.Inlines());
     I.Leave(f);
@@ -1096,6 +1116,8 @@ BEGIN
     END;
     IF r >= 0 THEN e := RawContent(r, FALSE, ts, te, TRUE, b) END;
     IF e >= 0 THEN
+      IF a # NIL THEN I.Unknown("Unknown block", B.Rope(ts - 8, te), ts - 8) END;
+      I.Origin(I.OrgLines, rawA, rawB);
       ParseBlocks(b, cont);
       IF a # NIL THEN A.AddBlock(out, A.NewDiv(a, cont.first))
       ELSIF k = "quote" THEN A.AddBlock(out, A.NewBlockQuote(cont.first))
@@ -1170,6 +1192,7 @@ BEGIN
   IF r < 0 THEN RETURN FALSE END;
   e := RawContent(r, TRUE, 0, 0, TRUE, b);
   IF e < 0 THEN RETURN FALSE END;
+  I.Origin(I.OrgLines, rawA, rawB);
   ParseBlocks(b, out);
   A.AddBlock(l, A.NewDiv(a, out.first));
   B.pos := e;
@@ -1209,6 +1232,7 @@ BEGIN
   keep := ~Ropes.EqualString(name, "PROPERTIES") & ((d = NIL) = M.drawersExcept);
   IF keep THEN
     B.InitBuf(b); B.Put(b, q, r);
+    I.Origin(I.OrgOffset, q, 0);
     ParseBlocks(b, out);
     a := A.NewAttr(NIL); A.AddClass(a, name); A.AddClass(a, A.S("drawer"));
     A.AddBlock(l, A.NewDiv(a, out.first))
@@ -1386,6 +1410,7 @@ BEGIN
   END;
   ItemText(q, n, b);
   saved := inList; inList := TRUE;
+  I.Origin(I.OrgLines, q, n);
   I.Enter(f, b.t, b.len);
   A.InitBlocks(l);
   fresh := TRUE;
@@ -1470,6 +1495,7 @@ PROCEDURE InlinesOf(from, to: LONGINT; VAR ok: BOOLEAN): A.Inline;
   VAR b: B.Buf; f: B.Frame; i: A.Inline;
 BEGIN
   B.InitBuf(b); B.Put(b, from, to);
+  I.Origin(I.OrgOffset, from, 0);
   I.Enter(f, b.t, b.len);
   i := I.Inlines();
   ok := B.pos > 0;
@@ -1495,7 +1521,9 @@ BEGIN
   IF B.LineEnd(r) >= B.len THEN RETURN FALSE END;
   term := InlinesOf(q, r, ok);
   IF ~ok THEN RETURN FALSE END;
-  ItemText(DefinitionMarker(r), n, b);
+  q := DefinitionMarker(r);
+  ItemText(q, n, b);
+  I.Origin(I.OrgLines, q, n);
   I.Enter(f, b.t, b.len);
   A.InitBlocks(l);
   fresh := TRUE;
@@ -1704,7 +1732,7 @@ PROCEDURE CellBlocks(VAR b: B.Buf): A.Block;
 BEGIN
   saved := fresh;
   I.ClearStr(str);
-  B.Enter(f, b.t, b.len);
+  I.Push(f, b.t, b.len);
   A.InitBlocks(l);
   Blocks(l);
   B.Leave(f);
@@ -2768,7 +2796,7 @@ BEGIN
   FOR i := q TO e - 1 DO B.PutChar(b, B.t[i]) END;
   B.PutChar(b, 0AX);
   kv := A.NewAttr(NIL);
-  B.Enter(fr, b.t, b.len); ok := KeyValues(kv); B.Leave(fr);
+  I.Push(fr, b.t, b.len); ok := KeyValues(kv); B.Leave(fr);
   IF ~ok THEN RETURN FALSE END;
   FOR i := fs TO fe - 1 DO f[i - fs] := B.t[i] END;
   f[fe - fs] := 0X;
@@ -2820,7 +2848,8 @@ BEGIN
     NEW(inc); NEW(inc.name, n + 1); COPY(f, inc.name^);
     IF hasStart THEN inc.start := start ELSE inc.start := 1 END;
     inc.next := incs;
-    B.Enter(fr, c.t, c.len); inc.depth := B.depth; incs := inc;
+    I.FileOrigin(path, inc.start);
+    I.Push(fr, c.t, c.len); inc.depth := B.depth; incs := inc;
     savedFresh := fresh; fresh := FALSE;
     root := DocumentTree();
     A.InitBlocks(il); TreeBlocks(root, il);
@@ -2847,6 +2876,7 @@ BEGIN
   FOR i := n TO n + 1 - k DO t[i] := 0AX END;
   B.Start(t, n + 2 - k, tabStop);
   main := B.t; mainLen := n + 2 - k; incs := NIL;
+  I.main := main; I.mainLen := mainLen; I.unknown := unknown;
   M.Reset(smart, smartQuotes, specialStrings);
   I.fancyLists := fancyLists; I.citations := citations; I.Reset;
   NEW(idTable);
