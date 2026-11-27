@@ -50,8 +50,9 @@ VAR
   fancyLists*: BOOLEAN; (* the extension fancy_lists *)
   st: State;
   here: Pos; (* B.pos's line and column, last counted *)
-  preChars, postChars: ARRAY 64 OF CHAR; (* UTF-8: the characters
-    allowed before and after emphasis *)
+  preChars, postChars: B.Buf; (* UTF-8: the characters allowed
+    before and after emphasis *)
+  defPre, defPost: B.Buf; (* pandoc's defaults for them *)
 
 (* Block starts. Each takes the start of a line, p, and returns where
    what it matched ends, or -1. *)
@@ -379,7 +380,8 @@ END Set;
 PROCEDURE Reset*;
 BEGIN
   st.pre.id := -1; st.forb.id := -1; st.str.id := -1; st.stack := NIL;
-  st.count := -1; st.quote := NoQuote; here.id := -1
+  st.count := -1; st.quote := NoQuote; here.id := -1;
+  preChars := defPre; postChars := defPost
 END Reset;
 
 (* Saves the state, and B.pos, in s. *)
@@ -448,14 +450,12 @@ BEGIN
 END RestoreStr;
 
 (* Whether s, UTF-8, holds the character r *)
-PROCEDURE In(VAR s: ARRAY OF CHAR; r: Utf8.Rune): BOOLEAN;
-  VAR p, n: LONGINT; c: Utf8.Rune;
+PROCEDURE In(VAR s: B.Buf; r: Utf8.Rune): BOOLEAN;
+  VAR p: LONGINT; c: Utf8.Rune;
 BEGIN
-  n := 0;
-  WHILE (n < LEN(s)) & (s[n] # 0X) DO INC(n) END;
   p := 0;
-  WHILE p < n DO
-    p := MI.RuneOf(s, p, n, c);
+  WHILE p < s.len DO
+    p := MI.RuneOf(s.t^, p, s.len, c);
     IF c = r THEN RETURN TRUE END
   END;
   RETURN FALSE
@@ -508,16 +508,112 @@ PROCEDURE^ Inline*(VAR l: A.Inlines): BOOLEAN;
 
 (* Sets s to the characters of ascii, a double quote, a tab, a new
    line if nl, and U+200B *)
-PROCEDURE Chars(VAR s: ARRAY OF CHAR; ascii: ARRAY OF CHAR; quote, nl: BOOLEAN);
-  VAR i: LONGINT;
+PROCEDURE Chars(VAR s: B.Buf; ascii: ARRAY OF CHAR; quote, nl: BOOLEAN);
 BEGIN
-  i := 0;
-  WHILE ascii[i] # 0X DO s[i] := ascii[i]; INC(i) END;
-  IF quote THEN s[i] := 22X; INC(i) END;
-  s[i] := 09X; INC(i);
-  IF nl THEN s[i] := 0AX; INC(i) END;
-  s[i] := 0E2X; s[i + 1] := 80X; s[i + 2] := 8BX; s[i + 3] := 0X
+  B.InitBuf(s);
+  B.PutString(s, ascii);
+  IF quote THEN B.PutChar(s, 22X) END;
+  B.PutChar(s, 09X);
+  IF nl THEN B.PutChar(s, 0AX) END;
+  B.PutUtf8(s, 200BH)
 END Chars;
+
+(* Haskell's read of a String, as safeRead reads it, from p to the
+   line's end e, into b: white space, a string literal and white
+   space. FALSE if it is not one. *)
+PROCEDURE ReadString(p, e: LONGINT; VAR b: B.Buf): BOOLEAN;
+  CONST Names = " NUL SOH STX ETX EOT ENQ ACK BEL BS HT LF VT FF CR SO SI DLE DC1 DC2 DC3 DC4 NAK SYN ETB CAN EM SUB ESC FS GS RS US SP ";
+  VAR ch: CHAR; c, base, d, i, j, n, best, bestLen: LONGINT; ok: BOOLEAN;
+
+  PROCEDURE White(ch: CHAR): BOOLEAN;
+  BEGIN
+    RETURN (ch = " ") OR (ch = 09X) OR (ch = 0BX) OR (ch = 0CX) OR (ch = 0DX)
+  END White;
+
+BEGIN
+  WHILE (p < e) & White(B.t[p]) DO INC(p) END;
+  IF (p >= e) OR (B.t[p] # 22X) THEN RETURN FALSE END;
+  INC(p); B.InitBuf(b);
+  LOOP
+    IF p >= e THEN RETURN FALSE END;
+    ch := B.t[p];
+    IF ch = 22X THEN INC(p); EXIT
+    ELSIF ch # "\" THEN j := MI.RuneEnd(p); B.Put(b, p, j); p := j
+    ELSE
+      INC(p);
+      IF p >= e THEN RETURN FALSE END;
+      ch := B.t[p]; INC(p); c := -1;
+      CASE ch OF
+        "a": c := 7 | "b": c := 8 | "f": c := 0CH | "n": c := 0AH
+      | "r": c := 0DH | "t": c := 9 | "v": c := 0BH
+      | "\", 22X, 27X: c := ORD(ch)
+      | "&": c := -2
+      | "^":
+          IF (p < e) & (B.t[p] >= "@") & (B.t[p] <= "_") THEN
+            c := ORD(B.t[p]) - 40H; INC(p)
+          ELSE RETURN FALSE
+          END
+      | "0" .. "9", "x", "o":
+          IF ch = "x" THEN base := 16 ELSIF ch = "o" THEN base := 8
+          ELSE base := 10; DEC(p)
+          END;
+          c := 0; n := 0;
+          LOOP
+            IF p >= e THEN EXIT END;
+            ch := B.t[p];
+            IF (ch >= "0") & (ch <= "9") THEN d := ORD(ch) - ORD("0")
+            ELSIF (ch >= "a") & (ch <= "f") THEN d := ORD(ch) - ORD("a") + 10
+            ELSIF (ch >= "A") & (ch <= "F") THEN d := ORD(ch) - ORD("A") + 10
+            ELSE d := 99
+            END;
+            IF d >= base THEN EXIT END;
+            c := c * base + d; INC(n); INC(p);
+            IF c > 10FFFFH THEN RETURN FALSE END
+          END;
+          IF n = 0 THEN RETURN FALSE END
+      | " ", 09X, 0BX, 0CX, 0DX: (* a gap *)
+          WHILE (p < e) & White(B.t[p]) DO INC(p) END;
+          IF (p >= e) OR (B.t[p] # "\") THEN RETURN FALSE END;
+          INC(p); c := -2
+      ELSE (* an ASCII name, the longest that matches *)
+        DEC(p); best := -1; bestLen := 0; i := 1; n := 0;
+        WHILE Names[i] # 0X DO
+          j := 0; ok := TRUE;
+          WHILE Names[i + j] # " " DO
+            IF (p + j >= e) OR (B.t[p + j] # Names[i + j]) THEN ok := FALSE END;
+            INC(j)
+          END;
+          IF ok & (j > bestLen) THEN best := n; bestLen := j END;
+          i := i + j + 1; INC(n)
+        END;
+        IF best < 0 THEN
+          IF (p + 3 <= e) & (B.t[p] = "D") & (B.t[p + 1] = "E") & (B.t[p + 2] = "L") THEN
+            c := 7FH; INC(p, 3)
+          ELSE RETURN FALSE
+          END
+        ELSIF best = 32 THEN c := 20H; INC(p, bestLen)
+        ELSE c := best; INC(p, bestLen)
+        END
+      END;
+      IF c >= 0 THEN B.PutUtf8(b, c) END
+    END
+  END;
+  WHILE (p < e) & White(B.t[p]) DO INC(p) END;
+  RETURN p = e
+END ReadString;
+
+(* #+pandoc-emphasis-pre: and #+pandoc-emphasis-post:, the value from
+   p to the line's end: the characters allowed before or after
+   emphasis, or pandoc's defaults if it is not a Haskell string *)
+PROCEDURE EmphChars*(post: BOOLEAN; p: LONGINT);
+  VAR b: B.Buf; e: LONGINT;
+BEGIN
+  e := B.LineEnd(p);
+  IF ~ReadString(p, e, b) THEN
+    IF post THEN b := defPost ELSE b := defPre END
+  END;
+  IF post THEN postChars := b ELSE preChars := b END
+END EmphChars;
 
 
 (* str: a word, to the next isStrEnd *)
@@ -856,7 +952,7 @@ END Inlines;
 BEGIN
   fancyLists := FALSE;
   (* -\t ('"{ and U+200B; -\t\n .,:!?;'")}[ and U+200B *)
-  Chars(preChars, "- ('{", TRUE, FALSE);
-  Chars(postChars, "- .,:!?;')}[", TRUE, TRUE);
+  Chars(defPre, "- ('{", TRUE, FALSE);
+  Chars(defPost, "- .,:!?;')}[", TRUE, TRUE);
   Reset
 END PdOrgInline.

@@ -4217,3 +4217,11 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   (26.5) and a property drawer before the first headline, which
   pandoc reads as metadata (28.1). The output of every probe is the
   same under `-O2` and `-OC`. Not yet run on the BSDs.
+- 2026-11-26, a correction to 27.1: `#+pandoc-emphasis-pre`/`-post`
+  were not read then (the case test passed because an empty value
+  means the defaults). They are now: `PdOrgInline.EmphChars` reads
+  the value as Haskell reads a `String`, escapes and gaps included,
+  and a value that does not read gives the defaults. Case test
+  `org-inline-emphasis-set` (JSON from pandoc 3.14); `make test`
+  passed under `-O2` and `-OC`, 406 case tests. Uncommitted; Phase
+  27.2's links are not yet begun in code.

@@ -1,0 +1,17 @@
+#+pandoc-emphasis-pre: "x"
+x*a* y*b*
+
+#+pandoc-emphasis-pre: "\120\x79\o172"
+x*a* y*b* z*c* *d*
+
+#+pandoc-emphasis-pre: "a\&b\SOH\^A\SP\DEL"
+a*a* b*b* *c*
+
+#+pandoc-emphasis-pre: "ab" x
+a*a* *c*
+
+#+pandoc-emphasis-post: "é"
+*a*é *b*.
+
+#+pandoc-emphasis-post:
+*a*é *b*.

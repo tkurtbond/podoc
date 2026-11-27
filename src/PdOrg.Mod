@@ -144,7 +144,11 @@ PROCEDURE KeywordLine(VAR k: Key; p: LONGINT): BOOLEAN;
 BEGIN
   IF ~InList(k, Keywords) THEN RETURN FALSE END;
   IF k = "options" THEN B.pos := M.Options(p)
-  ELSE B.pos := NextLine(p)
+  ELSE
+    IF k = "pandoc-emphasis-pre" THEN I.EmphChars(FALSE, p)
+    ELSIF k = "pandoc-emphasis-post" THEN I.EmphChars(TRUE, p)
+    END;
+    B.pos := NextLine(p)
   END;
   I.Newline;
   RETURN TRUE
