@@ -1,0 +1,1 @@
+In sub/deeper2.org, which pandoc looks for in ./sub.

@@ -2034,6 +2034,18 @@ BEGIN
   A.mergeWalk := old
 END Resolve;
 
+(* Resolves the blocks b, read from an included file, against the
+   notes, anchors and #+LINK formats known now, as pandoc's runF does
+   at an include; returns them *)
+PROCEDURE ResolveBlocks*(b: A.Block): A.Block;
+  VAR w: Resolver; old: BOOLEAN;
+BEGIN
+  old := A.mergeWalk; A.mergeWalk := TRUE;
+  NEW(w); w.notes := TRUE; b := A.WalkBlocks(w, b);
+  A.mergeWalk := old;
+  RETURN b
+END ResolveBlocks;
+
 (* Math and LaTeX (Phase 27.4) *)
 
 (* Whether ch is one of Org's characters not allowed at the inner

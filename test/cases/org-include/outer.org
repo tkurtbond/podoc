@@ -1,0 +1,11 @@
+#+TITLE: Ignored
+:PROPERTIES:
+:subtitle: From the drawer
+:END:
+*bold* at the start.[fn:2] A ref[fn:1].
+
+[fn:2] Defined in the included file.
+* Included head
+Its text, with [[*Included head]].
+** Its child
+#+INCLUDE: "sub/inner.org"

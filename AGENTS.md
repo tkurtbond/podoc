@@ -85,7 +85,7 @@ Phases 26 to 28; 26.1 (blocks of text), 26.2 (lists), 26.3 (blocks),
 27.1 (text, emphasis and verbatim), 27.2 (links, images and targets),
 27.3 (notes, citations, macros, snippets and inline source) and 27.4
 (math, Org entities and LaTeX commands): `PdOrg`, `PdOrgInline` and
-`PdOrgMeta`. Phase 28: 28.1 (metadata) is done; 28.2 (`#+INCLUDE`),
+`PdOrgMeta`. Phase 28: 28.1 (metadata) and 28.2 (`#+INCLUDE`) are done;
 28.3 (reporting) and 28.4 (the corpus) are next. Read `docs/research/org-mode-reader.md` first.
 See PLAN.md's State.
 

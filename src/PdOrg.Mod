@@ -20,9 +20,10 @@ MODULE PdOrg;
    the metadata keywords (Meta.hs's keywordHandlers: #+TITLE,
    #+AUTHOR, #+LATEX_HEADER and the rest), joined as collectLines and
    collectAsList join them, and author:, email: and creator:
-   (metaExport). *)
+   (metaExport). Phase 28.2: #+INCLUDE (include and
+   insertIncludedFile). *)
 
-IMPORT Ropes, Utf8, Unicode, PdIO, A := PdAst, B := PdMdBase, MI := PdMdInline,
+IMPORT Ropes, Utf8, Unicode, PdIO, PdSource, A := PdAst, B := PdMdBase, MI := PdMdInline,
   I := PdOrgInline, M := PdOrgMeta, SH := PdShared, G := PdGridTable;
 
 CONST
@@ -96,6 +97,20 @@ TYPE
   END;
   IdTable = POINTER TO ARRAY IdTableSize OF IdSlot;
 
+  (* an included file being read *)
+  Inc = POINTER TO RECORD
+    name: POINTER TO ARRAY OF CHAR; (* as the #+INCLUDE: line gives it *)
+    start: LONGINT; (* the line its text starts at *)
+    depth: INTEGER; (* B.depth while its text is read *)
+    next: Inc (* the file that includes it *)
+  END;
+
+  (* the walk of blockFilter: the highest level, then the shift *)
+  LevelWalker = POINTER TO RECORD (A.WalkerDesc)
+    query: BOOLEAN; (* finding min, not shifting *)
+    min, shift: LONGINT
+  END;
+
   Ints = POINTER TO ARRAY OF INTEGER;
   Reals = POINTER TO ARRAY OF LONGREAL;
 
@@ -117,6 +132,8 @@ VAR
     since a parseFromString began or ended, as at an item's start or
     after a list *)
   meta: A.MetaMapV; (* the document's *)
+  incs: Inc; (* the files being included, the innermost first *)
+  main: B.Text; mainLen: LONGINT; (* the document's text *)
 
 (* Lines *)
 
@@ -441,6 +458,7 @@ BEGIN
 END ListLine;
 
 PROCEDURE ^ Block(VAR l: A.Blocks): BOOLEAN;
+PROCEDURE ^ Include(VAR l: A.Blocks): BOOLEAN;
 
 (* Org blocks: block attributes, #+begin_ blocks, figures, dynamic
    blocks, drawers, LaTeX environments and footnote definitions *)
@@ -1854,7 +1872,7 @@ BEGIN
   I.Save(s);
   IF Table(l) OR R() & DynamicBlock(l) OR R() & OrgBlock(l)
       OR R() & Figure(l) OR R() & Example(l) OR R() & Drawer(l)
-      OR R() & SpecialLine(l) THEN
+      OR R() & Include(l) OR R() & SpecialLine(l) THEN
     fresh := FALSE; RETURN TRUE
   END;
   I.Restore(s);
@@ -2558,6 +2576,263 @@ BEGIN
   END
 END TreeBlocks;
 
+(* Includes *)
+
+(* Appends s to m, as far as m holds it *)
+PROCEDURE Append(VAR m: ARRAY OF CHAR; s: ARRAY OF CHAR);
+  VAR i, j: LONGINT;
+BEGIN
+  i := 0; WHILE m[i] # 0X DO INC(i) END;
+  j := 0;
+  WHILE (j < LEN(s)) & (s[j] # 0X) & (i < LEN(m) - 1) DO
+    m[i] := s[j]; INC(i); INC(j)
+  END;
+  m[i] := 0X
+END Append;
+
+(* Appends the number n to m *)
+PROCEDURE CatNum(VAR m: ARRAY OF CHAR; n: LONGINT);
+  VAR d: ARRAY 24 OF CHAR; i, k: INTEGER;
+BEGIN
+  IF n < 0 THEN Append(m, "-"); n := -n END;
+  i := 0;
+  REPEAT d[i] := CHR(ORD("0") + n MOD 10); n := n DIV 10; INC(i) UNTIL n = 0;
+  k := 0; WHILE m[k] # 0X DO INC(k) END;
+  WHILE (i > 0) & (k < LEN(m) - 1) DO DEC(i); m[k] := d[i]; INC(k) END;
+  m[k] := 0X
+END CatNum;
+
+(* The name of the source and the line of the place p in the current
+   text, as pandoc's positions give them: in a text parseFromString
+   reads, the source's name with _chunk for each such text and the
+   line counted from that text's start *)
+PROCEDURE SourcePos(p: LONGINT; VAR name: ARRAY OF CHAR; VAR line: LONGINT);
+  VAR i, k: LONGINT;
+BEGIN
+  name[0] := 0X; line := 1;
+  IF incs # NIL THEN k := B.depth - incs.depth ELSE k := B.depth END;
+  IF incs # NIL THEN
+    COPY(incs.name^, name);
+    IF k = 0 THEN line := incs.start END
+  ELSIF k = 0 THEN
+    IF p >= mainLen THEN p := mainLen - 1 END;
+    PdSource.Locate(main^, p, name, line);
+    RETURN
+  ELSE PdSource.Locate(main^, B.outerPos, name, i)
+  END;
+  IF p > B.len THEN p := B.len END;
+  FOR i := 0 TO p - 1 DO IF B.t[i] = 0AX THEN INC(line) END END;
+  WHILE k > 0 DO Append(name, "_chunk"); DEC(k) END
+END SourcePos;
+
+(* safeRead of an Int from r[from .. to-1]: spaces, a minus sign or
+   none, digits and spaces *)
+PROCEDURE ReadInt(r: A.Rope; from, to: LONGINT; VAR n: LONGINT): BOOLEAN;
+  VAR neg: BOOLEAN; d: LONGINT; ch: CHAR;
+BEGIN
+  WHILE (from < to) & B.IsSpace(Ropes.Fetch(r, from)) DO INC(from) END;
+  WHILE (to > from) & B.IsSpace(Ropes.Fetch(r, to - 1)) DO DEC(to) END;
+  neg := (from < to) & (Ropes.Fetch(r, from) = "-");
+  IF neg THEN INC(from) END;
+  IF (from >= to) OR (to - from > 9) THEN RETURN FALSE END;
+  n := 0;
+  WHILE from < to DO
+    ch := Ropes.Fetch(r, from);
+    IF (ch < "0") OR (ch > "9") THEN RETURN FALSE END;
+    d := ORD(ch) - ORD("0"); n := n * 10 + d; INC(from)
+  END;
+  IF neg THEN n := -n END;
+  RETURN TRUE
+END ReadInt;
+
+(* The bounds of :lines "a-b": start a, if a is a number, and end b-1,
+   if b is one; the quotes are the value's first and last characters,
+   whatever they are *)
+PROCEDURE LineBounds(v: A.Rope; VAR hasStart, hasEnd: BOOLEAN; VAR start, end: LONGINT);
+  VAR n, i, j: LONGINT;
+BEGIN
+  hasStart := FALSE; hasEnd := FALSE;
+  IF v = NIL THEN RETURN END;
+  n := Ropes.Length(v) - 1; (* boundStr is v[1 .. n-1] *)
+  i := 1; WHILE (i < n) & (Ropes.Fetch(v, i) # "-") DO INC(i) END;
+  hasStart := ReadInt(v, 1, i, start);
+  j := n; WHILE (j > 1) & (Ropes.Fetch(v, j - 1) # "-") DO DEC(j) END;
+  hasEnd := ReadInt(v, j, n, end);
+  IF hasEnd THEN DEC(end) END
+END LineBounds;
+
+(* exciseLines: the lines start to end of c's, each with a new line *)
+PROCEDURE Excise(VAR c: B.Buf; hasStart, hasEnd: BOOLEAN; start, end: LONGINT);
+  VAR o: B.Buf; nlines, i, j, k, s, e, s0: LONGINT;
+BEGIN
+  nlines := 0; i := 0;
+  WHILE i < c.len DO
+    WHILE (i < c.len) & (c.t[i] # 0AX) DO INC(i) END;
+    INC(nlines); INC(i)
+  END;
+  IF ~hasStart THEN s := 1 ELSIF start >= 0 THEN s := start ELSE s := nlines + start END;
+  IF ~hasEnd THEN e := nlines ELSIF end >= 0 THEN e := end ELSE e := nlines + end END;
+  (* take (e - (s-1)) $ drop (s-1) *)
+  IF s < 1 THEN s0 := 1 ELSE s0 := s END;
+  B.InitBuf(o); k := 1; i := 0;
+  WHILE i < c.len DO
+    j := i; WHILE (j < c.len) & (c.t[j] # 0AX) DO INC(j) END;
+    IF (k >= s) & (k - s0 < e - (s - 1)) THEN
+      WHILE i < j DO B.PutChar(o, c.t[i]); INC(i) END;
+      B.PutChar(o, 0AX)
+    END;
+    INC(k); i := j + 1
+  END;
+  c := o
+END Excise;
+
+(* The end of the alphanumeric word at p, or p *)
+PROCEDURE AlnumWord(p: LONGINT): LONGINT;
+  VAR q, r: LONGINT; ch: CHAR; c: Utf8.Rune;
+BEGIN
+  q := p;
+  LOOP
+    IF q >= B.len THEN EXIT END;
+    ch := B.t[q];
+    IF ch < 80X THEN
+      IF B.IsAlnum(ch) THEN INC(q) ELSE EXIT END
+    ELSE
+      r := q;
+      IF Utf8.Decode(B.t^, r, c) & (r > q) & IsAlnumRune(c) THEN q := r
+      ELSE EXIT
+      END
+    END
+  END;
+  RETURN q
+END AlnumWord;
+
+PROCEDURE (w: LevelWalker) Block*(b: A.Block): A.Block;
+  VAR h: A.HeaderBlk; n: LONGINT;
+BEGIN
+  IF b.kind = A.Header THEN
+    h := b(A.HeaderBlk);
+    IF w.query THEN
+      IF (w.min < 0) OR (h.level < w.min) THEN w.min := h.level END
+    ELSE
+      n := h.level - w.shift;
+      IF n <= 0 THEN RETURN A.NewInlinesBlock(A.Para, h.inlines) END;
+      IF n > MAX(INTEGER) THEN n := MAX(INTEGER) END;
+      h.level := SHORT(n)
+    END
+  END;
+  RETURN b
+END Block;
+
+(* blockFilter: the headers of b shifted so that the highest is at
+   level lvl; one shifted to level 0 or less becomes a Para *)
+PROCEDURE MinLevel(b: A.Block; lvl: LONGINT): A.Block;
+  VAR w: LevelWalker;
+BEGIN
+  NEW(w); w.query := TRUE; w.min := -1;
+  b := A.WalkBlocks(w, b);
+  IF w.min < 0 THEN w.min := 0 END;
+  w.query := FALSE; w.shift := w.min - lvl;
+  RETURN A.WalkBlocks(w, b)
+END MinLevel;
+
+(* include: #+INCLUDE: "file" args :key value..., the file's text as
+   the args ask, its blocks by default (insertIncludedFile) *)
+PROCEDURE Include(VAR l: A.Blocks): BOOLEAN;
+  VAR q, fs, fe, e, i, j, n, len, line, start, end, nargs, lvl: LONGINT;
+    as, ae: ARRAY 2 OF LONGINT; f, dir, path, nm: ARRAY 1024 OF CHAR;
+    m: ARRAY 2048 OF CHAR; kv: A.Attr; b, c: B.Buf; fr: B.Frame;
+    found, hasStart, hasEnd, ok, savedFresh: BOOLEAN; t: PdIO.Text;
+    in, inc: Inc; a: A.Attr; v: A.Rope; root: Headline; il: A.Blocks;
+    blks: A.Block;
+BEGIN
+  q := I.MetaLineStart(B.pos);
+  IF (q < 0) OR ~LookingCI(q, "include:") THEN RETURN FALSE END;
+  q := B.SkipSpaces(q + 8);
+  IF B.C(q) # 22X THEN RETURN FALSE END;
+  fs := q + 1; fe := fs;
+  WHILE (fe < B.len) & (B.C(fe) # 22X) DO
+    IF (B.C(fe) = 0AX) OR (B.C(fe) = 0DX) OR (B.C(fe) = 09X) THEN RETURN FALSE END;
+    INC(fe)
+  END;
+  IF (fe >= B.len) OR (fe - fs >= LEN(f)) THEN RETURN FALSE END;
+  q := fe + 1; nargs := 0;
+  LOOP
+    i := B.SkipSpaces(q); j := AlnumWord(i);
+    IF j = i THEN EXIT END;
+    IF nargs < 2 THEN as[nargs] := i; ae[nargs] := j END;
+    INC(nargs); q := j
+  END;
+  (* keyValues, in the rest of the line *)
+  e := B.LineEnd(q);
+  B.InitBuf(b);
+  FOR i := q TO e - 1 DO B.PutChar(b, B.t[i]) END;
+  B.PutChar(b, 0AX);
+  kv := A.NewAttr(NIL);
+  B.Enter(fr, b.t, b.len); ok := KeyValues(kv); B.Leave(fr);
+  IF ~ok THEN RETURN FALSE END;
+  FOR i := fs TO fe - 1 DO f[i - fs] := B.t[i] END;
+  f[fe - fs] := 0X;
+  B.pos := NextLine(e); I.Newline;
+  SourcePos(B.pos, nm, line);
+  in := incs;
+  WHILE in # NIL DO
+    IF in.name^ = f THEN
+      m := 'Include file loop at "'; Append(m, nm); Append(m, '" (line ');
+      CatNum(m, line); Append(m, ", column 1)");
+      PdIO.Fail("", m, PdIO.ParseError)
+    END;
+    in := in.next
+  END;
+  (* takeDirectory of the source *)
+  COPY(nm, dir); i := -1; j := 0;
+  WHILE dir[j] # 0X DO IF dir[j] = "/" THEN i := j END; INC(j) END;
+  IF i < 0 THEN dir := "." ELSIF i = 0 THEN dir := "/" ELSE dir[i] := 0X END;
+  IF f[0] = "/" THEN COPY(f, path)
+  ELSE COPY(dir, path); IF dir # "/" THEN Append(path, "/") END; Append(path, f)
+  END;
+  LineBounds(A.GetKeyVal(kv, "lines", found), hasStart, hasEnd, start, end);
+  B.InitBuf(c);
+  IF (f # "") & PdIO.Exists(path) THEN
+    PdIO.ReadFile(path, t, len);
+    i := 0;
+    IF (len >= 3) & (t[0] = 0EFX) & (t[1] = 0BBX) & (t[2] = 0BFX) THEN i := 3 END;
+    WHILE i < len DO IF t[i] # 0DX THEN B.PutChar(c, t[i]) END; INC(i) END;
+    IF hasStart OR hasEnd THEN Excise(c, hasStart, hasEnd, start, end) END
+  ELSE
+    m := "Could not load include file "; Append(m, f); Append(m, " at ");
+    IF (nm # "") & (nm # "-") THEN Append(m, nm); Append(m, " ") END;
+    Append(m, "line "); CatNum(m, line); Append(m, " column 1");
+    PdIO.Warn(m)
+  END;
+  IF (nargs >= 1) & Is(as[0], ae[0], "example") THEN
+    A.AddBlock(l, A.NewCodeBlock(A.NewAttr(NIL), B.BufRope(c)))
+  ELSIF (nargs = 1) & Is(as[0], ae[0], "export") THEN
+  ELSIF (nargs = 2) & Is(as[0], ae[0], "export") THEN
+    A.AddBlock(l, A.NewRawBlock(B.Rope(as[1], ae[1]), B.BufRope(c)))
+  ELSIF (nargs >= 1) & Is(as[0], ae[0], "src") THEN
+    a := A.NewAttr(NIL);
+    IF nargs = 2 THEN A.AddClass(a, B.Rope(as[1], ae[1])) END;
+    A.AddBlock(l, A.NewCodeBlock(a, B.BufRope(c)))
+  ELSE (* blockList, with blockFilter *)
+    v := A.GetKeyVal(kv, "minlevel", found);
+    IF v = NIL THEN found := FALSE ELSE found := ReadInt(v, 0, Ropes.Length(v), lvl) END;
+    n := 0; WHILE f[n] # 0X DO INC(n) END;
+    NEW(inc); NEW(inc.name, n + 1); COPY(f, inc.name^);
+    IF hasStart THEN inc.start := start ELSE inc.start := 1 END;
+    inc.next := incs;
+    B.Enter(fr, c.t, c.len); inc.depth := B.depth; incs := inc;
+    savedFresh := fresh; fresh := FALSE;
+    root := DocumentTree();
+    A.InitBlocks(il); TreeBlocks(root, il);
+    fresh := savedFresh;
+    B.Leave(fr); incs := inc.next;
+    blks := I.ResolveBlocks(il.first);
+    IF found THEN blks := MinLevel(blks, lvl) END;
+    A.AddBlock(l, blks)
+  END;
+  RETURN TRUE
+END Include;
+
 (* Reads the Org text text[0 .. n-1], its tabs already expanded at
    tabStop. *)
 PROCEDURE Read*(text: PdIO.Text; n: LONGINT; tabStop: INTEGER): A.Doc;
@@ -2571,6 +2846,7 @@ BEGIN
   FOR i := 0 TO n - 1 DO t[i] := text[i] END;
   FOR i := n TO n + 1 - k DO t[i] := 0AX END;
   B.Start(t, n + 2 - k, tabStop);
+  main := B.t; mainLen := n + 2 - k; incs := NIL;
   M.Reset(smart, smartQuotes, specialStrings);
   I.fancyLists := fancyLists; I.citations := citations; I.Reset;
   NEW(idTable);
@@ -2591,7 +2867,7 @@ BEGIN
   IF ~M.withEmail THEN A.DeleteMeta(meta, "email") END;
   I.Resolve(d);
   NEW(sep); A.WalkMetaValue(sep, d.meta);
-  idTable := NIL; meta := NIL; markers := NIL;
+  idTable := NIL; meta := NIL; markers := NIL; main := NIL;
   selectTags := NIL; excludeTags := NIL;
   RETURN d
 END Read;

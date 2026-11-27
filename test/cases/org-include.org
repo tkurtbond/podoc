@@ -1,0 +1,12 @@
+#+OPTIONS: H:3
+Before[fn:1]: a note defined after the include stays text in it.
+#+INCLUDE: "org-include/outer.org" :minlevel 2
+After the include.
+
+- An item
+  #+INCLUDE: "org-include/sub/inner.org"
+- Another
+#+INCLUDE: "org-include/outer.org" :minlevel x
+#+INCLUDE: "org-include/outer.org" bogus words
+
+[fn:1] The parent's note.

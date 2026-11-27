@@ -4412,3 +4412,40 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   chose to keep plain-text math (decision 61), MathML is in "Later".
   `make test` passed under `-O2` and `-OC`: 443 case tests, 23 round
   trips, 10 image tests, 20 mermaid tests.
+- 2026-11-26, Phase 28.2: Org `#+INCLUDE` in `PdOrg.Include`, as
+  pandoc 3.14's `include` and `insertIncludedFile` do. The line is
+  `#+INCLUDE:`, a quoted name (no tab or new line), alphanumeric
+  words and `:key value` pairs; a line that is not all of these
+  is a `RawBlock org`. `example` (with anything after it) gives a
+  CodeBlock, `export` nothing, `export FORMAT` a RawBlock, `src` a
+  CodeBlock, classed only with exactly one word after it; anything
+  else (`EXAMPLE`, unknown words) reads the file's blocks with the
+  headline tree, in the includer's state (identifiers, macros, notes,
+  tags, metadata from the root's property drawer), its root dropped,
+  with no new lines added at its end, so that a last paragraph is
+  Plain. They are resolved when included, as `runF` does: a note
+  defined after the include in the including file stays `[fn:1]`.
+  `:minlevel N` shifts the headers after `H:` has made list items of
+  deep headlines; those at level 0 or less become Para; N that is not
+  a number shifts nothing. `:lines "a-b"` drops the value's first and
+  last characters and reads lines a to b-1 (`"3"` gives nothing,
+  `"-2"` the first line, `"3-"` the third to the end, `"1-2" junk`
+  every line). The BOM and CRs are removed, tabs kept. The name is
+  looked for in the directory of the including source's name, which
+  for an included file is the name as its line gave it (so
+  `sub/a.org`, included as `sub/a.org`, finds `sub/b.org`, but
+  included from there as `a.org`, looks for `./b.org`), as pandoc
+  does. A missing file warns `Could not load include file F at NAME
+  line N column 1`, the place after the line, and reads nothing; in
+  a list item or other text read with `parseFromString`, NAME gets
+  `_chunk` and N counts from that text's start, as in pandoc. A file
+  already being included ends podoc with `Include file loop at
+  "NAME" (line N, column 1)`, status 64. Four case tests,
+  `org-include`, `-args`, `-missing` and `-loop`, with their files in
+  `test/cases/org-include`; their JSON is pandoc 3.14's and the
+  messages pandoc's after `podoc: `. 24 probes (`:lines`, export,
+  `src`, notes, links, `:minlevel` with `H:`, emphasis at the start
+  of an included file and after it, standard input, several inputs)
+  give the same JSON and status as pandoc under both models. `make
+  test` passed under `-O2` and `-OC`: 447 case tests, 23 round trips,
+  10 image tests, 20 mermaid tests. Not yet run on the BSDs.
