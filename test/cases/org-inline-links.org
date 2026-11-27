@@ -1,0 +1,32 @@
+[[http://zeitlens.com/][pseudo-random /nonsense/]]
+
+[[http://zeitlens.com/]]
+
+[[#rabbit]]
+
+[[/url][hi]]
+
+[[../file.txt][moin]]
+
+[[][New Link]]
+
+Posts on http://zeitlens.com/ can be funny at times.
+
+Look at <http://moltkeplatz.de> for fnords.
+
+[[file:///etc/passwd][passwd]]
+
+[[file:target][title]]
+
+
+A [[https://a][b
+c]] d
+
+[[file:a.org::*heading][x]] [[file:a.org::123]] [[a.org::#cid]]
+
+[[*Heading]] [[*Heading][go]] [[#cid][c]]
+
+[[mailto:a@b.c]] mailto:a@b.c [[doi:10.1/x][d]] https://x.y/a_b(c)d.
+
+[[https://a.b/c d][e]] [[a b]] [[ a ]]
+

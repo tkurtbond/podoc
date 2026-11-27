@@ -12,16 +12,32 @@ MODULE PdOrgInline;
    strings under -: and smart quotes under ':. The text read is
    PdMdBase's.
 
+   Phase 27.2 reads links: [[target][description]], [[target]], plain
+   and angle links, images and <<anchor>> targets. As pandoc's F monad
+   resolves them against the state at the end, a link is read as a
+   placeholder Span (PendAttr) and Resolve replaces it once the
+   document's anchors and #+LINK formats are known.
+
    pandoc's parser state is kept in st: the positions of the last pre
    character, forbidden character and Str, the emphasis characters
    open and the new lines allowed. PdOrg's blocks set it as pandoc's
    do, through Newline, SetPre, Enter and Leave (Org's
    parseFromString), and Save and Restore where an alternative fails. *)
 
-IMPORT Utf8, A := PdAst, B := PdMdBase, MI := PdMdInline, M := PdOrgMeta;
+IMPORT Utf8, Unicode, Ropes, A := PdAst, B := PdMdBase, MI := PdMdInline,
+  M := PdOrgMeta;
 
 CONST
   NoQuote = 0; InSingle = 1; InDouble = 2; (* the quote context *)
+
+  (* How a link is resolved at the end of the document *)
+  Explicit = 0; (* [[target][description]]: formatted, then
+    linkToInlinesF *)
+  ExplicitImage = 1; (* [[target][image]]: formatted only *)
+  Internal = 2; (* [[target]], not a URL: internalLink *)
+
+  (* #+LINK formats *)
+  FmtPlain = 0; FmtUrl = 1; FmtAppend = 2;
 
 TYPE
   (* A position: Nothing if id < 0 *)
@@ -43,8 +59,32 @@ TYPE
       last Str's *)
     stack: Stack;
     count: LONGINT; (* orgStateEmphasisNewlines; -1 for Nothing *)
-    quote: INTEGER
+    quote: INTEGER;
+    anchors: A.StrList (* orgStateAnchorIds, the newest first; never
+      changed, only added to at its head *)
   END;
+
+  (* A link resolved at the end, when the document's anchors and link
+     formats are known, as pandoc's F monad resolves it: the attributes
+     of a Span that stands in for it until then, shared by any copy *)
+  PendAttr = POINTER TO PendAttrDesc;
+  PendAttrDesc = RECORD (A.AttrDesc)
+    how: INTEGER; (* Explicit, ExplicitImage, Internal *)
+    target: B.Buf (* the target as written *)
+  END;
+
+  (* A #+LINK abbreviation, orgStateLinkFormatters: the link type
+     name; for FmtPlain and FmtUrl the text before and after %s or %h,
+     for FmtAppend the text the rest of the link is appended to *)
+  Format = POINTER TO FormatDesc;
+  FormatDesc = RECORD
+    name, before, after: B.Buf;
+    kind: INTEGER;
+    next: Format
+  END;
+
+  Resolver = POINTER TO ResolverDesc;
+  ResolverDesc = RECORD (A.WalkerDesc) END;
 
 VAR
   fancyLists*: BOOLEAN; (* the extension fancy_lists *)
@@ -53,6 +93,7 @@ VAR
   preChars, postChars: B.Buf; (* UTF-8: the characters allowed
     before and after emphasis *)
   defPre, defPost: B.Buf; (* pandoc's defaults for them *)
+  formats: Format; (* the newest first *)
 
 (* Block starts. Each takes the start of a line, p, and returns where
    what it matched ends, or -1. *)
@@ -380,8 +421,8 @@ END Set;
 PROCEDURE Reset*;
 BEGIN
   st.pre.id := -1; st.forb.id := -1; st.str.id := -1; st.stack := NIL;
-  st.count := -1; st.quote := NoQuote; here.id := -1;
-  preChars := defPre; postChars := defPost
+  st.count := -1; st.quote := NoQuote; st.anchors := NIL; here.id := -1;
+  preChars := defPre; postChars := defPost; formats := NIL
 END Reset;
 
 (* Saves the state, and B.pos, in s. *)
@@ -910,6 +951,404 @@ BEGIN
   RETURN TRUE
 END Special;
 
+(* Links *)
+
+(* Whether t[p .. to-1] is absolute as a Windows path is: two
+   separators, or a letter, a colon and a separator *)
+PROCEDURE WinAbs(p, to: LONGINT): BOOLEAN;
+
+  PROCEDURE Sep(p: LONGINT): BOOLEAN;
+  BEGIN
+    RETURN (p < to) & ((B.t[p] = "/") OR (B.t[p] = "\"))
+  END Sep;
+
+BEGIN
+  RETURN Sep(p) & Sep(p + 1)
+    OR (p + 2 < to) & (CAP(B.t[p]) >= "A") & (CAP(B.t[p]) <= "Z")
+       & (B.t[p + 1] = ":") & Sep(p + 2)
+END WinAbs;
+
+(* toFileSchema: t[p .. to-1] as a file: URL, or NIL if it is not
+   absolute *)
+PROCEDURE Schema(p, to: LONGINT): A.Rope;
+BEGIN
+  IF WinAbs(p, to) THEN RETURN Ropes.Cat(A.S("file:///"), B.Rope(p, to))
+  ELSIF (p < to) & (B.t[p] = "/") THEN RETURN Ropes.Cat(A.S("file://"), B.Rope(p, to))
+  END;
+  RETURN NIL
+END Schema;
+
+(* cleanLinkText: t[from .. to-1] of the current text as a link; ok
+   FALSE if it is not one *)
+PROCEDURE CleanLink*(from, to: LONGINT; VAR ok: BOOLEAN): A.Rope;
+  VAR p: LONGINT; r: A.Rope;
+BEGIN
+  ok := TRUE;
+  r := Schema(from, to);
+  IF r # NIL THEN RETURN r END;
+  IF B.Looking(from, "./") OR B.Looking(from, "../") THEN RETURN B.Rope(from, to)
+  ELSIF B.Looking(from, "file:") THEN
+    IF B.Looking(from + 5, "//") THEN RETURN B.Rope(from, to) END;
+    r := Schema(from + 5, to);
+    IF r # NIL THEN RETURN r END;
+    RETURN B.Rope(from + 5, to)
+  END;
+  p := from; (* isUrl *)
+  WHILE (p < to) & (B.t[p] # ":") DO
+    IF ~MI.AlnumAt(p) & (B.t[p] # ".") & (B.t[p] # "-") THEN
+      ok := FALSE; RETURN NIL
+    END;
+    p := MI.RuneEnd(p)
+  END;
+  ok := p < to;
+  RETURN B.Rope(from, to)
+END CleanLink;
+
+(* isImageFilename: whether the last part of the path t[from .. to-1]
+   of the current text has the extension of an image *)
+PROCEDURE IsImage*(from, to: LONGINT): BOOLEAN;
+  CONST Exts = " jpeg jpg png gif svg webp jxl avif pdf ";
+  VAR p, i, j, n: LONGINT; e: ARRAY 8 OF CHAR; ext: ARRAY 64 OF CHAR;
+BEGIN
+  p := to;
+  WHILE (p > from) & (B.t[p - 1] # "/") & (B.t[p - 1] # ".") DO DEC(p) END;
+  IF (p = from) OR (B.t[p - 1] # ".") OR (to - p > 6) OR (to = p) THEN
+    RETURN FALSE
+  END;
+  n := to - p;
+  FOR i := 0 TO n - 1 DO e[i] := B.Lower(B.t[p + i]) END;
+  ext := Exts; i := 0;
+  WHILE ext[i] # 0X DO
+    IF ext[i] = " " THEN
+      j := 0;
+      WHILE (j < n) & (ext[i + 1 + j] = e[j]) DO INC(j) END;
+      IF (j = n) & (ext[i + 1 + j] = " ") THEN RETURN TRUE END
+    END;
+    INC(i)
+  END;
+  RETURN FALSE
+END IsImage;
+
+(* Enters b's text, with 0X after it *)
+PROCEDURE EnterBuf(VAR f: B.Frame; VAR b: B.Buf);
+BEGIN
+  B.PutChar(b, 0X); DEC(b.len);
+  B.Enter(f, b.t, b.len)
+END EnterBuf;
+
+(* linkTarget at p: [, one or more characters but new lines and
+   brackets, and ]; where it ends, or -1 *)
+PROCEDURE LinkTarget(p: LONGINT): LONGINT;
+  VAR q: LONGINT; ch: CHAR;
+BEGIN
+  IF B.C(p) # "[" THEN RETURN -1 END;
+  q := p + 1;
+  LOOP
+    ch := B.C(q);
+    IF (q >= B.len) OR (ch = 0AX) OR (ch = 0DX) OR (ch = "[") THEN RETURN -1
+    ELSIF ch = "]" THEN EXIT
+    END;
+    INC(q)
+  END;
+  IF q = p + 1 THEN RETURN -1 END;
+  RETURN q + 1
+END LinkTarget;
+
+(* many1TillChar (noneOf "\n\r") (char ']') at p: where the ] is, or
+   -1 *)
+PROCEDURE OneLine(p: LONGINT): LONGINT;
+  VAR ch: CHAR;
+BEGIN
+  ch := B.C(p);
+  IF (p >= B.len) OR (ch = 0AX) OR (ch = 0DX) OR (ch = "]") THEN RETURN -1 END;
+  INC(p);
+  LOOP
+    ch := B.C(p);
+    IF (p >= B.len) OR (ch = 0AX) OR (ch = 0DX) THEN RETURN -1
+    ELSIF ch = "]" THEN RETURN p
+    END;
+    INC(p)
+  END
+END OneLine;
+
+(* A Span that stands for a link until Resolve *)
+PROCEDURE Pending(how: INTEGER; VAR target: B.Buf; content: A.Inline): A.Inline;
+  VAR a: PendAttr;
+BEGIN
+  NEW(a); a.id := NIL; a.classes := NIL; a.attrs := NIL;
+  a.how := how; a.target := target;
+  RETURN A.NewSpan(a, content)
+END Pending;
+
+(* explicitOrImageLink: [[target][description]] or [[][description]],
+   the description on one line or two *)
+PROCEDURE ExplicitLink(VAR l: A.Inlines): BOOLEAN;
+  VAR p, q, r, e: LONGINT; s: State; target, d: B.Buf; f: B.Frame;
+    cl: A.Inlines; src: A.Rope; ok, image: BOOLEAN;
+BEGIN
+  p := B.pos;
+  IF B.C(p) # "[" THEN RETURN FALSE END;
+  B.InitBuf(target);
+  q := LinkTarget(p + 1);
+  IF q >= 0 THEN B.Put(target, p + 2, q - 1)
+  ELSIF B.Looking(p + 1, "[]") THEN q := p + 3
+  ELSE RETURN FALSE
+  END;
+  IF B.C(q) # "[" THEN RETURN FALSE END;
+  INC(q);
+  Save(s);
+  B.InitBuf(d);
+  r := OneLine(q);
+  IF r >= 0 THEN B.Put(d, q, r)
+  ELSE (* spanningTwoLines *)
+    e := B.LineEnd(q);
+    IF B.C(e) # 0AX THEN RETURN FALSE END;
+    r := OneLine(e + 1);
+    IF r < 0 THEN RETURN FALSE END;
+    NewlineAt(e + 1);
+    B.Put(d, q, e); B.PutChar(d, " "); B.Put(d, e + 1, r)
+  END;
+  IF B.C(r + 1) # "]" THEN Restore(s); RETURN FALSE END;
+  B.pos := r + 2;
+  Enter(f, d.t, d.len);
+  src := CleanLink(0, d.len, ok);
+  image := ok & IsImage(0, d.len);
+  A.InitInlines(cl);
+  WHILE Inline(cl) DO END;
+  Leave(f);
+  IF image THEN
+    A.Append(l, Pending(ExplicitImage, target,
+      A.NewLink(A.Image, A.NewAttr(NIL), NIL, src, NIL)))
+  ELSE
+    A.Append(l, Pending(Explicit, target, cl.first))
+  END;
+  RETURN TRUE
+END ExplicitLink;
+
+(* selflinkOrImage: [[target]] *)
+PROCEDURE SelfLink(VAR l: A.Inlines): BOOLEAN;
+  VAR p, q, s, e: LONGINT; src, t: A.Rope; ok: BOOLEAN; target: B.Buf;
+BEGIN
+  p := B.pos;
+  IF B.C(p) # "[" THEN RETURN FALSE END;
+  q := LinkTarget(p + 1);
+  IF (q < 0) OR (B.C(q) # "]") THEN RETURN FALSE END;
+  s := p + 2; e := q - 1;
+  src := CleanLink(s, e, ok); t := B.Rope(s, e);
+  IF ~ok THEN
+    IF B.t[s] = "#" THEN
+      A.Append(l, A.NewLink(A.Link, A.NewAttr(NIL), A.NewStr(t), t, NIL))
+    ELSE
+      B.InitBuf(target); B.Put(target, s, e);
+      A.Append(l, Pending(Internal, target, A.NewStr(t)))
+    END
+  ELSIF IsImage(s, e) THEN
+    A.Append(l, A.NewLink(A.Image, A.NewAttr(NIL), NIL, src, NIL))
+  ELSE
+    A.Append(l, A.NewLink(A.Link, A.NewAttr(NIL), A.NewStr(t), src, NIL))
+  END;
+  B.pos := q + 1;
+  RETURN TRUE
+END SelfLink;
+
+(* plainLink: a URI with a scheme pandoc knows *)
+PROCEDURE PlainLink(VAR l: A.Inlines): BOOLEAN;
+  VAR q: LONGINT; orig, src: B.Buf;
+BEGIN
+  B.InitBuf(orig); B.InitBuf(src);
+  q := MI.Uri(B.pos, orig, src);
+  IF q < 0 THEN RETURN FALSE END;
+  A.Append(l, A.NewLink(A.Link, A.NewAttr(NIL), A.NewStr(B.BufRope(orig)),
+    B.BufRope(src), NIL));
+  B.pos := q;
+  RETURN TRUE
+END PlainLink;
+
+(* angleLink: <, plainLink and > *)
+PROCEDURE AngleLink(VAR l: A.Inlines): BOOLEAN;
+  VAR q: LONGINT; orig, src: B.Buf;
+BEGIN
+  IF B.C(B.pos) # "<" THEN RETURN FALSE END;
+  B.InitBuf(orig); B.InitBuf(src);
+  q := MI.Uri(B.pos + 1, orig, src);
+  IF (q < 0) OR (B.C(q) # ">") THEN RETURN FALSE END;
+  A.Append(l, A.NewLink(A.Link, A.NewAttr(NIL), A.NewStr(B.BufRope(orig)),
+    B.BufRope(src), NIL));
+  B.pos := q + 1;
+  RETURN TRUE
+END AngleLink;
+
+(* anchor: <<id>> and any spaces, an empty Span whose identifier is
+   id solidified (org-export-solidify-link-text); id is recorded *)
+PROCEDURE Anchor(VAR l: A.Inlines): BOOLEAN;
+  VAR p, q, r: LONGINT; ch: CHAR; b: B.Buf; c: Utf8.Rune; s: A.StrList;
+BEGIN
+  p := B.pos;
+  IF ~B.Looking(p, "<<") THEN RETURN FALSE END;
+  q := p + 2;
+  LOOP
+    ch := B.C(q);
+    IF (q >= B.len) OR (ch = 09X) OR (ch = 0AX) OR (ch = 0DX) OR (ch = "<")
+        OR (ch = ">") OR (ch = 22X) OR (ch = "'") OR (ch = " ") THEN
+      EXIT
+    END;
+    INC(q)
+  END;
+  IF (q = p + 2) OR ~B.Looking(q, ">>") THEN RETURN FALSE END;
+  NEW(s); s.s := B.Rope(p + 2, q); s.next := st.anchors; st.anchors := s;
+  B.InitBuf(b); r := p + 2;
+  WHILE r < q DO
+    ch := B.t[r];
+    IF (ch = "_") OR (ch = ".") OR (ch = "-") OR (ch = ":") OR MI.AlnumAt(r) THEN
+      B.Put(b, r, MI.RuneEnd(r))
+    ELSE B.PutChar(b, "-")
+    END;
+    r := MI.RuneAt(r, c)
+  END;
+  A.Append(l, A.NewSpan(A.NewAttr(B.BufRope(b)), NIL));
+  B.pos := B.SkipSpaces(q + 2);
+  RETURN TRUE
+END Anchor;
+
+(* #+LINK: the line from p, after the key: a link type, spaces and its
+   format (addLinkFormatter). FALSE, nothing changed, if there is no
+   link type. *)
+PROCEDURE LinkFormat*(p: LONGINT): BOOLEAN;
+  VAR q, e, s: LONGINT; fm: Format; c: Utf8.Rune;
+BEGIN
+  q := MI.RuneAt(p, c);
+  IF (p >= B.len) OR ~((c < 80H) & B.IsLetter(B.t[p]) OR (c >= 80H) & Unicode.IsLetter(c)) THEN
+    RETURN FALSE
+  END;
+  WHILE (q < B.len) & (MI.AlnumAt(q) OR (B.t[q] = "-") OR (B.t[q] = "_")) DO
+    q := MI.RuneEnd(q)
+  END;
+  NEW(fm); B.InitBuf(fm.name); B.Put(fm.name, p, q);
+  B.InitBuf(fm.before); B.InitBuf(fm.after);
+  q := B.SkipSpaces(q);
+  e := q;
+  WHILE (e < B.len) & (B.t[e] # 0AX) & (B.t[e] # 0DX) DO INC(e) END;
+  s := q;
+  WHILE (s + 1 < e) & ~((B.t[s] = "%") & (B.t[s + 1] = "s")) DO INC(s) END;
+  IF s + 1 < e THEN fm.kind := FmtPlain
+  ELSE
+    s := q;
+    WHILE (s + 1 < e) & ~((B.t[s] = "%") & (B.t[s + 1] = "h")) DO INC(s) END;
+    IF s + 1 < e THEN fm.kind := FmtUrl ELSE fm.kind := FmtAppend END
+  END;
+  IF fm.kind = FmtAppend THEN B.Put(fm.before, q, e)
+  ELSE B.Put(fm.before, q, s); B.Put(fm.after, s + 2, e)
+  END;
+  fm.next := formats; formats := fm;
+  RETURN TRUE
+END LinkFormat;
+
+(* %h's encoding, as pandoc 3.14 does it: letters, digits and -_.~
+   kept, every other byte (space too) percent encoded *)
+PROCEDURE UrlEncode(VAR s: B.Buf; from, to: LONGINT; VAR out: B.Buf);
+  VAR ch: CHAR; hex: ARRAY 17 OF CHAR;
+BEGIN
+  hex := "0123456789ABCDEF";
+  WHILE from < to DO
+    ch := s.t[from];
+    IF (ch >= "a") & (ch <= "z") OR (ch >= "A") & (ch <= "Z")
+        OR (ch >= "0") & (ch <= "9") OR (ch = "-") OR (ch = "_")
+        OR (ch = ".") OR (ch = "~") THEN
+      B.PutChar(out, ch)
+    ELSE
+      B.PutChar(out, "%");
+      B.PutChar(out, hex[ORD(ch) DIV 16]);
+      B.PutChar(out, hex[ORD(ch) MOD 16])
+    END;
+    INC(from)
+  END
+END UrlEncode;
+
+(* Appends s[from .. to-1] to out *)
+PROCEDURE PutPart(VAR out: B.Buf; VAR s: B.Buf; from, to: LONGINT);
+BEGIN
+  WHILE from < to DO B.PutChar(out, s.t[from]); INC(from) END
+END PutPart;
+
+(* applyCustomLinkFormat: t with the #+LINK format for its link type,
+   the text before its first colon, applied to the rest, in out *)
+PROCEDURE ApplyFormat(VAR t: B.Buf; VAR out: B.Buf);
+  VAR i, n, r: LONGINT; fm: Format; same: BOOLEAN;
+BEGIN
+  n := 0;
+  WHILE (n < t.len) & (t.t[n] # ":") DO INC(n) END;
+  fm := formats;
+  LOOP
+    IF fm = NIL THEN EXIT END;
+    IF fm.name.len = n THEN
+      same := TRUE; i := 0;
+      WHILE same & (i < n) DO same := fm.name.t[i] = t.t[i]; INC(i) END;
+      IF same THEN EXIT END
+    END;
+    fm := fm.next
+  END;
+  B.InitBuf(out);
+  IF fm = NIL THEN PutPart(out, t, 0, t.len); RETURN END;
+  r := n + 1;
+  IF r > t.len THEN r := t.len END;
+  PutPart(out, fm.before, 0, fm.before.len);
+  IF fm.kind = FmtUrl THEN UrlEncode(t, r, t.len, out)
+  ELSE PutPart(out, t, r, t.len)
+  END;
+  PutPart(out, fm.after, 0, fm.after.len)
+END ApplyFormat;
+
+(* internalLink: a link to an anchor of the document, or an Emph in a
+   spurious-link Span if there is none *)
+PROCEDURE InternalLink(link: A.Rope; title: A.Inline): A.Inline;
+  VAR s: A.StrList; a: A.Attr;
+BEGIN
+  s := st.anchors;
+  WHILE (s # NIL) & ~Ropes.Equal(s.s, link) DO s := s.next END;
+  IF s # NIL THEN
+    RETURN A.NewLink(A.Link, A.NewAttr(NIL), title,
+      Ropes.Cat(A.S("#"), link), NIL)
+  END;
+  a := A.NewAttr(NIL);
+  A.AddClass(a, A.S("spurious-link"));
+  A.AddKeyVal(a, A.S("target"), link);
+  RETURN A.NewSpan(a, A.NewCont(A.Emph, title))
+END InternalLink;
+
+(* The link that a Span made by Pending stands for *)
+PROCEDURE Resolved(a: PendAttr; content: A.Inline): A.Inline;
+  VAR src: B.Buf; r, c: A.Rope; ok: BOOLEAN; f: B.Frame;
+BEGIN
+  IF a.how = Internal THEN RETURN InternalLink(B.BufRope(a.target), content) END;
+  ApplyFormat(a.target, src);
+  r := B.BufRope(src);
+  IF (a.how = ExplicitImage) OR (src.len = 0) OR (src.t[0] = "#") THEN
+    RETURN A.NewLink(A.Link, A.NewAttr(NIL), content, r, NIL)
+  END;
+  EnterBuf(f, src);
+  c := CleanLink(0, src.len, ok);
+  B.Leave(f);
+  IF ok THEN RETURN A.NewLink(A.Link, A.NewAttr(NIL), content, c, NIL) END;
+  RETURN InternalLink(r, content)
+END Resolved;
+
+PROCEDURE (w: Resolver) Inline*(i: A.Inline): A.Inline;
+BEGIN
+  IF (i IS A.SpanInl) & (i(A.SpanInl).attr # NIL)
+      & (i(A.SpanInl).attr IS PendAttr) THEN
+    RETURN Resolved(i(A.SpanInl).attr(PendAttr), i(A.SpanInl).content)
+  END;
+  RETURN i
+END Inline;
+
+(* Resolves the links of the document d, read last, against its
+   anchors and #+LINK formats, as pandoc's F monad does at the end *)
+PROCEDURE Resolve*(d: A.Doc);
+  VAR w: Resolver;
+BEGIN
+  NEW(w); A.WalkDoc(w, d)
+END Resolve;
+
 (* inline: one inline at B.pos, added to l; FALSE, with B.pos and the
    state as they were, if there is none. *)
 PROCEDURE Inline*(VAR l: A.Inlines): BOOLEAN;
@@ -920,12 +1359,14 @@ BEGIN
   ch := B.t[p];
   IF ~IsStrEnd(ch) THEN (* a tab, not a special character, is part of
       a word *)
-    Str(l)
+    IF ~((ch < 80X) & B.IsLetter(ch) & PlainLink(l)) THEN Str(l) END
   ELSIF ch = " " THEN (* whitespace *)
     WHILE B.IsSpace(B.C(p)) DO INC(p) END;
     B.pos := p; Newline;
     A.Append(l, A.NewSimple(A.Space))
   ELSIF (ch = "\") & Linebreak(l) THEN
+  ELSIF (ch = "[") & (ExplicitLink(l) OR SelfLink(l)) THEN
+  ELSIF (ch = "<") & (AngleLink(l) OR Anchor(l)) THEN
   ELSIF ch = 0AX THEN RETURN Endline(l)
   ELSIF ch = 0DX THEN RETURN FALSE
   ELSIF (ch = "_") & Script(A.Subscript, l)

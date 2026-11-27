@@ -4223,5 +4223,31 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   the value as Haskell reads a `String`, escapes and gaps included,
   and a value that does not read gives the defaults. Case test
   `org-inline-emphasis-set` (JSON from pandoc 3.14); `make test`
-  passed under `-O2` and `-OC`, 406 case tests. Uncommitted; Phase
-  27.2's links are not yet begun in code.
+  passed under `-O2` and `-OC`, 406 case tests. Committed as
+  e4f18df.
+- 2026-11-26, Phase 27.2: Org links in `PdOrgInline`: explicit
+  links `[[target][description]]` (a description over two lines, an
+  image file as the description), self links `[[target]]`, plain
+  links (`PdMdInline.Uri`), angle links and `<<anchor>>` targets
+  (ids solidified as pandoc does, the raw id recorded). Images: a
+  self link to an image file (`.pdf` too, any case). As pandoc
+  resolves links in its `F` monad, after parsing, a link is read as
+  a placeholder Span and `Resolve` replaces it at the end: `#+LINK`
+  formats (`%s`; `%h`, percent encoding every byte but letters,
+  digits and `-_.~`, a space as `%20`; neither, appended), the last
+  definition winning and applying to links before it; a target that
+  is not a URL nor a file is a link to `#target` if an anchor has
+  that id, else a `spurious-link` Span of the description in
+  `Emph`. In 3.14 `[[*Heading]]` and `[[#cid]]` (with no anchor) are
+  spurious too. `WinAbs`, `Schema`, `CleanLink` and `IsImage` moved
+  from `PdOrg` to `PdOrgInline`. Five case tests (`org-inline-images`,
+  `-links`, `-link-formats`, `-anchors`, `-link-misc`; JSON from
+  pandoc 3.14). `make test` passed under `-O2` and `-OC`: 411 case
+  tests, 23 round trips, 10 image tests, 20 mermaid tests. The link,
+  image and anchor inputs of pandoc's `Inline.hs` and the `#+link`,
+  anchor and search link inputs of `Meta.hs`, with 9 more probes,
+  match pandoc 3.14 byte for byte under both models, except
+  `#+title` with links, which waits for metadata (28.1); a
+  headline's `CUSTOM_ID` waits for 26.5. Org citations (`[[cite:..]]`)
+  and footnote references, which pandoc tries before links, are
+  27.3. Not yet run on the BSDs.

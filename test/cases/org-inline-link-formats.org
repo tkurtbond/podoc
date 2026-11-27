@@ -1,0 +1,14 @@
+#+link: wp https://en.wikipedia.org/wiki/%s
+[[wp:Org_mode][Wikipedia on Org-mode]]
+
+[[zl:non-sense][Non-sense articles]]
+#+link: zl http://zeitlens.com/tags/%s.html
+
+#+link: expl http://example.com/%h/foo
+[[expl:Hello, World!][Moin!]]
+
+#+LINK: g https://g/?q=%h&x=%s
+[[g:a b][q]] [[g]] [[g:]]
+
+#+link: h https://h/
+[[h:x]] h:x [[h:x][h:y]]

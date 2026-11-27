@@ -1,0 +1,17 @@
+A [[https://a.b][two
+lines]] link, and [[x][ spaced ]] and [[a][]]] then.
+
+/[[https://e.com][it]]/ and *bold [[tgt2]]* [[img.png][text]] [[#cid][x]] [[wp][bare]]
+
+<https://x.y and <<a b>> <<é/x?>> <<>> word<<z>>after [[https://q.r]]*no*
+
+<<tgt2>> [[sp:ünï cödé/&]] [[gh2:]] http://foo.com/(bar) (http://foo.com) mailto:x@y.z.
+
+* Head [[https://h.i][link]] <<ht>>
+[[ht]] [[*Head]] [[file:a.org][file:b.svg]] [[../up.gif]] [[c:\win\x.png]] [[\\srv\a.jpg]]
+#+LINK: 9bad http://x/
+#+LINK: wp https://w/%s/end
+#+LINK: sp https://s.org/?q=%h&x
+#+link: gh2 https://g/
+#+LINK: wp https://w2/%s
+[[wp:z]]

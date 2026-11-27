@@ -1,0 +1,18 @@
+<<anchor>> Link here later.
+
+[[Wally][Where's Wally?]]
+
+<<link-here>> Target.
+
+[[link-here][See here!]]
+
+- item [[x]] <<x>>
+
+| [[https://t.c][cell]] | <<c>> |
+
+[fn:1] note [[c]]
+
+
+<<link-here>> Target.
+
+[[link$here][See here!]]

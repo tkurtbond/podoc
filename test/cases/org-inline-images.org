@@ -1,0 +1,10 @@
+[[./sunset.jpg]]
+[[file:sunrise.jpg]]
+[[file:test.PNG]]
+[[sunset.png][file:dusk.svg]]
+[[http://example.com][./logo.png]]
+[[https://example.com/image.jpg][Look!]]
+[[file:doc.pdf]] [[doc.PDF]] [[x.svg][y]] [[file:x.jpeg::3]]
+
+#+attr_html: :width 50%
+[[file:guinea-pig.gif]]

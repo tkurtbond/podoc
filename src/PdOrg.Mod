@@ -14,7 +14,8 @@ MODULE PdOrg;
    admonitions, abstract and the rest as Divs), dynamic blocks,
    drawers, LaTeX environments and footnote definitions, kept until
    Phase 27.3 resolves their references. Phase 26.4: Org tables and
-   table.el tables (PdGridTable). *)
+   table.el tables (PdGridTable). Phase 27.2: #+LINK formats, and
+   PdOrgInline.Resolve's pass over the document for links. *)
 
 IMPORT Ropes, PdIO, A := PdAst, B := PdMdBase, MI := PdMdInline,
   I := PdOrgInline, M := PdOrgMeta, SH := PdShared, G := PdGridTable;
@@ -137,13 +138,14 @@ BEGIN
   RETURN TRUE
 END Example;
 
-(* keywordLine: a keyword pandoc knows, after #+ and the key. Phase
-   26.1 reads #+OPTIONS and passes over the rest of the others' lines:
-   what they set comes in later phases. *)
+(* keywordLine: a keyword pandoc knows, after #+ and the key.
+   #+OPTIONS, #+pandoc-emphasis-pre and -post, and #+LINK are read;
+   the rest of the others' lines are passed over, for later phases. *)
 PROCEDURE KeywordLine(VAR k: Key; p: LONGINT): BOOLEAN;
 BEGIN
   IF ~InList(k, Keywords) THEN RETURN FALSE END;
   IF k = "options" THEN B.pos := M.Options(p)
+  ELSIF (k = "link") & ~I.LinkFormat(p) THEN RETURN FALSE
   ELSE
     IF k = "pandoc-emphasis-pre" THEN I.EmphChars(FALSE, p)
     ELSIF k = "pandoc-emphasis-post" THEN I.EmphChars(TRUE, p)
@@ -932,69 +934,6 @@ BEGIN
   RETURN TRUE
 END OrgBlock;
 
-(* Whether t[p .. to-1] is absolute as a Windows path is: two
-   separators, or a letter, a colon and a separator *)
-PROCEDURE WinAbs(p, to: LONGINT): BOOLEAN;
-
-  PROCEDURE Sep(p: LONGINT): BOOLEAN;
-  BEGIN
-    RETURN (p < to) & ((B.t[p] = "/") OR (B.t[p] = "\"))
-  END Sep;
-
-BEGIN
-  RETURN Sep(p) & Sep(p + 1)
-    OR (p + 2 < to) & (CAP(B.t[p]) >= "A") & (CAP(B.t[p]) <= "Z")
-       & (B.t[p + 1] = ":") & Sep(p + 2)
-END WinAbs;
-
-(* toFileSchema: t[p .. to-1] as a file: URL, or NIL if it is not
-   absolute *)
-PROCEDURE Schema(p, to: LONGINT): A.Rope;
-BEGIN
-  IF WinAbs(p, to) THEN RETURN Ropes.Cat(A.S("file:///"), B.Rope(p, to))
-  ELSIF (p < to) & (B.t[p] = "/") THEN RETURN Ropes.Cat(A.S("file://"), B.Rope(p, to))
-  END;
-  RETURN NIL
-END Schema;
-
-(* cleanLinkText: t[from .. to-1] as a link; ok FALSE if it is not
-   one *)
-PROCEDURE CleanLink(from, to: LONGINT; VAR ok: BOOLEAN): A.Rope;
-  VAR p: LONGINT; r: A.Rope;
-BEGIN
-  ok := TRUE;
-  r := Schema(from, to);
-  IF r # NIL THEN RETURN r END;
-  IF B.Looking(from, "./") OR B.Looking(from, "../") THEN RETURN B.Rope(from, to)
-  ELSIF B.Looking(from, "file:") THEN
-    IF B.Looking(from + 5, "//") THEN RETURN B.Rope(from, to) END;
-    r := Schema(from + 5, to);
-    IF r # NIL THEN RETURN r END;
-    RETURN B.Rope(from + 5, to)
-  END;
-  p := from; (* isUrl *)
-  WHILE (p < to) & (B.t[p] # ":") DO
-    IF ~MI.AlnumAt(p) & (B.t[p] # ".") & (B.t[p] # "-") THEN
-      ok := FALSE; RETURN NIL
-    END;
-    p := MI.RuneEnd(p)
-  END;
-  ok := p < to;
-  RETURN B.Rope(from, to)
-END CleanLink;
-
-(* isImageFilename: whether the last part of the path t[from .. to-1]
-   has the extension of an image *)
-PROCEDURE IsImage(from, to: LONGINT): BOOLEAN;
-  VAR p: LONGINT; k: Key;
-BEGIN
-  p := to;
-  WHILE (p > from) & (B.t[p - 1] # "/") & (B.t[p - 1] # ".") DO DEC(p) END;
-  IF (p = from) OR (B.t[p - 1] # ".") THEN RETURN FALSE END;
-  LowerKey(p, to, k);
-  RETURN InList(k, " jpeg jpg png gif svg webp jxl avif pdf ")
-END IsImage;
-
 (* figure: an image alone in its paragraph, [[src]], with its block
    attributes; a Figure if it has a caption *)
 PROCEDURE Figure(VAR l: A.Blocks): BOOLEAN;
@@ -1016,8 +955,8 @@ BEGIN
   IF (e = s) OR ~B.Looking(e, "]]") THEN RETURN FALSE END;
   r := B.SkipSpaces(e + 2);
   IF (B.C(r) # 0AX) OR ~I.EndOfBlock(r + 1) THEN RETURN FALSE END;
-  src := CleanLink(s, e, ok);
-  IF ~ok OR ~IsImage(s, e) THEN RETURN FALSE END;
+  src := I.CleanLink(s, e, ok);
+  IF ~ok OR ~I.IsImage(s, e) THEN RETURN FALSE END;
   a := A.NewAttr(ba.name); a.attrs := ba.kv.attrs;
   IF ba.hasCaption THEN
     c := NIL;
@@ -1851,6 +1790,7 @@ BEGIN
   A.InitBlocks(l);
   DocumentTree(l);
   d.blocks := l.first;
+  I.Resolve(d);
   ids := NIL; meta := NIL; notes := NIL;
   RETURN d
 END Read;
