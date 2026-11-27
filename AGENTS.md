@@ -79,14 +79,19 @@ Phase 25, mermaid diagrams (decisions 48 to 54), is done: `PdMermaid`
 runs pomermaid (`~/Repos/Oberon/pomermaid`) for `-F
 pandoc-mermaid-selenium-filter` or `-F pomermaid`; its tests are
 `tools/runmermaid`, with a stand-in pomermaid in `test/mermaid/bin`.
-An Org mode reader, `-f org` (decisions 55 to 59), is planned as
-Phases 26 to 28; 26.1 (blocks of text), 26.2 (lists), 26.3 (blocks),
+An Org mode reader, `-f org` (decisions 55 to 59), was planned as
+Phases 26 to 28, and is done; 26.1 (blocks of text), 26.2 (lists), 26.3 (blocks),
 26.4 (tables) and 26.5 (the headline tree) are done, and Phase 27:
 27.1 (text, emphasis and verbatim), 27.2 (links, images and targets),
 27.3 (notes, citations, macros, snippets and inline source) and 27.4
 (math, Org entities and LaTeX commands): `PdOrg`, `PdOrgInline` and
-`PdOrgMeta`. Phase 28: 28.1 (metadata), 28.2 (`#+INCLUDE`) and 28.3
-(reporting, `--unknown`) are done; 28.4 (the corpus) is next. Read `docs/research/org-mode-reader.md` first.
+`PdOrgMeta`. Phase 28: 28.1 (metadata), 28.2 (`#+INCLUDE`), 28.3
+(reporting, `--unknown`) and 28.4 (the corpus, `tools/bench org`
+and the documentation) are done. `tools/orgcorpus` compares podoc
+with pandoc on every `.org` file under `~/Repos` and `~/current`
+(663 files on 2026-11-26), with `tools/orglatex` to tell decision 57's
+differences from others. Read `docs/research/org-mode-reader.md`
+first.
 See PLAN.md's State.
 
 ## Reference material
@@ -187,7 +192,7 @@ reinstall after upgrading poc.
   installed.
 - `tools/bench` times podoc, under both models, against pandoc. It
   reports wall and CPU time and peak RSS for conversions, the
-  Lost-Worlds builds, PDFs and reStructuredText (`rst`); run it under a `systemd-run` memory
+  Lost-Worlds builds, PDFs, reStructuredText (`rst`) and Org (`org`); run it under a `systemd-run` memory
   cap. Its results, the method and the changes made for performance
   are in `docs/developer/performance.md`. The layout writers' memory
   use, its fixes and what is left are in

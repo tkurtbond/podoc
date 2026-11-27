@@ -174,33 +174,42 @@ END ToSmallCaps;
 
 (* toAscii: an identifier for a PDF anchor *)
 PROCEDURE ToAscii*(r: Rope): Rope;
-  VAR b: Buf; n, i, q: LONGINT; out: Rope; ru: Utf8.Rune; ch: CHAR;
+  VAR b, o: Buf; n, i, q, k, j: LONGINT; ru: Utf8.Rune; ch: CHAR;
+    d: ARRAY 12 OF CHAR;
 BEGIN
   n := Len(r); b := ToBuf(r);
-  out := NIL; i := 0;
+  NEW(o, 10 * n + 1); k := 0; i := 0; (* a byte gives at most _u1114111_ *)
   WHILE i < n DO
     q := i;
     IF ~Utf8.Decode(b^, q, ru) OR (q <= i) THEN ru := ORD(b[i]); q := i + 1 END;
-    IF PdAscii.ToAscii(ru, ch) & (ch # "/") THEN out := CatC(out, ch)
-    ELSE out := CatS(Cat(CatS(out, "_u"), Sh.IntRope(ru)), "_")
+    IF PdAscii.ToAscii(ru, ch) & (ch # "/") THEN o[k] := ch; INC(k)
+    ELSE
+      o[k] := "_"; o[k + 1] := "u"; INC(k, 2);
+      j := 0;
+      REPEAT d[j] := CHR(ORD("0") + ru MOD 10); ru := ru DIV 10; INC(j) UNTIL ru = 0;
+      WHILE j > 0 DO DEC(j); o[k] := d[j]; INC(k) END;
+      o[k] := "_"; INC(k)
     END;
     i := q
   END;
-  RETURN out
+  IF k = 0 THEN RETURN NIL END;
+  RETURN Ropes.FromSubchars(o^, 0, k)
 END ToAscii;
 
-PROCEDURE Octal(VAR out: Rope; v: LONGINT);
-  VAR s: ARRAY 5 OF CHAR;
+(* Puts v, a byte, at o[k] as \ooo *)
+PROCEDURE Octal(VAR o: ARRAY OF CHAR; VAR k: LONGINT; v: LONGINT);
 BEGIN
-  s[0] := "\"; s[1] := CHR(ORD("0") + v DIV 64); s[2] := CHR(ORD("0") + v DIV 8 MOD 8);
-  s[3] := CHR(ORD("0") + v MOD 8); s[4] := 0X;
-  out := CatS(out, s)
+  o[k] := "\"; o[k + 1] := CHR(ORD("0") + v DIV 64);
+  o[k + 2] := CHR(ORD("0") + v DIV 8 MOD 8); o[k + 3] := CHR(ORD("0") + v MOD 8);
+  INC(k, 4)
 END Octal;
 
 (* escapePDFString: as it is, if it is ASCII without ( ) \ and ";
-   otherwise UTF-16BE, each byte in octal, after a byte order mark *)
+   otherwise UTF-16BE, each byte in octal, after a byte order mark.
+   Built in one buffer: a byte gives at most 8 bytes (( ) \ and a byte
+   not UTF-8 give 8 each) *)
 PROCEDURE EscapePDFString*(r: Rope): Rope;
-  VAR b: Buf; n, i, q: LONGINT; out: Rope; ru, lo, hi: LONGINT; x: Utf8.Rune;
+  VAR b, o: Buf; n, i, q, k: LONGINT; ru, lo, hi: LONGINT; x: Utf8.Rune;
     plain: BOOLEAN; ch: CHAR;
 BEGIN
   n := Len(r); b := ToBuf(r);
@@ -211,26 +220,27 @@ BEGIN
     INC(i)
   END;
   IF plain THEN RETURN r END;
-  out := R("\376\377"); i := 0;
+  NEW(o, 8 * n + 8); k := 0;
+  Octal(o^, k, 0FEH); Octal(o^, k, 0FFH); i := 0;
   WHILE i < n DO
     ch := b[i];
     IF (ORD(ch) < 80H) & (ch # "\") & (ch # "(") & (ch # ")") THEN
-      out := CatC(CatS(out, "\000"), ch); INC(i)
+      Octal(o^, k, 0); o[k] := ch; INC(k); INC(i)
     ELSE
       q := i;
       IF ~Utf8.Decode(b^, q, x) OR (q <= i) THEN x := 0FFFDH; q := i + 1 END;
       ru := x;
       IF ru >= 10000H THEN
         DEC(ru, 10000H); hi := 0D800H + ru DIV 400H; lo := 0DC00H + ru MOD 400H;
-        Octal(out, hi DIV 256); Octal(out, hi MOD 256);
-        Octal(out, lo DIV 256); Octal(out, lo MOD 256)
+        Octal(o^, k, hi DIV 256); Octal(o^, k, hi MOD 256);
+        Octal(o^, k, lo DIV 256); Octal(o^, k, lo MOD 256)
       ELSE
-        Octal(out, ru DIV 256); Octal(out, ru MOD 256)
+        Octal(o^, k, ru DIV 256); Octal(o^, k, ru MOD 256)
       END;
       i := q
     END
   END;
-  RETURN out
+  RETURN Ropes.FromSubchars(o^, 0, k)
 END EscapePDFString;
 
 (* Whether ch may stand in a URI as it is (isAllowedInURI), @ apart *)

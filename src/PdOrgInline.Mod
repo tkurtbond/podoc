@@ -56,6 +56,9 @@ CONST
   Internal = 2; (* [[target]], not a URL: internalLink *)
   NoteRef = 3; (* [fn:name] or [1]: referencedNote *)
 
+  TableSize = 4093; (* the buckets of the notes' and anchors' tables, a
+    prime *)
+
   (* org-cite styles that change a citation *)
   NilStyle = 0; TextStyle = 1; NoAuthorStyle = 2; OtherStyle = 3;
 
@@ -120,13 +123,17 @@ TYPE
   END;
 
   (* orgStateNotes': a footnote's definition, its key fn:name or a
-     number, and its blocks *)
+     number, and its blocks; next is the next in its bucket *)
   Note = POINTER TO NoteDesc;
   NoteDesc = RECORD
     ref: A.Rope;
     blocks: A.Block;
     next: Note
   END;
+  NoteTable = POINTER TO ARRAY TableSize OF Note;
+
+  (* The anchors' identifiers, indexed for InternalLink *)
+  AnchorTable = POINTER TO ARRAY TableSize OF A.StrList;
 
   (* A #+MACRO definition, orgStateMacros: its text, parts of it
      with the number of the argument after each, 0 after the last *)
@@ -171,7 +178,10 @@ VAR
     before and after emphasis *)
   defPre, defPost: B.Buf; (* pandoc's defaults for them *)
   formats: Format; (* the newest first *)
-  notes: Note; (* the newest first *)
+  notes: NoteTable; (* each bucket the newest first; NIL if empty *)
+  anchorTable: AnchorTable; (* st.anchors up to anchorHead, NIL if not
+    made yet *)
+  anchorHead: A.StrList; (* the head of st.anchors when it was indexed *)
   macros: Macro; (* the newest first *)
   macroDepth: INTEGER; (* orgStateMacroDepth *)
   unknown*: INTEGER; (* --unknown: Quiet, WarnUnknown or FailUnknown *)
@@ -514,16 +524,37 @@ BEGIN
   st.pre.id := -1; st.forb.id := -1; st.str.id := -1; st.stack := NIL;
   st.count := -1; st.quote := NoQuote; st.anchors := NIL; here.id := -1;
   preChars := defPre; postChars := defPost; formats := NIL; notes := NIL;
+  anchorTable := NIL; anchorHead := NIL;
   macros := NIL; macroDepth := 0;
   nextKind := OrgUnknown; nextName := NIL; reported := NIL
 END Reset;
 
 (* addToNotesTable: ref, fn:name or a number, is defined as blocks *)
+PROCEDURE Bucket(key: A.Rope): LONGINT;
+BEGIN
+  RETURN SHORT(Ropes.Hash(key) MOD TableSize)
+END Bucket;
+
 PROCEDURE AddNote*(ref: A.Rope; blocks: A.Block);
+  VAR n: Note; b, i: LONGINT;
+BEGIN
+  IF notes = NIL THEN
+    NEW(notes);
+    FOR i := 0 TO TableSize - 1 DO notes[i] := NIL END
+  END;
+  b := Bucket(ref);
+  NEW(n); n.ref := ref; n.blocks := blocks; n.next := notes[b]; notes[b] := n
+END AddNote;
+
+(* The newest note defined as ref, NIL if there is none *)
+PROCEDURE FindNote(ref: A.Rope): Note;
   VAR n: Note;
 BEGIN
-  NEW(n); n.ref := ref; n.blocks := blocks; n.next := notes; notes := n
-END AddNote;
+  IF notes = NIL THEN RETURN NIL END;
+  n := notes[Bucket(ref)];
+  WHILE (n # NIL) & ~Ropes.Equal(n.ref, ref) DO n := n.next END;
+  RETURN n
+END FindNote;
 
 (* Saves the state, and B.pos, in s. *)
 PROCEDURE Save*(VAR s: State);
@@ -980,7 +1011,7 @@ END EmphasisEnd;
 
 (* emphasizedText: /emph/, *strong*, +strikeout+ or _underline_ *)
 PROCEDURE Emphasis(c: CHAR; VAR l: A.Inlines): BOOLEAN;
-  VAR s: State; cl: A.Inlines; kind: INTEGER;
+  VAR s, s1: State; cl: A.Inlines; kind: INTEGER;
 BEGIN
   IF ~M.emphasis THEN RETURN FALSE END;
   CASE c OF
@@ -993,6 +1024,12 @@ BEGIN
   Save(s);
   st.count := 1;
   IF ~EmphasisStart(c) OR MI.SpaceAt(B.pos) THEN Restore(s); RETURN FALSE END;
+  (* many1Till's notFollowedBy' end: the end may not follow the start,
+     the emphasis character around this one counting as a post
+     character *)
+  Save(s1);
+  IF EmphasisEnd(c) THEN Restore(s); RETURN FALSE END;
+  Restore(s1);
   A.InitInlines(cl);
   IF ~Inline(cl) THEN Restore(s); RETURN FALSE END;
   LOOP
@@ -2142,10 +2179,31 @@ END Footnote;
 
 (* internalLink: a link to an anchor of the document, or an Emph in a
    spurious-link Span if there is none *)
+PROCEDURE IndexAnchors;
+  VAR s, n: A.StrList; b, i: LONGINT;
+BEGIN
+  s := st.anchors;
+  WHILE (s # NIL) & (s # anchorHead) DO s := s.next END;
+  IF (anchorTable = NIL) OR (s # anchorHead) THEN
+    (* first made, or backtracking took anchorHead away *)
+    IF anchorTable = NIL THEN NEW(anchorTable) END;
+    FOR i := 0 TO TableSize - 1 DO anchorTable[i] := NIL END;
+    anchorHead := NIL
+  END;
+  s := st.anchors;
+  WHILE s # anchorHead DO
+    b := Bucket(s.s);
+    NEW(n); n.s := s.s; n.next := anchorTable[b]; anchorTable[b] := n;
+    s := s.next
+  END;
+  anchorHead := st.anchors
+END IndexAnchors;
+
 PROCEDURE InternalLink(link: A.Rope; title: A.Inline): A.Inline;
   VAR s: A.StrList; a: A.Attr;
 BEGIN
-  s := st.anchors;
+  IndexAnchors;
+  s := anchorTable[Bucket(link)];
   WHILE (s # NIL) & ~Ropes.Equal(s.s, link) DO s := s.next END;
   IF s # NIL THEN
     RETURN A.NewLink(A.Link, A.NewAttr(NIL), title,
@@ -2180,10 +2238,7 @@ PROCEDURE NoteFor(w: Resolver; VAR ref: B.Buf): A.Inline;
   VAR n: Note; r: A.Rope; v: Resolver; b: A.Block;
 BEGIN
   r := B.BufRope(ref); n := NIL;
-  IF w.notes THEN
-    n := notes;
-    WHILE (n # NIL) & ~Ropes.Equal(n.ref, r) DO n := n.next END
-  END;
+  IF w.notes THEN n := FindNote(r) END;
   IF n = NIL THEN
     RETURN A.NewStr(Ropes.Cat(Ropes.Cat(A.S("["), r), A.S("]")))
   END;
@@ -2226,6 +2281,19 @@ BEGIN
   A.mergeWalk := old;
   RETURN b
 END ResolveBlocks;
+
+(* A copy of the inlines i resolved against the notes, anchors and
+   #+LINK formats known now; i is not changed. For a headline's
+   identifier, which pandoc makes from its title after runF: an
+   undefined [1] or [fn:x] then counts as its text *)
+PROCEDURE ResolvedCopy*(i: A.Inline): A.Inline;
+  VAR w: Resolver; old: BOOLEAN;
+BEGIN
+  old := A.mergeWalk; A.mergeWalk := TRUE;
+  NEW(w); w.notes := TRUE; i := A.WalkInlines(w, A.DeepCopyInlines(i));
+  A.mergeWalk := old;
+  RETURN i
+END ResolvedCopy;
 
 (* Math and LaTeX (Phase 27.4) *)
 

@@ -400,15 +400,18 @@ BEGIN
   id := AttrId(h.attr);
   anchor := NIL;
   IF Len(id) > 0 THEN anchor := Anchor(id) END;
-  IF secnum # NIL THEN t := CatS(secnum, "  ") ELSE t := NIL END;
-  IF groff THEN t := Cat(t, plain) ELSE t := Cat(t, Ro.EscapePDFString(plain)) END;
-  bookmark := L.Cat3(Lit(".pdfhref O "), L.Literal(CatS(Sh.IntRope(h.level), " ")),
-    L.NoWrap(DQ(L.Literal(t))));
-  backlink := L.NoWrap(L.Cat3(Lit(".pdfhref L -D "), DQ(L.Literal(Ro.ToAscii(id))),
-    L.Cat(L.Space(), Lit("\"))));
-  backlink := L.Cat3(backlink, L.Cr(), Lit(" -- "));
+  bookmark := NIL;
+  IF hasEngine THEN (* only written then *)
+    IF secnum # NIL THEN t := CatS(secnum, "  ") ELSE t := NIL END;
+    IF groff THEN t := Cat(t, plain) ELSE t := Cat(t, Ro.EscapePDFString(plain)) END;
+    bookmark := L.Cat3(Lit(".pdfhref O "), L.Literal(CatS(Sh.IntRope(h.level), " ")),
+      L.NoWrap(DQ(L.Literal(t))))
+  END;
   toc := NIL;
   IF wantToc & (h.level <= tocDepth) THEN
+    backlink := L.NoWrap(L.Cat3(Lit(".pdfhref L -D "), DQ(L.Literal(Ro.ToAscii(id))),
+      L.Cat(L.Space(), Lit("\"))));
+    backlink := L.Cat3(backlink, L.Cr(), Lit(" -- "));
     t := NIL;
     FOR k := 1 TO h.level DO t := CatC(t, 9X) END;
     IF secnum # NIL THEN t := CatS(Cat(t, secnum), "\~\~") END;

@@ -2,7 +2,7 @@
 # bench: times podoc against pandoc and measures their memory use
 # (docs/developer/performance.md):
 #
-#   tools/bench [convert] [build] [pdf] [rst]
+#   tools/bench [convert] [build] [pdf] [rst] [org]
 #
 # With no arguments, runs convert and build. Each case is run once to
 # warm the file cache, then RUNS times; the median wall-clock and CPU
@@ -32,6 +32,11 @@
 #            12,000 anonymous references, substitutions, footnotes,
 #            citations and repeated section titles, to json, each once
 #            quadratic or worse in podoc. Both podoc builds are run.
+#   org      the Org reader: pandoc's test/writer.org and test/tables.org,
+#            the user's largest Org file and that file ten times over, to
+#            json, html, ms and context; and generated inputs of 12,000
+#            notes, repeated headlines linked to by name, and targets with
+#            links to them, to json. Both podoc builds are run.
 #
 # Memory-heavy: run it capped, for example
 #
@@ -50,6 +55,8 @@
 #                Return/Scenarios/005-merchant/rst-version/
 #                return-005-merchant.rst), read only
 #                Where either is missing, it is left out.
+#   ORG_LARGE    the largest Org file (~/Repos/tkb-notes/Books/read.org),
+#                left out where it is missing
 #   BENCH_TIME   GNU time, which measures the peak RSS (/usr/bin/time)
 #   RUNS         if set, the number of timed runs for every case (by
 #                default 20 for small inputs, down to 3 for MANUAL x10)
@@ -70,6 +77,8 @@ SRD = os.environ.get("RST_SRD",
     HOME + "/current/RPG/Mini-Six/SRD/minimal-opend6-srd.rst")
 MERCHANT = os.environ.get("RST_MERCHANT", HOME + "/current/RPG/Campaigns/"
     "Alusia/Return/Scenarios/005-merchant/rst-version/return-005-merchant.rst")
+ORG_LARGE = os.environ.get("ORG_LARGE",
+    HOME + "/Repos/tkb-notes/Books/read.org")
 RUNS = int(os.environ["RUNS"]) if os.environ.get("RUNS") else None
 TIME = os.environ.get("BENCH_TIME", "/usr/bin/time")
 RSSFILE = None                          # set in main
@@ -225,6 +234,40 @@ def rst(inp):
         args = ["-f", "rst", "-t", "json", f"{inp}/{name}.rst"]
         case("rst", "json", f"{name} {STRESS}", 3, args, args)
 
+def org_stress(inp):
+    """The generated Org inputs, by name"""
+    n = STRESS
+    gen = {
+        "notes": "".join(f"A note[fn:n{i}].\n\n" for i in range(n)) +
+            "".join(f"[fn:n{i}] Note {i}.\n\n" for i in range(n)),
+        "headlines": "".join(f"* Section {i % 50}\nText [[*Section {i % 50}]].\n"
+                             for i in range(n)),
+        "targets": "".join(f"<<t{i}>> A target.\n\n" for i in range(n)) +
+            "".join(f"See [[t{i * 7919 % n}]].\n\n" for i in range(n))}
+    for name, text in gen.items():
+        with open(f"{inp}/{name}.org", "w") as f: f.write(text)
+    return list(gen)
+
+def org(inp):
+    files = {"writer.org": 20, "tables.org": 20}
+    for f in files:
+        shutil.copy(f"{PANDOC_SRC}/test/{f}", f"{inp}/{f}")
+    if os.path.isfile(ORG_LARGE):
+        shutil.copy(ORG_LARGE, inp + "/large.org")
+        large = open(ORG_LARGE, "rb").read()
+        with open(inp + "/large10.org", "wb") as f:
+            for _ in range(10): f.write(large + b"\n")
+        files.update({"large.org": 10, "large10.org": 3})
+    else:
+        print(f"bench: {ORG_LARGE} not found: left out", file=sys.stderr)
+    for f in files:
+        for fmt in ["json", "html", "ms", "context"]:
+            args = ["--wrap=none", "-f", "org", "-t", fmt, f"{inp}/{f}"]
+            case("org", fmt, f, files[f], args, args)
+    for name in org_stress(inp):
+        args = ["-f", "org", "-t", "json", f"{inp}/{name}.org"]
+        case("org", "json", f"{name} {STRESS}", 3, args, args)
+
 def main(tmp, which):
     global RSSFILE
     RSSFILE = tmp + "/rss"
@@ -244,7 +287,7 @@ def main(tmp, which):
                            stdout=f, check=True)
     elif set(which) & {"build", "pdf"}:
         print(f"bench: {LW} not found: build and pdf left out", file=sys.stderr)
-        which = [w for w in which if w in ("convert", "rst")]
+        which = [w for w in which if w in ("convert", "rst", "org")]
     print(f"# pandoc {PANDOC}; podoc {PD} at " + subprocess.run(
         ["git", "-C", PD, "describe", "--always", "--dirty"],
         capture_output=True, text=True).stdout.strip(), flush=True)
@@ -252,14 +295,15 @@ def main(tmp, which):
     if "build" in which: build(out, subs)
     if "pdf" in which: pdf(out, subs)
     if "rst" in which: rst(inp)
+    if "org" in which: org(inp)
     if os.environ.get("BENCH_JSON"):
         with open(os.environ["BENCH_JSON"], "w") as f:
             json.dump(results, f, indent=1)
 
 which = sys.argv[1:] or ["convert", "build"]
 for w in which:
-    if w not in ("convert", "build", "pdf", "rst"):
-        sys.exit("usage: bench [convert] [build] [pdf] [rst]")
+    if w not in ("convert", "build", "pdf", "rst", "org"):
+        sys.exit("usage: bench [convert] [build] [pdf] [rst] [org]")
 if PANDOC is None:
     sys.exit("bench: pandoc not found")
 if subprocess.run([TIME, "-f", "%M", "true"], capture_output=True).returncode:

@@ -1,0 +1,17 @@
+A[fn:a] and [1].
+
+[fn:a] First.
+
+[fn:a] Second.
+
+[1] One.
+
+[1] Two.
+
+* H [[t2]] [[t9]]
+
+/x <<t1>> y
+
+See [[t1]], *a <<t2>>* and [[t2]] and [[t3]].
+
+<<t3>>

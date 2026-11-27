@@ -556,18 +556,35 @@ BEGIN
   END
 END TeXGroup;
 
-(* dimenarg at p: =, -, a number and a unit; -1 if there is none *)
+(* The end of the Word token (a run of letters and numbers) at p; p if
+   there is none *)
+PROCEDURE TeXWord(p: LONGINT): LONGINT;
+BEGIN
+  WHILE AlnumAt(p) DO p := RuneEnd(p) END;
+  RETURN p
+END TeXWord;
+
+(* dimenarg at p: =, -, a Word token starting with a digit, then "."
+   and a Word token, each optional; together a number of digits and
+   dots and a unit or nothing: the position after it; -1 if there is
+   none *)
 PROCEDURE TeXDimen(p: LONGINT): LONGINT;
-  VAR q, u: LONGINT; units: ARRAY 40 OF CHAR; i: INTEGER;
+  VAR q, u, e: LONGINT; units: ARRAY 40 OF CHAR; i: INTEGER;
 BEGIN
   p := TeXSp(p);
   IF B.C(p) = "=" THEN INC(p) END;
   IF B.C(p) = "-" THEN INC(p) END;
+  e := p;
+  IF (B.C(e) >= "0") & (B.C(e) <= "9") THEN e := TeXWord(e) END; (* s1 *)
+  IF (B.C(e) = ".") & (TeXWord(e + 1) > e + 1) THEN (* s2 *)
+    e := TeXWord(e + 1)
+  END;
   q := p;
-  WHILE ((B.C(q) >= "0") & (B.C(q) <= "9")) OR (B.C(q) = ".") DO INC(q) END;
-  IF (q = p) OR (B.C(p) = ".") THEN RETURN -1 END;
-  u := q;
-  WHILE B.IsAlnum(B.C(u)) DO INC(u) END;
+  WHILE (q < e) & (((B.C(q) >= "0") & (B.C(q) <= "9")) OR (B.C(q) = ".")) DO
+    INC(q)
+  END;
+  IF q = p THEN RETURN -1 END;
+  u := e;
   IF u = q THEN RETURN q END;
   IF u - q # 2 THEN RETURN -1 END;
   units := "ptpcinbpcmmmddccspexemmupx";

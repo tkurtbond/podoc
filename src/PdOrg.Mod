@@ -2493,7 +2493,7 @@ BEGIN
   END;
   a := PropAttr(h.props);
   IF Ropes.Length(a.id) = 0 THEN
-    IF autoIds THEN a.id := UniqueId(h.title) END
+    IF autoIds THEN a.id := UniqueId(I.ResolvedCopy(h.title)) END
   ELSE Use(a.id)
   END;
   level := h.level;

@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+# orglatex PANDOC.json PODOC.json
+#
+# For tools/orgcorpus: exits 0 if the two documents differ only as
+# decision 57 allows, 1 otherwise. The two trees are walked side by
+# side. Where an inline list differs and podoc's holds a
+# RawInline (Format "latex"), the elements before podoc's first such
+# command must equal pandoc's first elements, and the elements after
+# its last such command pandoc's last ones; what lies between, the
+# commands and what pandoc made of them, is not compared. Everything
+# else must be equal.
+
+import json
+import sys
+
+
+def is_latex(x):
+    return (isinstance(x, dict) and x.get("t") == "RawInline"
+            and x["c"][0] == "latex")
+
+
+def same(a, b):
+    if a == b:
+        return True
+    if isinstance(a, dict) and isinstance(b, dict):
+        if a.keys() != b.keys() or a.get("t") != b.get("t"):
+            return False
+        return all(same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        idx = [i for i, x in enumerate(b) if is_latex(x)]
+        if idx:
+            first, last = idx[0], idx[-1]
+            tail = len(b) - last - 1
+            if len(a) < first + tail:
+                return False
+            if not all(same(x, y) for x, y in zip(a[:first], b[:first])):
+                return False
+            if tail and not all(same(x, y) for x, y in
+                                zip(a[len(a) - tail:], b[last + 1:])):
+                return False
+            return True
+        if len(a) != len(b):
+            return False
+        return all(same(x, y) for x, y in zip(a, b))
+    return False
+
+
+def main():
+    with open(sys.argv[1]) as f:
+        a = json.load(f)
+    with open(sys.argv[2]) as f:
+        b = json.load(f)
+    sys.exit(0 if same(a, b) else 1)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, OSError):
+        sys.exit(1)

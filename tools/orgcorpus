@@ -1,0 +1,85 @@
+#!/bin/sh
+# orgcorpus PODOC OUTDIR [DIR...]
+#
+# Reads every *.org file under each DIR (by default ~/Repos and
+# ~/current), except those in podoc's own tree, with
+#
+#     pandoc -f org -t json FILE
+#     PODOC -f org -t json FILE
+#
+# each run in the file's own directory, since #+INCLUDE is relative,
+# and compares their standard output and standard error byte for byte.
+# Outputs go in OUTDIR, one directory per file, numbered in the order
+# found (OUTDIR/list holds the numbered list). A line
+#
+#     DIFF <kind> <n> <file> (<pandoc status>/<podoc status>)
+#
+# is printed for each file whose outputs differ, the kind being
+#
+#     latex   only decision 57's difference: podoc's JSON has
+#             RawInline (Format "latex") where pandoc's has what
+#             texmath made of the command. Found by replacing, in both
+#             outputs, each inline list containing such a command with
+#             a marker, and comparing again.
+#     stderr  the JSON is the same, the warnings are not.
+#     other   anything else.
+#
+# and a count of each kind is printed at the end. Exits 1 if any file
+# differs in a kind other than latex. pandoc is stopped after 30
+# seconds where timeout(1) is installed. Needs python3 for the latex
+# check. The files are only read.
+#
+# Memory: run it capped, for example
+#
+#   systemd-run --user --scope -q -p MemoryMax=8G -p MemorySwapMax=0 \
+#     tools/orgcorpus build/OC/podoc /usr/local/sw/tmp/x/org
+
+if [ $# -lt 2 ]; then
+  echo "usage: orgcorpus PODOC OUTDIR [DIR...]" >&2
+  exit 2
+fi
+podoc=$1
+outdir=$2
+shift 2
+[ $# -eq 0 ] && set -- "$HOME/Repos" "$HOME/current"
+pandoc=${PANDOC:-pandoc}
+command -v "$pandoc" > /dev/null 2>&1 || { echo "orgcorpus: no $pandoc" >&2; exit 2; }
+limit=
+command -v timeout > /dev/null 2>&1 && limit="timeout 30"
+
+case $podoc in /*) ;; *) podoc=$(pwd)/$podoc ;; esac
+here=$(cd "$(dirname "$0")/.." && pwd)
+norm=$here/tools/orglatex
+mkdir -p "$outdir" || exit 2
+case $outdir in /*) ;; *) outdir=$(pwd)/$outdir ;; esac
+
+find "$@" -name '*.org' -type f 2> /dev/null | grep -v "^$here/" | sort > "$outdir/list"
+
+total=0 same=0 latex=0 errs=0 other=0
+while IFS= read -r f; do
+  total=$((total + 1))
+  o=$outdir/$total
+  mkdir -p "$o"
+  d=$(dirname "$f") b=$(basename "$f")
+  (cd "$d" && $limit "$pandoc" -f org -t json "$b" > "$o/pandoc.json" 2> "$o/pandoc.err")
+  ps=$?
+  (cd "$d" && "$podoc" -f org -t json "$b" > "$o/podoc.json" 2> "$o/podoc.err")
+  qs=$?
+  if [ $ps -eq $qs ] && cmp -s "$o/pandoc.json" "$o/podoc.json" &&
+     cmp -s "$o/pandoc.err" "$o/podoc.err"; then
+    same=$((same + 1))
+    continue
+  fi
+  if [ $ps -eq $qs ] && cmp -s "$o/pandoc.json" "$o/podoc.json"; then
+    kind=stderr errs=$((errs + 1))
+  elif [ $ps -eq $qs ] && cmp -s "$o/pandoc.err" "$o/podoc.err" &&
+       python3 -I "$norm" "$o/pandoc.json" "$o/podoc.json"; then
+    kind=latex latex=$((latex + 1))
+  else
+    kind=other other=$((other + 1))
+  fi
+  echo "DIFF $kind $total $f ($ps/$qs)"
+done < "$outdir/list"
+
+echo "$total files: $same the same, $latex latex (decision 57), $errs stderr, $other other"
+[ $errs -eq 0 ] && [ $other -eq 0 ]

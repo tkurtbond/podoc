@@ -1,5 +1,11 @@
 # podoc and Org mode: scope, potential, benefits and risks
 
+Status, 2026-11-26: done, as PLAN.md's Phases 26 to 28 (decisions 55
+to 59). podoc's `-f org` matches pandoc 3.14 on the user's 663 files
+but for decision 57's raw LaTeX; the results are in PLAN.md's State
+and the remaining differences in docs/user/differences.md. What
+follows is the research as it was done, before the reader existed.
+
 Research done 2026-11-26 on whether podoc should read Emacs Org mode
 files as pandoc's `-f org` reads them. podoc reads pandoc markdown and
 reStructuredText today. `-f org`, or an input ending in `.org`, ends

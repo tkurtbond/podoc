@@ -2,7 +2,8 @@
 
 podoc is a small subset of [pandoc](https://pandoc.org) 3.10, written
 in Oberon-2 and built with the Peaseblossom Oberon Compiler (`poc`).
-It reads pandoc markdown with YAML metadata. It writes HTML, groff
+It reads pandoc markdown with YAML metadata, reStructuredText and
+Emacs Org mode. It writes HTML, groff
 `ms`, ConTeXt, markdown, plain text and pandoc's JSON, and groff `mom`,
 which pandoc does not, and it makes PDF with `pdfroff`, `groff`,
 ConTeXt or `pdfmom`. It is for systems where pandoc is too
@@ -70,7 +71,7 @@ when no files are named. `podoc --help` lists the options:
 
 | Option | Meaning |
 |---|---|
-| `-f`, `-r`, `--from`, `--read` | the input format: `markdown` or `rst` |
+| `-f`, `-r`, `--from`, `--read` | the input format: `markdown`, `rst` or `org` |
 | `-t`, `-w`, `--to`, `--write` | `html` (`html5`), `ms`, `mom`, `context`, `markdown`, `plain`, `json` or `pdf`; `plain+gutenberg` for Project Gutenberg's conventions |
 | `-o FILE` | the output file; with no `-t`, its extension names the format |
 | `-s`, `--standalone` | a whole document, through a template |
@@ -159,6 +160,23 @@ silence, or reports them only with `--verbose`. podoc's
 `--unknown=warn` reports each as a warning, with its position, and
 `--unknown=error` stops at the first with status 64, so a document
 can be checked for what neither program will render.
+
+podoc's Org mode reader, `-f org` (and `.org` inputs), reads what
+pandoc 3.14's does: the headline tree, with tags, `TODO` keywords,
+priorities, property drawers and the export settings (`#+OPTIONS:`,
+`#+SELECT_TAGS:`, `#+EXCLUDE_TAGS:`, `#+TODO:`, ...); lists, blocks,
+drawers, tables and figures; emphasis, links, targets, footnotes,
+citations, macros, export snippets, inline source, math and Org
+entities; the document keywords as metadata (`#+TITLE:`, `#+AUTHOR:`,
+`#+DATE:`, `#+LATEX_HEADER:`, ...); and `#+INCLUDE:`. Its extensions
+are pandoc's ten: `auto_identifiers`, `ascii_identifiers`,
+`gfm_auto_identifiers`, `citations`, `special_strings`, `task_lists`,
+`smart`, `smart_quotes`, `fancy_lists` and `east_asian_line_breaks`,
+turned on and off as in pandoc (`-f org-citations`). LaTeX commands
+other than Org entities are kept as raw LaTeX, where pandoc turns
+those it knows into text (see [differences.md](differences.md)). On
+the user's 663 Org files its JSON was pandoc's, byte for byte, but for
+one file with such a command (2026-11-26).
 
 The Org reader's `--unknown=warn` reports, with file, line and
 column, what it keeps unread or makes into something no writer may

@@ -1,0 +1,22 @@
+Runs of one emphasis character: an emphasis may not end where it
+starts.
+
+a ////
+
+a ///
+
+****
+
+x ******
+
+ ********
+
+x ______ y
+
+a __ b c_ d
+
+a ++ b c+ d
+
+i *a **b** c*
+
+/a//

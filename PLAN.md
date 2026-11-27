@@ -2454,6 +2454,11 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   actually found in; podoc copies this. Check later whether that is
   what pandoc means to do, or a pandoc bug to report and stop
   copying (found 2026-11-26, Phase 28.2).
+- rST `include` of a missing file that is the last thing in the
+  input: podoc's warning gives a line one less than pandoc's (4
+  against 5), and pandoc's own line for the same text varies (5 or
+  6) with the input's last new lines. With text after the directive
+  the two agree (found 2026-11-26, Phase 28.4).
 - Org `--unknown=warn` reports Emacs-only keywords (`#+STARTUP`,
   `#+TAGS`, `#+PROPERTY`, `#+COLUMNS`, `#+CATEGORY`) as unknown, as
   decision 58 says (the user's choice, 2026-11-26). In the user's
@@ -4492,3 +4497,75 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   nested include directory question went to "Later". `make test`
   passed under `-O2` and `-OC`: 449 case tests, 23 round trips, 10
   image tests, 20 mermaid tests. Not yet run on the BSDs.
+- 2026-11-26, Phase 28.4: the corpus. `tools/orgcorpus` reads every
+  `.org` file under `~/Repos` and `~/current` but podoc's own (663),
+  each in its own directory, with pandoc 3.14 and podoc, `-f org -t
+  json`, and compares output, warnings and status; `tools/orglatex`
+  tells a file that differs only by decision 57 (podoc's raw LaTeX
+  where pandoc has texmath's inlines, the text around it the same)
+  from others. Three bugs it found, fixed:
+  - emphasis: an end character right after the start
+    (`////`, `**` runs, `__ ... c_`) does not close, as pandoc's
+    `many1Till` checks `notFollowedBy' end` first; inside emphasis the
+    enclosing character counts as a post character there;
+  - headline identifiers come from the title resolved against the
+    notes (`PdOrgInline.ResolvedCopy`), as pandoc's `runF` runs first:
+    an undefined `[10]` is text in the identifier, a defined one a
+    Note, skipped;
+  - raw TeX after a command (`\tape0.`): `PdMdInline.TeXDimen` reads
+    a dimension as pandoc's `dimenarg` does (a word starting with a
+    digit, then `.` and a word only if a word follows), so the `.` is
+    not taken. This was the markdown reader's too; case test
+    `raw-tex-dimen`, and `tools/compare json` gives the same 150 of
+    182 as before.
+  `tools/bench org`'s generated inputs found two quadratic searches,
+  fixed: notes and anchors were linear lists, searched for each
+  reference (12,000 notes 4.57 s, 12,000 targets 3.82 s, under
+  `-OC`). Notes are in a 4,093-bucket table now, the newest
+  definition first as before; anchors, which backtracking can take
+  back, are indexed when a link is resolved, from the list's head to
+  the head last indexed, and indexed again if that is gone (0.11 s
+  each). Case tests `org-inline-emphasis-runs`,
+  `org-headlines-ids-resolved` and `org-notes-anchors-defined` (notes
+  defined twice, an anchor in emphasis that fails), with pandoc
+  3.14's JSON. After the fixes, under `-O2` and `-OC`: 663 files,
+  662 the same, 1 differing only by decision 57 (`\exp`, which
+  texmath reads as a function name); no other difference in output,
+  warnings or status. pandoc's 36 command tests that read Org hold 58
+  conversions: all 58 give pandoc's output, warnings and status
+  under both models (two need their include files beside them). The
+  fixtures `test/org-select-tags.org`, `tables.org` and `writer.org`
+  give pandoc's JSON. The 289 inputs of pandoc 3.14's
+  `test/Tests/Readers/Org/*.hs`: 283 give pandoc's JSON and warnings,
+  4 differ only by `podoc: ` before the warning, 2 by decision 57
+  (`Inline.hs`'s `\dots` and `\textit`). docs/user/podoc.md describes
+  `-f org`; AGENTS.md and the research document say the reader is
+  done. A missing rST `include` at the end of a file is reported a
+  line early (found on the way), now in "Later". `make test` passed
+  under `-O2` and `-OC`: 453 case tests, 23 round trips, 10 image
+  tests, 20 mermaid tests.
+  The ms and ConTeXt writers were slow on headline-heavy Org input
+  (the largest file ×10: ms 7.0 s, ConTeXt 3.9 s, against 1.3 s for
+  json), nearly all of it collection of ropes built a character at a
+  time. `PdRoff.EscapePDFString` and `PdRoff.ToAscii`, and
+  `PdConTeXt.ToLabel` and `EscUrl`, now fill a buffer and make one
+  rope; `PdMs.Header` makes the bookmark only when a PDF engine is
+  set and the backlink only for the table of contents, where each is
+  written. ms went to 2.8 s and ConTeXt to 2.6 s; the output is the
+  same, byte for byte, as HEAD's on that input, pandoc's
+  `testsuite.txt` and `writer.markdown` and non-ASCII headings, for
+  ms (`-s --toc`, `-V pdf-engine=pdfroff` and `=groff`,
+  `--number-sections`), mom and ConTeXt, under both models. 2026-11-26:
+  `make test` passed under `-O2` and `-OC` on Fedora (atla) and on
+  the six BSDs, FreeBSD 15.1 (alerik, rackhir), NetBSD 11.0 (artos,
+  yishana) and OpenBSD 7.9 (jherek, cymoril), from the working tree
+  with all of the above: 453 case tests, 23 round trips, 20 mermaid
+  tests, and 9 image tests (7 on OpenBSD, which lacks pdfmom 1.23;
+  the conversions skip without rsvg-convert, img2pdf or magick). This
+  covers 28.1, the 3.14 templates, 28.2 and 28.3 as well.
+  `tools/bench org` (2026-11-26, after the fixes, under a 12G cap):
+  podoc `-OC` was 5.2× pandoc's speed to 55× on pandoc's `writer.org`,
+  3.1–3.5× on `tables.org`, 3.2–5.0× on the largest Org file and
+  2.3–3.5× on it ×10, in 4–50% of the memory, and
+  6–13× on the 12,000-item inputs; `-O2` as fast or faster. Results
+  in docs/developer/performance.md's "Org mode", and change 9.

@@ -1,0 +1,7 @@
+* An undefined note [10] in a title
+* An undefined named note [fn:x] in a title
+* A defined note [fn:d] in a title
+* A link [[https://example.com][to somewhere]] in a title
+* A link to [[A defined note]] in a title
+
+[fn:d] The note.

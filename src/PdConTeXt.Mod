@@ -169,33 +169,37 @@ BEGIN
   RETURN out
 END Escape;
 
-(* toLabel *)
+(* toLabel; built in a buffer, as a rope built a character at a time
+   makes much garbage *)
 PROCEDURE ToLabel(r: Rope): Rope;
-  VAR b: Buf; n, i: LONGINT; out: Rope; ch: CHAR;
+  VAR b, o: Buf; n, i, k: LONGINT; ch: CHAR;
 BEGIN
-  n := Len(r); b := ToBuf(r); out := NIL;
+  n := Len(r); IF n = 0 THEN RETURN NIL END;
+  b := ToBuf(r); NEW(o, 4 * n); k := 0;
   FOR i := 0 TO n - 1 DO
     ch := b[i];
     CASE ch OF
       "\", "#", "[", "]", 22X, ",", "{", "}", "%", "(", ")", "|", "=":
-      out := CatC(CatC(CatS(out, "ux"), HexDigit(ORD(ch) DIV 16)), HexDigit(ORD(ch) MOD 16))
-    ELSE out := CatC(out, ch)
+      o[k] := "u"; o[k + 1] := "x"; o[k + 2] := HexDigit(ORD(ch) DIV 16);
+      o[k + 3] := HexDigit(ORD(ch) MOD 16); INC(k, 4)
+    ELSE o[k] := ch; INC(k)
     END
   END;
-  RETURN out
+  RETURN Ropes.FromSubchars(o^, 0, k)
 END ToLabel;
 
 (* A URL with # and % escaped (escConTeXtURL) *)
 PROCEDURE EscUrl(r: Rope): Rope;
-  VAR n, i: LONGINT; out: Rope; ch: CHAR;
+  VAR b, o: Buf; n, i, k: LONGINT; ch: CHAR;
 BEGIN
-  n := Len(r); out := NIL;
+  n := Len(r); IF n = 0 THEN RETURN NIL END;
+  b := ToBuf(r); NEW(o, 2 * n); k := 0;
   FOR i := 0 TO n - 1 DO
-    ch := Ropes.Fetch(r, i);
-    IF (ch = "#") OR (ch = "%") THEN out := CatC(out, "\") END;
-    out := CatC(out, ch)
+    ch := b[i];
+    IF (ch = "#") OR (ch = "%") THEN o[k] := "\"; INC(k) END;
+    o[k] := ch; INC(k)
   END;
-  RETURN out
+  RETURN Ropes.FromSubchars(o^, 0, k)
 END EscUrl;
 
 (* unEscapeString: r with each %XX decoded *)
