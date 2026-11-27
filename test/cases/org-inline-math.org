@@ -1,0 +1,21 @@
+Single: $x$, $a$. and $,$ or $ $ and a$b$c and $a$b.
+
+Text: $a + b$ and $ a$ and $a $ and $a+b$c and $a,$ here.
+
+Lines: $a
+b
+c$ and $a
+b
+c
+d$ end.
+
+Display: $$x^2$$ and $$a
+b$$ and $$$$ empty.
+
+Brackets: \(x + y\) and \[ z \] and \(\) and \(a
+
+b\) blank.
+
+Unclosed: $a and \(b and \[c.
+
+Escaped dollar: 5$ and $5 and $5$.

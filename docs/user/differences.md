@@ -158,7 +158,9 @@ read:
 - table cells that hold blank lines, but for grid tables;
 - raw TeX blocks, LaTeX environments and macros, and the commands
   pandoc's LaTeX reader reads specially (podoc keeps every `\command`
-  with its options and arguments as a raw TeX inline);
+  with its options and arguments as a raw TeX inline; a `%` in its
+  options or arguments is not a comment to podoc: `\qux{50%}` is raw
+  TeX, where pandoc gives the text, and `\qux[a%]` ends at the `]`);
 - citations, example references (`@label`), wikilinks and base64
   data URIs.
 
@@ -214,6 +216,32 @@ read:
   no table of emoji aliases. It drops the emoji under
   `+ascii_identifiers` (`smile`) and keeps a trailing `-` for it under
   `+gfm_auto_identifiers` (`smile-`).
+- LaTeX commands are kept raw (decision 57). pandoc reads a LaTeX
+  command in Org text with its LaTeX reader and turns the commands it
+  knows into inlines through texmath; podoc keeps every command that
+  is not an Org entity as `RawInline (Format "latex")`, ending where
+  podoc's markdown reader ends raw TeX: after the name, a `*`, any
+  `[options]` and `{arguments}`. So:
+  - `\textit{x}` is raw, where pandoc gives `Emph [Str "x"]`; so are
+    `\textbf{x}` (pandoc: `Strong`), `\dots` (pandoc: `…`), the other
+    commands texmath turns into text, and `\c` (a cedilla) in a
+    macro's expansion. Commands texmath does not read, such as
+    `\emph{x}` and `\cite{k}`, are raw in both;
+  - an entity followed by more than `{}`, as in `\alpha{x}`,
+    `\alpha{}{x}`, `\alpha {}`, `\alpha2` and `\alpha*`, is one raw
+    command, where pandoc's texmath gives `Emph [Str "α"]` and the
+    rest (`\alpha{x}`: `Emph [Str "α"], Emph [Str "x"]`);
+  - an unclosed argument ends the command differently: `\bar{ c` is
+    the text `\bar{ c` in podoc, but in pandoc a raw `\bar` and the
+    text `{ c`;
+  - `\begin {equation}x\end{equation}`, with a space after `\begin`,
+    is raw LaTeX in podoc; pandoc gives `Emph [Str "x"]`;
+  - a `%` inside a command's braces is not a comment to podoc:
+    `\foo{x%y}` is raw LaTeX in podoc, the text `\foo{x%y}` in pandoc.
+
+  `$x$`, `\(x\)`, `\[x\]`, `$$x$$` and inline math environments
+  (`\begin{equation}`) are math or raw LaTeX as in pandoc, and
+  `tex:nil` and `tex:verbatim` behave as in pandoc.
 
 ## YAML metadata
 

@@ -81,9 +81,12 @@ pandoc-mermaid-selenium-filter` or `-F pomermaid`; its tests are
 `tools/runmermaid`, with a stand-in pomermaid in `test/mermaid/bin`.
 An Org mode reader, `-f org` (decisions 55 to 59), is planned as
 Phases 26 to 28; 26.1 (blocks of text), 26.2 (lists), 26.3 (blocks),
-26.4 (tables) and 26.5 (the headline tree) are done, 27.1 (text, emphasis and
-verbatim), 27.2 (links, images and targets) and 27.3 (notes,
-citations, macros, snippets and inline source): `PdOrg`, `PdOrgInline` and `PdOrgMeta`. Read `docs/research/org-mode-reader.md` first.
+26.4 (tables) and 26.5 (the headline tree) are done, and Phase 27:
+27.1 (text, emphasis and verbatim), 27.2 (links, images and targets),
+27.3 (notes, citations, macros, snippets and inline source) and 27.4
+(math, Org entities and LaTeX commands): `PdOrg`, `PdOrgInline` and
+`PdOrgMeta`. Phase 28 (metadata, includes, reporting, the corpus) is
+next. Read `docs/research/org-mode-reader.md` first.
 See PLAN.md's State.
 
 ## Reference material

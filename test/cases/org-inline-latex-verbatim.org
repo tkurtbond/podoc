@@ -1,0 +1,5 @@
+#+OPTIONS: tex:verbatim
+
+Raw: a \qux{a} b and \alpha and $x$ and \(y\).
+
+Environment: \begin{equation}x\end{equation} and \begin{math}y\end{math}{} end.

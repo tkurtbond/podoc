@@ -1,0 +1,11 @@
+Greek: \alpha \beta{} \Gamma and \epsilon \varepsilon.
+
+Arrows: \rarr \Rightarrow{} and \larr.
+
+Other: \nbsp a\nbsp{}b \copy \deg \pm \times.
+
+Accents: \DotDot \TripleDot \tdot \DownBreve.
+
+Inside: x\alpha{}y and *\beta{}* and /\gamma/.
+
+Not entities: \notanentity and \fooBar{x}.

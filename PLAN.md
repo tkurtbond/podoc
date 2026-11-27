@@ -4321,3 +4321,30 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   (27.4: `\cite`, `$x$`, and `\c` in a macro's expansion, which is a
   LaTeX command) and metadata (28.1: `#+title`, `tex:`). Not yet run
   on the BSDs.
+- 2026-11-26, Phase 27.4: math and LaTeX in `PdOrgInline`, so Phase
+  27 is done. `$x$` (`math1CharBetween`) and `$text$`
+  (`mathTextBetween`, at most two new lines) with Org's border and
+  post characters, `$$x$$`, `\(x\)` and `\[x\]`, in pandoc's order
+  after the line break. Org entities, `\name` with trailing braces
+  dropped, from `PdEntities` with texmath's six exceptions; `e:nil`
+  leaves the text. The 24 math environments of pandoc's
+  `LaTeX/Math.hs` (`\begin{equation}`, to the first `\end{name}`) as
+  raw LaTeX, any other `\begin`, `\end` and `\and` as text. Every
+  other command as `RawInline latex`, ending where
+  `PdMdInline.RawTeXEnd` (split from `RawTeX`, which is unchanged)
+  ends it; `tex:nil` drops it, `tex:verbatim` makes it a `Str`
+  (decision 57). The commands kept raw where pandoc uses texmath are
+  listed in docs/user/differences.md, with two `%` cases of the
+  markdown reader found on the way. Six case tests
+  (`org-inline-math`, `-entities`, `-entities-nil`, `-latex`,
+  `-latex-nil`, `-latex-verbatim`; JSON from pandoc 3.14). `make
+  test` passed under `-O2` and `-OC`: 434 case tests, 23 round trips,
+  10 image tests, 20 mermaid tests. 440 probes give the same results
+  under both models; 409 match pandoc byte for byte. Of the other
+  31, 21 are metadata (28.1: `#+title`, `#+bibliography`, `tex:` in
+  metadata) and 10 decision 57 (`\dots`, `\textit{...}`, `\c` in two
+  macro expansions, `\alpha{x}` and the like, `\begin {equation}`, an
+  unclosed `\bar{`, `%` in braces). **Phase 27's done-when**: of the
+  125 inputs of pandoc 3.14's `test/Tests/Readers/Org/Inline.hs`,
+  123 match; the 2 others are decision
+  57's `\dots` and `\textit{Emphasised}`. Not yet run on the BSDs.

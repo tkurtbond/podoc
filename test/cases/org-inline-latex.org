@@ -1,0 +1,14 @@
+Raw: \qux and \qux{a} and \qux[b]{c} and \qux{a}{b} here.
+
+Ends: \qux{a b} and \qux{a
+b} and \qux{unclosed.
+
+Not commands: \end and \and and \begin{itemize} and \begin.
+
+Environments: \begin{equation}x\end{equation} and
+\begin{align*}a &= b\\ c\end{align*}{} and
+\begin{math}y\end
+{math} end.
+
+Line break: a \\
+b.

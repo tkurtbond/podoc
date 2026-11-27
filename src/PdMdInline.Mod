@@ -579,16 +579,15 @@ BEGIN
   RETURN -1
 END TeXDimen;
 
-(* rawLaTeXInline': a TeX command, \name, with the spaces after it,
-   a star, its options [...], a dimension and its arguments {...}, as
-   a raw inline, without a final new line. Only the general form of
-   pandoc's LaTeX reader: commands it reads specially, macros and
-   environments are not recognised. *)
-PROCEDURE RawTeX(VAR l: A.Inlines): BOOLEAN;
-  VAR p, q, e: LONGINT;
+(* rawLaTeXInline': a TeX command at p, \name, with the spaces after
+   it, a star, its options [...], a dimension and its arguments {...}:
+   the position after it, or -1. Only the general form of pandoc's
+   LaTeX reader: commands it reads specially, macros and environments
+   are not recognised. *)
+PROCEDURE RawTeXEnd*(p: LONGINT): LONGINT;
+  VAR q: LONGINT;
 BEGIN
-  p := B.pos;
-  IF (B.C(p) # "\") OR ~TeXLetterAt(p + 1) THEN RETURN FALSE END;
+  IF (B.C(p) # "\") OR ~TeXLetterAt(p + 1) THEN RETURN -1 END;
   INC(p);
   WHILE TeXLetterAt(p) DO p := RuneEnd(p) END;
   p := TeXSpaces(p);
@@ -602,8 +601,18 @@ BEGIN
   IF q >= 0 THEN p := q END;
   WHILE B.C(p) = "{" DO
     p := TeXGroup(p, "{", "}");
-    IF p < 0 THEN RETURN FALSE END
+    IF p < 0 THEN RETURN -1 END
   END;
+  RETURN p
+END RawTeXEnd;
+
+(* The command RawTeXEnd finds, as a raw inline, without a final new
+   line *)
+PROCEDURE RawTeX(VAR l: A.Inlines): BOOLEAN;
+  VAR p, e: LONGINT;
+BEGIN
+  p := RawTeXEnd(B.pos);
+  IF p < 0 THEN RETURN FALSE END;
   e := p;
   IF B.C(e - 1) = 0AX THEN DEC(e) END;
   A.Append(l, A.NewRawInline(A.S("tex"), B.Rope(B.pos, e)));

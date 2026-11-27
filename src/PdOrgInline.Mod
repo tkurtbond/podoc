@@ -25,6 +25,13 @@ MODULE PdOrgInline;
    read again as inlines; export snippets @@format:text@@; and inline
    source src_lang[options]{code}.
 
+   Phase 27.4 reads math, $x$ and $$x$$ with Org's border rules,
+   \(x\) and \[x\]; Org entities (\alpha, \alpha{}), looked up in
+   PdEntities with texmath's six exceptions; the math environments
+   (\begin{equation}...\end{equation}) as raw LaTeX; and every other
+   LaTeX command as RawInline latex, ending where PdMdInline.RawTeXEnd
+   ends it, as tex:t, tex:nil and tex:verbatim say (decision 57).
+
    pandoc's parser state is kept in st: the positions of the last pre
    character, forbidden character and Str, the emphasis characters
    open and the new lines allowed. PdOrg's blocks set it as pandoc's
@@ -32,7 +39,7 @@ MODULE PdOrgInline;
    parseFromString), and Save and Restore where an alternative fails. *)
 
 IMPORT Utf8, Unicode, Ropes, A := PdAst, B := PdMdBase, MI := PdMdInline,
-  M := PdOrgMeta;
+  M := PdOrgMeta, PdEntities;
 
 CONST
   NoQuote = 0; InSingle = 1; InDouble = 2; (* the quote context *)
@@ -2027,6 +2034,250 @@ BEGIN
   A.mergeWalk := old
 END Resolve;
 
+(* Math and LaTeX (Phase 27.4) *)
+
+(* Whether ch is one of Org's characters not allowed at the inner
+   border of $ math (mathForbiddenBorderChars, with the $) *)
+PROCEDURE MathBorder(ch: CHAR): BOOLEAN;
+BEGIN
+  RETURN (ch = 09X) OR (ch = 0AX) OR (ch = 0DX) OR (ch = " ")
+    OR (ch = ",") OR (ch = ";") OR (ch = ".") OR (ch = "$")
+END MathBorder;
+
+(* mathPostChars, or the end of the text, at p *)
+PROCEDURE MathPost(p: LONGINT): BOOLEAN;
+  VAR ch: CHAR;
+BEGIN
+  IF p >= B.len THEN RETURN TRUE END;
+  ch := B.C(p);
+  RETURN (ch = 09X) OR (ch = 0AX) OR (ch = " ") OR (ch = 22X)
+    OR (ch = "'") OR (ch = ")") OR (ch = ",") OR (ch = "-")
+    OR (ch = ".") OR (ch = ":") OR (ch = ";") OR (ch = "?")
+END MathPost;
+
+(* mathEnd '$' at p: a character not at the border, a $ and a post
+   character; the position of the $, or -1 *)
+PROCEDURE MathEnd(p: LONGINT): LONGINT;
+  VAR q: LONGINT; r: Utf8.Rune;
+BEGIN
+  IF (p >= B.len) OR MathBorder(B.C(p)) THEN RETURN -1 END;
+  q := MI.RuneAt(p, r);
+  IF (B.C(q) # "$") OR ~MathPost(q + 1) THEN RETURN -1 END;
+  RETURN q
+END MathEnd;
+
+(* rawMathBetween open close: the text from B.pos+LEN(open) to the
+   first close, as math of the kind given *)
+PROCEDURE RawMath(open, close: ARRAY OF CHAR; kind: INTEGER;
+    VAR l: A.Inlines): BOOLEAN;
+  VAR p, q: LONGINT;
+BEGIN
+  IF ~B.Looking(B.pos, open) THEN RETURN FALSE END;
+  p := B.pos + 2; q := p; (* open and close are two characters *)
+  WHILE (q < B.len) & ~B.Looking(q, close) DO INC(q) END;
+  IF q >= B.len THEN RETURN FALSE END;
+  A.Append(l, A.NewMath(kind, B.Rope(p, q)));
+  B.pos := q + 2;
+  RETURN TRUE
+END RawMath;
+
+(* math and displayMath at a $: math1CharBetween, mathTextBetween
+   (at most two new lines inside), then $$...$$ *)
+PROCEDURE DollarMath(VAR l: A.Inlines): BOOLEAN;
+  VAR p, q, start, e: LONGINT; lines: INTEGER; r: Utf8.Rune; ch: CHAR;
+BEGIN
+  p := B.pos;
+  (* math1CharBetween *)
+  IF (p + 1 < B.len) & ~MathBorder(B.C(p + 1)) THEN
+    q := MI.RuneAt(p + 1, r);
+    IF (B.C(q) = "$") & MathPost(q + 1) THEN
+      A.Append(l, A.NewMath(A.InlineMath, B.Rope(p + 1, q)));
+      B.pos := q + 1;
+      RETURN TRUE
+    END
+  END;
+  (* mathTextBetween *)
+  IF ~MathBorder(B.C(p + 1)) THEN
+    start := p + 1; q := start; lines := 0;
+    LOOP
+      e := MathEnd(q);
+      IF e >= 0 THEN
+        IF q = start THEN EXIT END; (* nothing before the final character *)
+        A.Append(l, A.NewMath(A.InlineMath, B.Rope(start, e)));
+        B.pos := e + 1;
+        RETURN TRUE
+      END;
+      ch := B.C(q);
+      IF (q >= B.len) OR (ch = "$") OR (ch = 0DX) THEN EXIT
+      ELSIF ch = 0AX THEN
+        IF lines = 2 THEN EXIT END;
+        INC(lines); INC(q)
+      ELSE q := MI.RuneAt(q, r)
+      END
+    END
+  END;
+  RETURN RawMath("$$", "$$", A.DisplayMath, l)
+END DollarMath;
+
+(* Sp: spaces and tabs at p, and a new line that does not end the
+   paragraph with the spaces and tabs after it *)
+PROCEDURE TeXSp(p: LONGINT): LONGINT;
+BEGIN
+  WHILE (B.C(p) = " ") OR (B.C(p) = 09X) DO INC(p) END;
+  IF (B.C(p) = 0AX) & (p + 1 < B.len) & (B.BlankLine(p + 1) < 0) THEN
+    INC(p);
+    WHILE (B.C(p) = " ") OR (B.C(p) = 09X) DO INC(p) END
+  END;
+  RETURN p
+END TeXSp;
+
+(* The end of the TeX control word at p, a backslash *)
+PROCEDURE TeXName(p: LONGINT): LONGINT;
+  VAR ch: CHAR;
+BEGIN
+  INC(p); ch := B.C(p);
+  WHILE (p < B.len) & ((ch >= 80X) OR B.IsLetter(ch)) DO
+    INC(p); ch := B.C(p)
+  END;
+  RETURN p
+END TeXName;
+
+(* Whether s[from .. to-1] names one of pandoc's inline (math)
+   environments, LaTeX/Math.hs's inlineEnvironments *)
+PROCEDURE MathEnvName(from, to: LONGINT): BOOLEAN;
+  CONST Names = " displaymath math equation equation* gather gather* multline multline* eqnarray eqnarray* align align* alignat alignat* flalign flalign* dmath dmath* dgroup dgroup* darray darray* subequations ";
+  VAR names: ARRAY 256 OF CHAR; i, j: LONGINT; n: LONGINT;
+BEGIN
+  names := Names; n := to - from;
+  IF n <= 0 THEN RETURN FALSE END;
+  i := 0;
+  WHILE names[i] # 0X DO
+    IF names[i] = " " THEN
+      j := 0;
+      WHILE (j < n) & (names[i + 1 + j] = B.C(from + j)) DO INC(j) END;
+      IF (j = n) & (names[i + 1 + j] = " ") THEN RETURN TRUE END
+    END;
+    INC(i)
+  END;
+  RETURN FALSE
+END MathEnvName;
+
+(* {name} at p: the position after it, or -1; the name from n0 to n1 *)
+PROCEDURE EnvName(p: LONGINT; VAR n0, n1: LONGINT): LONGINT;
+BEGIN
+  IF B.C(p) # "{" THEN RETURN -1 END;
+  n0 := p + 1; n1 := n0;
+  WHILE (n1 < B.len) & (B.C(n1) # "}") & (B.C(n1) # 0AX) DO INC(n1) END;
+  IF B.C(n1) # "}" THEN RETURN -1 END;
+  RETURN n1 + 1
+END EnvName;
+
+(* An inline math environment at p, \begin{name}...\end{name}, ended by
+   the first \end{name} (mathEnv): the position after it, or -1 *)
+PROCEDURE MathEnv(p: LONGINT): LONGINT;
+  VAR q, n0, n1, m0, m1, e: LONGINT; ch: CHAR;
+
+  PROCEDURE Same(): BOOLEAN;
+    VAR i: LONGINT;
+  BEGIN
+    IF m1 - m0 # n1 - n0 THEN RETURN FALSE END;
+    FOR i := 0 TO n1 - n0 - 1 DO
+      IF B.C(m0 + i) # B.C(n0 + i) THEN RETURN FALSE END
+    END;
+    RETURN TRUE
+  END Same;
+
+BEGIN
+  q := EnvName(TeXSp(p + 6), n0, n1);
+  IF (q < 0) OR ~MathEnvName(n0, n1) THEN RETURN -1 END;
+  LOOP
+    IF q >= B.len THEN RETURN -1 END;
+    ch := B.C(q);
+    IF ch = "%" THEN (* a comment, to the end of the line *)
+      WHILE (q < B.len) & (B.C(q) # 0AX) DO INC(q) END
+    ELSIF ch = "\" THEN
+      IF B.Looking(q, "\end") & (TeXName(q) = q + 4) THEN
+        e := EnvName(TeXSp(q + 4), m0, m1);
+        IF (e >= 0) & Same() THEN RETURN e END
+      END;
+      INC(q, 2)
+    ELSE INC(q)
+    END
+  END
+END MathEnv;
+
+(* An Org entity: \name with any final braces dropped, from p to e,
+   found in texmath's MathML table, PdEntities with its six
+   differences; added to l *)
+PROCEDURE Entity(p, e: LONGINT; VAR l: A.Inlines): BOOLEAN;
+  VAR name: ARRAY 40 OF CHAR; i, n, c1, c2: LONGINT;
+BEGIN
+  n := e;
+  WHILE (n > p + 1) & ((B.C(n - 1) = "{") OR (B.C(n - 1) = "}")) DO DEC(n) END;
+  INC(p);
+  IF (n <= p) OR (n - p >= LEN(name)) THEN RETURN FALSE END;
+  FOR i := p TO n - 1 DO name[i - p] := B.C(i) END;
+  name[n - p] := 0X;
+  IF ~PdEntities.Lookup(name, c1, c2) THEN RETURN FALSE END;
+  IF name = "epsilon" THEN c1 := 3F5H; c2 := 0
+  ELSIF name = "varepsilon" THEN c1 := 3B5H; c2 := 0
+  ELSIF name = "DotDot" THEN c1 := 20H; c2 := 20DCH
+  ELSIF (name = "TripleDot") OR (name = "tdot") THEN c1 := 20H; c2 := 20DBH
+  ELSIF name = "DownBreve" THEN c1 := 20H; c2 := 311H
+  END;
+  IF ~M.entities THEN A.Append(l, A.NewStr(B.Rope(p - 1, e)))
+  ELSE
+    MI.AddChar(l, c1);
+    IF c2 # 0 THEN MI.AddChar(l, c2) END
+  END;
+  RETURN TRUE
+END Entity;
+
+(* inlineLaTeX: an Org entity, a LaTeX command or an inline math
+   environment, as tex: and e: say. A command ends as PdMdInline's
+   raw TeX does (decision 57): what pandoc gives through texmath is a
+   RawInline here. *)
+PROCEDURE InlineLaTeX(VAR l: A.Inlines): BOOLEAN;
+  VAR p, e, f, n: LONGINT;
+BEGIN
+  p := B.pos;
+  IF (B.C(p) # "\") OR (p + 1 >= B.len) THEN RETURN FALSE END;
+  n := TeXName(p);
+  IF (n = p + 4) & B.Looking(p, "\end")
+      OR (n = p + 4) & B.Looking(p, "\and") THEN
+    RETURN FALSE
+  ELSIF (n = p + 6) & B.Looking(p, "\begin") THEN
+    e := MathEnv(p);
+    IF e < 0 THEN RETURN FALSE END;
+    f := e;
+    WHILE B.Looking(f, "{}") DO INC(f, 2) END; (* finalbraces *)
+    IF B.C(n) = "{" THEN (* \begin{: parseAsInlineLaTeX *)
+      IF M.latex = M.TexExport THEN
+        A.Append(l, A.NewRawInline(A.S("latex"), B.Rope(p, e)))
+      ELSIF M.latex = M.TexVerbatim THEN A.Append(l, BText(p, f))
+      END
+    ELSIF M.latex = M.TexExport THEN
+      A.Append(l, A.NewRawInline(A.S("latex"), B.Rope(p, f)))
+    ELSIF M.latex = M.TexVerbatim THEN A.Append(l, A.NewStr(B.Rope(p, f)))
+    END;
+    B.pos := f;
+    RETURN TRUE
+  END;
+  e := MI.RawTeXEnd(p);
+  IF e < 0 THEN RETURN FALSE END;
+  WHILE (e > p) & ((B.C(e - 1) = " ") OR (B.C(e - 1) = 09X)
+      OR (B.C(e - 1) = 0AX) OR (B.C(e - 1) = 0DX)) DO
+    DEC(e)
+  END;
+  IF Entity(p, e, l) THEN
+  ELSIF M.latex = M.TexExport THEN
+    A.Append(l, A.NewRawInline(A.S("latex"), B.Rope(p, e)))
+  ELSIF M.latex = M.TexVerbatim THEN A.Append(l, A.NewStr(B.Rope(p, e)))
+  END;
+  B.pos := e;
+  RETURN TRUE
+END InlineLaTeX;
+
 (* inline: one inline at B.pos, added to l; FALSE, with B.pos and the
    state as they were, if there is none. *)
 PROCEDURE Inline*(VAR l: A.Inlines): BOOLEAN;
@@ -2046,7 +2297,10 @@ BEGIN
     WHILE B.IsSpace(B.C(p)) DO INC(p) END;
     B.pos := p; Newline;
     A.Append(l, A.NewSimple(A.Space))
-  ELSIF (ch = "\") & Linebreak(l) THEN
+  ELSIF (ch = "\") & (Linebreak(l)
+      OR RawMath("\(", "\)", A.InlineMath, l)
+      OR RawMath("\[", "\]", A.DisplayMath, l) OR InlineLaTeX(l)) THEN
+  ELSIF (ch = "$") & DollarMath(l) THEN
   ELSIF (ch = "[") & (Cite(l) OR Footnote(l) OR ExplicitLink(l) OR SelfLink(l)) THEN
   ELSIF (ch = "<") & (AngleLink(l) OR Anchor(l)) THEN
   ELSIF ch = 0AX THEN RETURN Endline(l)

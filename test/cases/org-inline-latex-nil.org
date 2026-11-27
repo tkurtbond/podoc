@@ -1,0 +1,5 @@
+#+OPTIONS: tex:nil
+
+Raw: a \qux{a} b and \alpha and $x$ and \(y\).
+
+Environment: \begin{equation}x\end{equation} end.
