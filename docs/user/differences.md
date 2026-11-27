@@ -208,6 +208,12 @@ read:
 - A column width in an alignment row (`<10>`, `<l10>`) is read as a
   number exact up to 2^53; pandoc reads it as an `Int`, which wraps
   at 2^63.
+- With `+gfm_auto_identifiers` or `+ascii_identifiers`, pandoc
+  replaces an emoji in a headline with its alias when it makes the
+  headline's identifier: `* Smile 😄` gets `smile-smile`. podoc has
+  no table of emoji aliases. It drops the emoji under
+  `+ascii_identifiers` (`smile`) and keeps a trailing `-` for it under
+  `+gfm_auto_identifiers` (`smile-`).
 
 ## YAML metadata
 

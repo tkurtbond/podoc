@@ -7,22 +7,25 @@ MODULE PdOrg;
 
    Phase 26.1: paragraphs and Plain, blank lines, horizontal rules,
    fixed-width lines, comment lines, raw export lines, keywords and
-   #+OPTIONS; headlines only as headers with their identifiers, until
-   Phase 26.5. Phase 26.2: bullet, ordered and definition lists, with
+   #+OPTIONS. Phase 26.2: bullet, ordered and definition lists, with
    checkboxes. Phase 26.3: block attributes and figures, #+begin_
    blocks (source, example, quote, verse, export and raw, comment,
    admonitions, abstract and the rest as Divs), dynamic blocks,
    drawers, LaTeX environments and footnote definitions, kept until
    Phase 27.3 resolves their references. Phase 26.4: Org tables and
-   table.el tables (PdGridTable). Phase 27.2: #+LINK formats, and
+   table.el tables (PdGridTable). Phase 26.5: the headline tree, with
+   TODO keywords, priorities, tags, planning, property drawers,
+   COMMENT, ARCHIVE, select and exclude tags and H:. Phase 27.2: #+LINK formats, and
    PdOrgInline.Resolve's pass over the document for links. *)
 
-IMPORT Ropes, PdIO, A := PdAst, B := PdMdBase, MI := PdMdInline,
+IMPORT Ropes, Utf8, Unicode, PdIO, A := PdAst, B := PdMdBase, MI := PdMdInline,
   I := PdOrgInline, M := PdOrgMeta, SH := PdShared, G := PdGridTable;
 
 CONST
   Quiet* = 0; WarnUnknown* = 1; FailUnknown* = 2; (* unknown *)
   KeySize = 64;
+  IdTableSize = 4093; (* the buckets of the identifiers' table, a
+    prime, as PdMarkdown's *)
 
   (* the keywords pandoc's keywordHandlers know *)
   Keywords = " author bibliography creator date description email exclude_tags header-includes html_head html_head_extra institute keywords language latex_class latex_class_options latex_header latex_header_extra link macro nocite options pandoc-emphasis-post pandoc-emphasis-pre result select_tags seq_todo subtitle title todo typ_todo ";
@@ -52,6 +55,41 @@ TYPE
     next: Note
   END;
 
+  (* a property of a headline's drawer, key in lower case *)
+  Prop = POINTER TO RECORD
+    key, value: A.Rope;
+    next: Prop
+  END;
+
+  (* a TODO keyword *)
+  Marker = POINTER TO RECORD
+    name: A.Rope;
+    s: POINTER TO ARRAY OF CHAR; (* name, its bytes *)
+    len: LONGINT; (* their number *)
+    done: BOOLEAN; (* a done keyword, not a todo one *)
+    next: Marker
+  END;
+
+  (* a headline and the tree under it *)
+  Headline = POINTER TO RECORD
+    level: LONGINT;
+    marker: Marker; (* its TODO keyword, or NIL *)
+    title: A.Inline;
+    tags: A.StrList;
+    closed, deadline, scheduled: A.Rope; (* its planning, or NIL *)
+    props: Prop;
+    contents: A.Block;
+    children, next: Headline
+  END;
+
+  (* an identifier used, in the table's bucket *)
+  IdSlot = POINTER TO RECORD
+    key: A.Rope;
+    n: LONGINT; (* the last suffix tried for key as a base *)
+    next: IdSlot
+  END;
+  IdTable = POINTER TO ARRAY IdTableSize OF IdSlot;
+
   Ints = POINTER TO ARRAY OF INTEGER;
   Reals = POINTER TO ARRAY OF LONGREAL;
 
@@ -63,7 +101,11 @@ VAR
   unknown*: INTEGER; (* --unknown: Quiet, WarnUnknown or FailUnknown *)
   columns*: LONGINT; (* pandoc's readerColumns, from --columns *)
 
-  ids: A.StrList; (* the identifiers used so far *)
+  idTable: IdTable; (* the identifiers used so far *)
+  markers: Marker; (* the active TODO keywords, in the order tried *)
+  customTodo: BOOLEAN; (* a #+todo line has replaced the default *)
+  selectTags, excludeTags: A.StrList;
+  selectSet, excludeSet: BOOLEAN; (* a line has set them *)
   inList: BOOLEAN; (* in a list item: the context ListItemState *)
   fresh: BOOLEAN; (* orgStateLastPreCharPos is Nothing: nothing read
     since a parseFromString began or ended, as at an item's start or
@@ -138,14 +180,22 @@ BEGIN
   RETURN TRUE
 END Example;
 
+PROCEDURE ^ TodoSequence(p: LONGINT): BOOLEAN;
+PROCEDURE ^ TagList(p: LONGINT; select: BOOLEAN): BOOLEAN;
+
 (* keywordLine: a keyword pandoc knows, after #+ and the key.
-   #+OPTIONS, #+pandoc-emphasis-pre and -post, and #+LINK are read;
+   #+OPTIONS, #+pandoc-emphasis-pre and -post, #+LINK, the TODO
+   sequences and #+select_tags and #+exclude_tags are read;
    the rest of the others' lines are passed over, for later phases. *)
 PROCEDURE KeywordLine(VAR k: Key; p: LONGINT): BOOLEAN;
 BEGIN
   IF ~InList(k, Keywords) THEN RETURN FALSE END;
   IF k = "options" THEN B.pos := M.Options(p)
   ELSIF (k = "link") & ~I.LinkFormat(p) THEN RETURN FALSE
+  ELSIF (k = "todo") OR (k = "seq_todo") OR (k = "typ_todo") THEN
+    IF ~TodoSequence(p) THEN RETURN FALSE END
+  ELSIF (k = "select_tags") OR (k = "exclude_tags") THEN
+    IF ~TagList(p, k = "select_tags") THEN RETURN FALSE END
   ELSE
     IF k = "pandoc-emphasis-pre" THEN I.EmphChars(FALSE, p)
     ELSIF k = "pandoc-emphasis-post" THEN I.EmphChars(TRUE, p)
@@ -1720,61 +1770,684 @@ END Blocks;
 
 (* The headline tree *)
 
-(* uniqueIdent: id, or id-1, id-2, ... if it has been used; section
-   if id is empty *)
-PROCEDURE UniqueId(id: A.Rope): A.Rope;
-  VAR s: A.StrList; base: A.Rope; n: LONGINT;
+(* Identifiers *)
 
-  PROCEDURE Used(r: A.Rope): BOOLEAN;
-    VAR s: A.StrList;
-  BEGIN
-    s := ids;
-    WHILE (s # NIL) & ~Ropes.Equal(s.s, r) DO s := s.next END;
-    RETURN s # NIL
-  END Used;
-
+PROCEDURE Bucket(key: A.Rope): LONGINT;
 BEGIN
-  IF Ropes.Length(id) = 0 THEN id := A.S("section") END;
-  base := id; n := 0;
-  WHILE Used(id) DO
-    INC(n); id := Ropes.Cat(Ropes.Cat(base, A.S("-")), SH.IntRope(n))
-  END;
-  NEW(s); s.s := id; s.next := ids; ids := s;
+  RETURN SHORT(Ropes.Hash(key) MOD IdTableSize)
+END Bucket;
+
+(* The slot of the identifier id, NIL if it has not been used *)
+PROCEDURE Find(id: A.Rope): IdSlot;
+  VAR s: IdSlot;
+BEGIN
+  s := idTable[Bucket(id)];
+  WHILE (s # NIL) & ~Ropes.Equal(s.key, id) DO s := s.next END;
+  RETURN s
+END Find;
+
+(* Records id as used. *)
+PROCEDURE Use(id: A.Rope);
+  VAR s: IdSlot; b: LONGINT;
+BEGIN
+  IF Find(id) = NIL THEN
+    b := Bucket(id);
+    NEW(s); s.key := id; s.n := 0; s.next := idTable[b]; idTable[b] := s
+  END
+END Use;
+
+(* uniqueIdent: the identifier of title, or it with -1, -2, ... if it
+   has been used; section if it is empty. It is recorded as used. *)
+PROCEDURE UniqueId(title: A.Inline): A.Rope;
+  VAR base, id: A.Rope; s: IdSlot;
+BEGIN
+  base := MI.IdentifierExt(title, gfmIds, asciiIds);
+  IF Ropes.Length(base) = 0 THEN base := A.S("section") END;
+  s := Find(base);
+  IF s = NIL THEN Use(base); RETURN base END;
+  (* the suffixes before s.n + 1 are used already *)
+  REPEAT
+    INC(s.n);
+    id := Ropes.Cat(Ropes.Cat(base, A.S("-")), SH.IntRope(s.n))
+  UNTIL (Find(id) = NIL) OR (s.n >= 60000);
+  IF Find(id) # NIL THEN RETURN base END;
+  Use(id);
   RETURN id
 END UniqueId;
 
-(* A headline at B.pos, a Header of its title. Phase 26.5 reads the
-   rest: TODO keywords, priorities, tags, property drawers and the
-   tree's sections. *)
-PROCEDURE Headline(VAR l: A.Blocks);
-  VAR level: LONGINT; t: A.Inlines; i: A.Inline; id: A.Rope;
-BEGIN
-  B.pos := I.HeaderStart(B.pos, level); I.SetPre;
-  A.InitInlines(t);
-  WHILE (B.pos < B.len) & (B.t[B.pos] # 0AX) & I.Inline(t) DO END;
-  IF B.C(B.pos) = 0AX THEN INC(B.pos); I.Newline END;
-  i := MI.Trim(t);
-  id := A.S("");
-  IF autoIds THEN id := UniqueId(MI.Identifier(i)) END;
-  IF level > MAX(INTEGER) THEN level := MAX(INTEGER) END;
-  A.AddBlock(l, A.NewHeader(SHORT(level), A.NewAttr(id), i))
-END Headline;
+(* Parsing *)
 
-(* documentTree: the blocks before the first headline, then the
-   headlines and the blocks after each *)
-PROCEDURE DocumentTree(VAR l: A.Blocks);
-  VAR n: LONGINT;
+(* The default TODO keywords: TODO, then DONE *)
+PROCEDURE NewDefaultMarkers(): Marker;
+  VAR m: Marker;
+
+  PROCEDURE New(name: ARRAY OF CHAR; done: BOOLEAN; next: Marker): Marker;
+    VAR m: Marker; i: LONGINT;
+  BEGIN
+    NEW(m); m.name := A.S(name); m.done := done; m.next := next;
+    i := 0; WHILE name[i] # 0X DO INC(i) END;
+    m.len := i; NEW(m.s, i + 1);
+    i := 0; WHILE name[i] # 0X DO m.s[i] := name[i]; INC(i) END;
+    m.s[i] := 0X;
+    RETURN m
+  END New;
+
 BEGIN
-  Blocks(l);
-  WHILE (B.pos < B.len) & (I.HeaderStart(B.pos, n) >= 0) DO
-    Headline(l); Blocks(l)
-  END
+  m := New("DONE", TRUE, NIL);
+  RETURN New("TODO", FALSE, m)
+END NewDefaultMarkers;
+
+(* Whether c, not ASCII, is a letter or a number *)
+PROCEDURE IsAlnumRune(c: Utf8.Rune): BOOLEAN;
+BEGIN
+  RETURN Unicode.IsLetter(c) OR Unicode.IsNumber(c)
+END IsAlnumRune;
+
+(* orgTagWord: letters, numbers and @%#_; where it ends, or -1 *)
+PROCEDURE TagWord(p: LONGINT): LONGINT;
+  VAR q, r: LONGINT; ch: CHAR; c: Utf8.Rune;
+BEGIN
+  q := p;
+  LOOP
+    IF q >= B.len THEN EXIT END;
+    ch := B.t[q];
+    IF ch < 80X THEN
+      IF B.IsAlnum(ch) OR (ch = "@") OR (ch = "%") OR (ch = "#")
+          OR (ch = "_") THEN
+        INC(q)
+      ELSE EXIT
+      END
+    ELSE
+      r := q;
+      IF Utf8.Decode(B.t^, r, c) & (r > q) & IsAlnumRune(c) THEN q := r
+      ELSE EXIT
+      END
+    END
+  END;
+  IF q = p THEN RETURN -1 END;
+  RETURN q
+END TagWord;
+
+(* Adds s to the list from first to last. *)
+PROCEDURE AddStr(VAR first, last: A.StrList; s: A.Rope);
+  VAR n: A.StrList;
+BEGIN
+  NEW(n); n.s := s; n.next := NIL;
+  IF first = NIL THEN first := n ELSE last.next := n END;
+  last := n
+END AddStr;
+
+(* Whether s is in the list l *)
+PROCEDURE Member(s: A.Rope; l: A.StrList): BOOLEAN;
+BEGIN
+  WHILE (l # NIL) & ~Ropes.Equal(l.s, s) DO l := l.next END;
+  RETURN l # NIL
+END Member;
+
+(* tagList, for #+select_tags (select) and #+exclude_tags: words up to
+   the new line. The first such line replaces the default, export or
+   noexport; later ones add to it. *)
+PROCEDURE TagList(p: LONGINT; select: BOOLEAN): BOOLEAN;
+  VAR q, e: LONGINT; first, last, s: A.StrList;
+BEGIN
+  q := B.SkipSpaces(p); first := NIL; last := NIL;
+  LOOP
+    e := TagWord(q);
+    IF e < 0 THEN EXIT END;
+    AddStr(first, last, B.Rope(q, e));
+    q := B.SkipSpaces(e)
+  END;
+  IF B.C(q) # 0AX THEN RETURN FALSE END;
+  IF select & ~selectSet THEN selectTags := first; selectSet := TRUE
+  ELSIF ~select & ~excludeSet THEN excludeTags := first; excludeSet := TRUE
+  ELSE
+    WHILE first # NIL DO
+      s := first.next;
+      IF select THEN first.next := selectTags; selectTags := first
+      ELSE first.next := excludeTags; excludeTags := first
+      END;
+      first := s
+    END
+  END;
+  B.pos := q + 1;
+  RETURN TRUE
+END TagList;
+
+(* A marker named t[from .. to-1] *)
+PROCEDURE NewMarker(from, to: LONGINT; done: BOOLEAN): Marker;
+  VAR m: Marker; i: LONGINT;
+BEGIN
+  NEW(m); m.name := B.Rope(from, to); m.done := done; m.len := to - from;
+  NEW(m.s, to - from + 1);
+  FOR i := 0 TO to - from - 1 DO m.s[i] := B.t[from + i] END;
+  m.s[to - from] := 0X;
+  m.next := NIL;
+  RETURN m
+END NewMarker;
+
+(* todoSequence, for #+todo, #+seq_todo and #+typ_todo: keywords, then
+   | and the done keywords; without |, the last keyword is the done
+   one. The sequence comes before those registered earlier, and
+   replaces the default TODO and DONE. *)
+PROCEDURE TodoSequence(p: LONGINT): BOOLEAN;
+  VAR q, r: LONGINT; first, last, m: Marker; hasDone: BOOLEAN;
+
+  (* todoDoneSep: spaces, |, and one or more spaces; where it ends, or
+     -1 *)
+  PROCEDURE Sep(p: LONGINT): LONGINT;
+  BEGIN
+    p := B.SkipSpaces(p);
+    IF (B.C(p) = "|") & B.IsSpace(B.C(p + 1)) THEN
+      RETURN B.SkipSpaces(p + 1)
+    END;
+    RETURN -1
+  END Sep;
+
+  (* todoKeyword at q, added to the list; q past it and its spaces *)
+  PROCEDURE Word(done: BOOLEAN): BOOLEAN;
+    VAR e, c: LONGINT; ch: CHAR; m: Marker;
+  BEGIN
+    e := q;
+    LOOP
+      ch := B.C(e);
+      IF (e >= B.len) OR (ch = " ") OR (ch = 09X) OR (ch = 0AX)
+          OR (ch = 0DX) THEN
+        EXIT
+      END;
+      INC(e)
+    END;
+    IF e = q THEN RETURN FALSE END;
+    c := q;
+    WHILE (c < e) & (B.t[c] # "(") DO INC(c) END;
+    m := NewMarker(q, c, done);
+    IF first = NIL THEN first := m ELSE last.next := m END;
+    last := m;
+    q := B.SkipSpaces(e);
+    RETURN TRUE
+  END Word;
+
+BEGIN
+  q := p; first := NIL; last := NIL;
+  WHILE (Sep(q) < 0) & (B.C(q) # 0AX) DO
+    IF ~Word(FALSE) THEN RETURN FALSE END
+  END;
+  hasDone := FALSE;
+  r := Sep(q);
+  IF r >= 0 THEN
+    hasDone := TRUE; q := r;
+    WHILE B.C(q) # 0AX DO
+      IF ~Word(TRUE) THEN RETURN FALSE END;
+      r := Sep(q);
+      IF r >= 0 THEN q := r END
+    END
+  END;
+  IF B.C(q) # 0AX THEN RETURN FALSE END;
+  IF ~hasDone THEN
+    IF first = NIL THEN RETURN FALSE END;
+    last.done := TRUE
+  END;
+  IF ~customTodo THEN markers := NIL; customTodo := TRUE END;
+  IF first # NIL THEN last.next := markers; markers := first END;
+  B.pos := q + 1;
+  RETURN TRUE
+END TodoSequence;
+
+(* endOfTitle at p: spaces, tags :a:b: and spaces, and a new line;
+   where it ends, past the new line, with the tags, or -1 *)
+PROCEDURE EndOfTitle(p: LONGINT; VAR tags: A.StrList): LONGINT;
+  VAR q, r, e: LONGINT; last: A.StrList; ok: BOOLEAN;
+BEGIN
+  tags := NIL; last := NIL;
+  q := B.SkipSpaces(p);
+  IF B.C(q) = ":" THEN (* headerTags *)
+    r := q + 1; ok := FALSE;
+    LOOP
+      e := TagWord(r);
+      IF e < 0 THEN EXIT END;
+      IF B.C(e) # ":" THEN ok := FALSE; EXIT END;
+      AddStr(tags, last, B.Rope(r, e)); ok := TRUE;
+      r := e + 1
+    END;
+    IF ok THEN q := B.SkipSpaces(r) ELSE tags := NIL END
+  END;
+  IF B.C(q) = 0AX THEN RETURN q + 1 END;
+  tags := NIL;
+  RETURN -1
+END EndOfTitle;
+
+(* planningInfo at p: SCHEDULED:, DEADLINE: and CLOSED: and their
+   timestamps, then a new line; where it ends, or -1. The first of each
+   kind is kept. *)
+PROCEDURE Planning(p: LONGINT; h: Headline): LONGINT;
+  VAR q, r, e, n, k: LONGINT; close: CHAR; ts, c, d, s: A.Rope;
+BEGIN
+  q := p; n := 0; c := NIL; d := NIL; s := NIL;
+  LOOP
+    r := B.SkipSpaces(q);
+    IF B.Looking(r, "SCHEDULED:") THEN k := 0; r := r + 10
+    ELSIF B.Looking(r, "DEADLINE:") THEN k := 1; r := r + 9
+    ELSIF B.Looking(r, "CLOSED:") THEN k := 2; r := r + 7
+    ELSIF (n > 0) & (r = q) & (B.C(q) = 0AX) THEN EXIT
+    ELSE RETURN -1
+    END;
+    r := B.SkipSpaces(r);
+    IF B.C(r) = "<" THEN close := ">"
+    ELSIF B.C(r) = "[" THEN close := "]"
+    ELSE RETURN -1
+    END;
+    IF r + 1 >= B.len THEN RETURN -1 END;
+    e := r + 2;
+    WHILE (e < B.len) & (B.t[e] # close) DO INC(e) END;
+    IF e >= B.len THEN RETURN -1 END;
+    ts := B.Rope(r, e + 1);
+    IF (k = 0) & (s = NIL) THEN s := ts
+    ELSIF (k = 1) & (d = NIL) THEN d := ts
+    ELSIF (k = 2) & (c = NIL) THEN c := ts
+    END;
+    INC(n); q := e + 1
+  END;
+  h.scheduled := s; h.deadline := d; h.closed := c;
+  RETURN q + 1
+END Planning;
+
+(* t[from .. to-1] in lower case, as Text's toLower makes it *)
+PROCEDURE LowerRope(from, to: LONGINT): A.Rope;
+  VAR b: B.Buf; p, q: LONGINT; c: Utf8.Rune;
+BEGIN
+  B.InitBuf(b); p := from;
+  WHILE p < to DO
+    q := p;
+    IF ~Utf8.Decode(B.t^, q, c) OR (q <= p) OR (q > to) THEN
+      B.PutChar(b, B.t[p]); INC(p)
+    ELSE
+      B.PutUtf8(b, Unicode.ToLower(c)); p := q
+    END
+  END;
+  RETURN B.BufRope(b)
+END LowerRope;
+
+(* Whether there is a byte at p, and it is not a space, a tab or a new
+   line (nonspaceChar) *)
+PROCEDURE NonSpaceChar(p: LONGINT): BOOLEAN;
+  VAR ch: CHAR;
+BEGIN
+  ch := B.C(p);
+  RETURN (p < B.len) & (ch # " ") & (ch # 09X) & (ch # 0AX) & (ch # 0DX)
+END NonSpaceChar;
+
+(* propertiesDrawer at p: :PROPERTIES:, lines :key: value, and :END:;
+   where it ends, past the new line, with the properties in order, or
+   -1 *)
+PROCEDURE Properties(p: LONGINT; VAR props: Prop): LONGINT;
+  VAR q, s, e, k, v, w: LONGINT; first, last, n: Prop;
+BEGIN
+  q := I.DrawerStart(p);
+  IF q < 0 THEN RETURN -1 END;
+  s := B.SkipSpaces(p) + 1; e := s;
+  WHILE B.t[e] # ":" DO INC(e) END;
+  IF (e - s # 10) OR ~LookingCI(s, "properties") THEN RETURN -1 END;
+  first := NIL; last := NIL;
+  LOOP
+    e := DrawerEnd(q);
+    IF e >= 0 THEN EXIT END;
+    (* the key: :, a nonspace character, then any up to a : and a
+       space *)
+    k := B.SkipSpaces(q);
+    IF (B.C(k) # ":") OR ~NonSpaceChar(k + 1) THEN RETURN -1 END;
+    INC(k); e := k + 1;
+    WHILE ~((B.C(e) = ":") & B.IsSpace(B.C(e + 1))) DO
+      IF ~NonSpaceChar(e) THEN RETURN -1 END;
+      INC(e)
+    END;
+    (* the value: up to spaces and the new line *)
+    v := B.SkipSpaces(e + 2);
+    w := B.LineEnd(v);
+    IF w >= B.len THEN RETURN -1 END;
+    q := w + 1;
+    WHILE (w > v) & B.IsSpace(B.t[w - 1]) DO DEC(w) END;
+    NEW(n); n.key := LowerRope(k, e); n.value := B.Rope(v, w); n.next := NIL;
+    IF first = NIL THEN first := n ELSE last.next := n END;
+    last := n
+  END;
+  props := first;
+  RETURN e
+END Properties;
+
+(* headline: a headline of level lvl or more, its TODO keyword, title,
+   tags, planning, properties, blocks and the headlines under it; NIL,
+   with B.pos and the state as they were, if there is none *)
+PROCEDURE ParseHeadline(lvl: LONGINT): Headline;
+  VAR s: I.State; h, c, last: Headline; level, p, q: LONGINT; m: Marker;
+    t: A.Inlines; tags: A.StrList; l: A.Blocks; i: LONGINT; ok: BOOLEAN;
+BEGIN
+  I.Save(s);
+  p := I.HeaderStart(B.pos, level);
+  IF (p < 0) OR (level < lvl) THEN RETURN NIL END;
+  B.pos := p; I.SetPre;
+  NEW(h); h.level := level; h.marker := NIL; h.props := NIL;
+  h.closed := NIL; h.deadline := NIL; h.scheduled := NIL;
+  h.children := NIL; h.next := NIL;
+  (* todoKeyword *)
+  m := markers; ok := FALSE;
+  WHILE (m # NIL) & ~ok DO
+    i := 0;
+    WHILE (i < m.len) & (B.C(B.pos + i) = m.s[i]) DO INC(i) END;
+    ok := (m.len > 0) & (i = m.len) & B.IsSpace(B.C(B.pos + i));
+    IF ~ok THEN m := m.next END
+  END;
+  IF ok THEN h.marker := m; B.pos := B.pos + m.len + 1; I.SetPre END;
+  (* the title, up to endOfTitle *)
+  A.InitInlines(t);
+  LOOP
+    q := EndOfTitle(B.pos, tags);
+    IF q >= 0 THEN EXIT END;
+    IF ~I.Inline(t) THEN I.Restore(s); RETURN NIL END
+  END;
+  B.pos := q; I.Newline;
+  h.title := MI.Trim(t); h.tags := tags;
+  q := Planning(B.pos, h);
+  IF q >= 0 THEN B.pos := q; I.Newline END;
+  q := Properties(B.pos, h.props);
+  IF q >= 0 THEN B.pos := q; I.Newline END;
+  A.InitBlocks(l); Blocks(l); h.contents := l.first;
+  last := NIL;
+  LOOP
+    c := ParseHeadline(level + 1);
+    IF c = NIL THEN EXIT END;
+    IF last = NIL THEN h.children := c ELSE last.next := c END;
+    last := c
+  END;
+  RETURN h
+END ParseHeadline;
+
+(* documentTree: comment lines, a properties drawer, the blocks before
+   the first headline, and the headlines, as the children of a root of
+   level 0 *)
+PROCEDURE DocumentTree(): Headline;
+  VAR root, h, last: Headline; q: LONGINT; l: A.Blocks;
+BEGIN
+  NEW(root); root.level := 0; root.marker := NIL; root.title := NIL;
+  root.tags := NIL; root.closed := NIL; root.deadline := NIL;
+  root.scheduled := NIL; root.props := NIL; root.children := NIL;
+  root.next := NIL;
+  WHILE (B.pos < B.len) & (I.CommentLineStart(B.pos) >= 0) DO
+    B.pos := NextLine(B.pos); I.Newline
+  END;
+  q := Properties(B.pos, root.props);
+  IF q >= 0 THEN B.pos := q; I.Newline END;
+  A.InitBlocks(l); Blocks(l); root.contents := l.first;
+  last := NIL;
+  WHILE B.pos < B.len DO
+    h := ParseHeadline(1);
+    IF h = NIL THEN (* pandoc fails here; podoc passes over the line *)
+      B.pos := NextLine(B.pos); I.Newline
+    ELSE
+      IF last = NIL THEN root.children := h ELSE last.next := h END;
+      last := h
+    END
+  END;
+  RETURN root
 END DocumentTree;
+
+(* Conversion to blocks *)
+
+(* Whether one of h's tags is in l *)
+PROCEDURE HasTag(h: Headline; l: A.StrList): BOOLEAN;
+  VAR t: A.StrList;
+BEGIN
+  t := h.tags;
+  WHILE (t # NIL) & ~Member(t.s, l) DO t := t.next END;
+  RETURN t # NIL
+END HasTag;
+
+(* docContainsSelectTags *)
+PROCEDURE ContainsSelect(h: Headline): BOOLEAN;
+  VAR c: Headline;
+BEGIN
+  IF HasTag(h, selectTags) THEN RETURN TRUE END;
+  c := h.children;
+  WHILE (c # NIL) & ~ContainsSelect(c) DO c := c.next END;
+  RETURN c # NIL
+END ContainsSelect;
+
+(* The list of headlines from h kept by includeAncestorsAndSelected:
+   those with a select tag, whole, and those with such a headline
+   under them, with only their children kept *)
+PROCEDURE IncludeSelected(h: Headline): Headline;
+  VAR first, last, n: Headline;
+BEGIN
+  first := NIL; last := NIL;
+  WHILE h # NIL DO
+    n := h.next;
+    IF ~HasTag(h, selectTags) THEN h.children := IncludeSelected(h.children) END;
+    IF HasTag(h, selectTags) OR (h.children # NIL) THEN
+      h.next := NIL;
+      IF first = NIL THEN first := h ELSE last.next := h END;
+      last := h
+    END;
+    h := n
+  END;
+  RETURN first
+END IncludeSelected;
+
+(* removeExplicitlyExcludedNodes: the headlines under h with an
+   exclude tag dropped *)
+PROCEDURE RemoveExcluded(h: Headline);
+  VAR c, first, last, n: Headline;
+BEGIN
+  c := h.children; first := NIL; last := NIL;
+  WHILE c # NIL DO
+    n := c.next;
+    IF ~HasTag(c, excludeTags) THEN
+      c.next := NIL; RemoveExcluded(c);
+      IF first = NIL THEN first := c ELSE last.next := c END;
+      last := c
+    END;
+    c := n
+  END;
+  h.children := first
+END RemoveExcluded;
+
+(* The first value of property key, NIL if there is none *)
+PROCEDURE Property(props: Prop; key: ARRAY OF CHAR): A.Rope;
+BEGIN
+  WHILE (props # NIL) & ~Ropes.EqualString(props.key, key) DO
+    props := props.next
+  END;
+  IF props = NIL THEN RETURN NIL END;
+  RETURN props.value
+END Property;
+
+(* propertiesToAttr: the identifier from custom_id or id, the classes
+   from class and unnumbered, the other properties as pairs *)
+PROCEDURE PropAttr(props: Prop): A.Attr;
+  VAR a: A.Attr; id, v: A.Rope; b: B.Buf; i, j, n: LONGINT; ch: CHAR;
+BEGIN
+  id := Property(props, "custom_id");
+  IF id = NIL THEN id := Property(props, "id") END;
+  IF id = NIL THEN id := A.S("") END;
+  a := A.NewAttr(id);
+  v := Property(props, "class");
+  IF v # NIL THEN (* its words *)
+    n := Ropes.Length(v); i := 0;
+    WHILE i < n DO
+      WHILE (i < n) & (Ropes.Fetch(v, i) <= " ") DO INC(i) END;
+      j := i;
+      WHILE (j < n) & (Ropes.Fetch(v, j) > " ") DO INC(j) END;
+      IF j > i THEN A.AddClass(a, Ropes.Substring(v, i, j - i)) END;
+      i := j
+    END
+  END;
+  v := Property(props, "unnumbered");
+  IF v # NIL THEN (* isNonNil *)
+    n := Ropes.Length(v); B.InitBuf(b);
+    FOR i := 0 TO n - 1 DO
+      ch := Ropes.Fetch(v, i); B.PutChar(b, B.Lower(ch))
+    END;
+    v := B.BufRope(b);
+    IF ~Ropes.EqualString(v, "()") & ~Ropes.EqualString(v, "{}")
+        & ~Ropes.EqualString(v, "nil") THEN
+      A.AddClass(a, A.S("unnumbered"))
+    END
+  END;
+  WHILE props # NIL DO
+    IF ~Ropes.EqualString(props.key, "custom_id")
+        & ~Ropes.EqualString(props.key, "id")
+        & ~Ropes.EqualString(props.key, "class")
+        & ~Ropes.EqualString(props.key, "unnumbered") THEN
+      A.AddKeyVal(a, props.key, props.value)
+    END;
+    props := props.next
+  END;
+  RETURN a
+END PropAttr;
+
+(* headlineToHeader: the Header of h, its identifier registered *)
+PROCEDURE Header(h: Headline): A.Block;
+  VAR t: A.Inlines; a: A.Attr; tag: A.StrList; level: LONGINT;
+    nbsp: ARRAY 3 OF CHAR;
+BEGIN
+  nbsp[0] := 0C2X; nbsp[1] := 0A0X; nbsp[2] := 0X;
+  A.InitInlines(t);
+  IF M.todo & (h.marker # NIL) THEN
+    a := A.NewAttr(A.S(""));
+    IF h.marker.done THEN A.AddClass(a, A.S("done"))
+    ELSE A.AddClass(a, A.S("todo"))
+    END;
+    A.AddClass(a, h.marker.name);
+    A.Append(t, A.NewSpan(a, A.NewStr(h.marker.name)));
+    A.Append(t, A.NewSimple(A.Space))
+  END;
+  A.Append(t, A.CopyInlines(h.title));
+  IF M.tags & (h.tags # NIL) THEN
+    A.Append(t, A.NewSimple(A.Space));
+    tag := h.tags;
+    WHILE tag # NIL DO
+      IF tag # h.tags THEN A.Append(t, A.NewStr(A.S(nbsp))) END;
+      a := A.NewAttr(A.S("")); A.AddClass(a, A.S("tag"));
+      A.AddKeyVal(a, A.S("tag-name"), tag.s);
+      A.Append(t, A.NewSpan(a, A.NewCont(A.SmallCaps, A.NewStr(tag.s))));
+      tag := tag.next
+    END
+  END;
+  a := PropAttr(h.props);
+  IF Ropes.Length(a.id) = 0 THEN
+    IF autoIds THEN a.id := UniqueId(h.title) END
+  ELSE Use(a.id)
+  END;
+  level := h.level;
+  IF level > MAX(INTEGER) THEN level := MAX(INTEGER) END;
+  RETURN A.NewHeader(SHORT(level), a, t.first)
+END Header;
+
+(* planningToBlock *)
+PROCEDURE PlanningBlock(h: Headline; VAR l: A.Blocks);
+  VAR t: A.Inlines;
+
+  PROCEDURE Datum(ts: A.Rope; name: ARRAY OF CHAR);
+  BEGIN
+    IF ts # NIL THEN
+      IF t.first # NIL THEN A.Append(t, A.NewSimple(A.Space)) END;
+      A.Append(t, A.NewCont(A.Strong, A.NewStr(A.S(name))));
+      A.Append(t, A.NewSimple(A.Space));
+      A.Append(t, A.NewCont(A.Emph, A.NewStr(ts)))
+    END
+  END Datum;
+
+BEGIN
+  IF M.planning THEN
+    A.InitInlines(t);
+    Datum(h.closed, "CLOSED:"); Datum(h.deadline, "DEADLINE:");
+    Datum(h.scheduled, "SCHEDULED:");
+    IF t.first # NIL THEN A.AddBlock(l, A.NewInlinesBlock(A.Plain, t.first)) END
+  END
+END PlanningBlock;
+
+PROCEDURE ^ HeadlineBlocks(h: Headline; VAR l: A.Blocks);
+
+(* headlineToHeaderWithContents *)
+PROCEDURE WithContents(h: Headline; VAR l: A.Blocks);
+  VAR c: Headline;
+BEGIN
+  A.AddBlock(l, Header(h));
+  PlanningBlock(h, l);
+  A.AddBlock(l, h.contents);
+  c := h.children;
+  WHILE c # NIL DO HeadlineBlocks(c, l); c := c.next END
+END WithContents;
+
+(* headlineToHeaderWithList: the headlines under h as an ordered
+   list, its header a paragraph below the level of H: *)
+PROCEDURE WithList(h: Headline; VAR l: A.Blocks);
+  VAR hdr: A.Block; c: Headline; first, last, item: A.BlockList;
+    cl: A.Blocks;
+BEGIN
+  hdr := Header(h);
+  first := NIL; last := NIL; c := h.children;
+  WHILE c # NIL DO
+    A.InitBlocks(cl); HeadlineBlocks(c, cl);
+    NEW(item); item.blocks := cl.first; item.next := NIL;
+    IF first = NIL THEN first := item ELSE last.next := item END;
+    last := item;
+    c := c.next
+  END;
+  IF M.headlineLevels = h.level THEN A.AddBlock(l, hdr)
+  ELSE A.AddBlock(l, A.NewInlinesBlock(A.Para, hdr(A.HeaderBlk).inlines))
+  END;
+  PlanningBlock(h, l);
+  A.AddBlock(l, h.contents);
+  IF first # NIL THEN
+    A.AddBlock(l, A.NewOrderedList(1, A.DefaultStyle, A.DefaultDelim, first))
+  END
+END WithList;
+
+(* headlineToBlocks *)
+PROCEDURE HeadlineBlocks(h: Headline; VAR l: A.Blocks);
+BEGIN
+  IF Member(A.S("ARCHIVE"), h.tags) THEN
+    IF M.archived = M.ArchExport THEN WithContents(h, l)
+    ELSIF M.archived = M.ArchHeadline THEN A.AddBlock(l, Header(h))
+    END
+  ELSIF (h.title # NIL) & (h.title.kind = A.Str)
+      & Ropes.EqualString(h.title(A.StrInl).text, "COMMENT") THEN
+  ELSIF M.headlineLevels <= h.level THEN WithList(h, l)
+  ELSE WithContents(h, l)
+  END
+END HeadlineBlocks;
+
+(* unprunedHeadlineToBlocks: the blocks of the tree under root, with
+   the select and exclude tags; the root's properties, without select
+   tags, the document's metadata *)
+PROCEDURE TreeBlocks(root: Headline; VAR l: A.Blocks);
+  VAR v: A.MetaValue; using: BOOLEAN; t: A.Blocks; c: Headline;
+    p, q: Prop;
+BEGIN
+  v := A.GetMeta(meta, "title");
+  IF (v # NIL) & (v IS A.MetaInlinesV) THEN root.title := v(A.MetaInlinesV).inlines END;
+  using := ContainsSelect(root);
+  IF using THEN root.children := IncludeSelected(root.children) END;
+  RemoveExcluded(root);
+  IF ~using THEN
+    A.InitBlocks(t); HeadlineBlocks(root, t);
+    IF t.first # NIL THEN A.AddBlock(l, t.first.next) END;
+    p := root.props;
+    WHILE p # NIL DO (* the first of a key wins *)
+      q := root.props;
+      WHILE ~Ropes.Equal(q.key, p.key) DO q := q.next END;
+      IF q = p THEN A.SetMeta(meta, p.key, A.NewMetaString(p.value)) END;
+      p := p.next
+    END
+  ELSE
+    c := root.children;
+    WHILE c # NIL DO HeadlineBlocks(c, l); c := c.next END
+  END
+END TreeBlocks;
 
 (* Reads the Org text text[0 .. n-1], its tabs already expanded at
    tabStop. *)
 PROCEDURE Read*(text: PdIO.Text; n: LONGINT; tabStop: INTEGER): A.Doc;
-  VAR t: B.Text; i, k: LONGINT; d: A.Doc; l: A.Blocks;
+  VAR t: B.Text; i, k: LONGINT; d: A.Doc; l: A.Blocks; root: Headline;
+    last: A.StrList;
 BEGIN
   (* ensureFinalNewlines 2 *)
   k := 0;
@@ -1785,13 +2458,21 @@ BEGIN
   B.Start(t, n + 2 - k, tabStop);
   M.Reset(smart, smartQuotes, specialStrings);
   I.fancyLists := fancyLists; I.Reset;
-  ids := NIL; inList := FALSE; fresh := FALSE;
+  NEW(idTable);
+  FOR i := 0 TO IdTableSize - 1 DO idTable[i] := NIL END;
+  markers := NewDefaultMarkers(); customTodo := FALSE;
+  selectTags := NIL; AddStr(selectTags, last, A.S("export"));
+  excludeTags := NIL; AddStr(excludeTags, last, A.S("noexport"));
+  selectSet := FALSE; excludeSet := FALSE;
+  inList := FALSE; fresh := FALSE;
   d := A.NewDoc(); meta := d.meta; notes := NIL;
+  root := DocumentTree();
   A.InitBlocks(l);
-  DocumentTree(l);
+  TreeBlocks(root, l);
   d.blocks := l.first;
   I.Resolve(d);
-  ids := NIL; meta := NIL; notes := NIL;
+  idTable := NIL; meta := NIL; notes := NIL; markers := NIL;
+  selectTags := NIL; excludeTags := NIL;
   RETURN d
 END Read;
 

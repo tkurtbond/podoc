@@ -1,0 +1,28 @@
+* Planning and properties :work:urgent:
+  DEADLINE: <2024-02-01 Thu> SCHEDULED: <2024-01-01 Mon> CLOSED: [2024-01-03 Wed 10:00]
+  :PROPERTIES:
+  :CUSTOM_ID: plan
+  :CLASS: c1  c2
+  :UNNUMBERED: t
+  :Foo: bar
+  :END:
+Body text.
+* Planning shown
+  CLOSED: [2024-01-03 Wed 10:00] DEADLINE: <2024-02-01 Thu>
+* By id
+  :PROPERTIES:
+  :ID: the-id
+  :END:
+* Bad planning
+  SCHEDULED: <2024-01-01 Mon> trailing
+* Bad drawer
+  :PROPERTIES:
+  not a property
+  :END:
+* Bare key
+  :PROPERTIES:
+  :CUSTOM_ID: bare
+  :Empty:
+  :END:
+* Tags only :a:b_c:@d:
+* Not tags :a b:

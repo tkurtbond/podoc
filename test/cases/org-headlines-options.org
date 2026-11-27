@@ -1,0 +1,9 @@
+#+OPTIONS: H:2 arch:headline p:t todo:nil tags:nil
+* TODO First :x:
+  SCHEDULED: <2024-01-01 Mon>
+** Second
+*** Third
+Third's text.
+**** Fourth
+* Archived :ARCHIVE:
+Gone.

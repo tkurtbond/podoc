@@ -2435,6 +2435,10 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   ...), and with them the approximate pipe table pandoc writes for a
   table with spans when raw HTML is off.
 - Image conversion for ConTeXt beyond SVG.
+- Org identifiers with `+gfm_auto_identifiers` or
+  `+ascii_identifiers`: an emoji replaced by its alias, from the
+  emojis package's table, as pandoc does (found 2026-11-26, Phase
+  26.5).
 - The ms writer: TeX math to `eqn` (texmath's `writeEqn`), and
   syntax highlighting.
 - Templates: the pipes `left`, `right` and `center` (block layout);
@@ -4251,3 +4255,35 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   headline's `CUSTOM_ID` waits for 26.5. Org citations (`[[cite:..]]`)
   and footnote references, which pandoc tries before links, are
   27.3. Not yet run on the BSDs.
+- 2026-11-26, 26.3 checked against pandoc's tests: the 48 inputs of
+  pandoc 3.14's `test/Tests/Readers/Org/Block.hs`,
+  `Block/CodeBlock.hs` and `Block/Figure.hs` (25, 16 and 7), taken
+  from the Haskell by a script, were run through pandoc and podoc.
+  46 give the same JSON under `-O2` and `-OC`; the other 2 are the
+  math environments read inline (`\begin{equation}`), Phase 27.4.
+  Nothing in 26.3 needed changing.
+- 2026-11-26, Phase 26.5: the headline tree in `PdOrg`, as pandoc's
+  `DocumentTree`: headlines with TODO keywords (`#+todo`,
+  `#+seq_todo`, `#+typ_todo`; with no `|` the last keyword is done;
+  the first sequence replaces TODO/DONE), priorities, tags, planning
+  lines (`p:`; text after the last timestamp makes them a paragraph)
+  and property drawers (`CUSTOM_ID`, `ID`, `CLASS`, `UNNUMBERED`, the
+  other keys lowercased; a key needs a space after its colon, and one
+  bad line fails the drawer); the root drawer's properties are kept
+  for metadata, the first of a key winning. `COMMENT` trees,
+  `arch:`, `#+select_tags` and `#+exclude_tags` (the first use
+  replacing `export` / `noexport`), `todo:`, `tags:` and `H:` (list
+  items below the level). Identifiers are unique across the
+  document, the root header included; `PdMdInline.IdentifierExt`
+  makes them with `+gfm_auto_identifiers` and `+ascii_identifiers`.
+  Ten case tests (`org-headlines-todo`, `-sequences`, `-attrs`,
+  `-planning`, `-select`, `-exclude`, `-options`, `-ids`, `-gfm-ids`,
+  `-ascii-ids`; JSON from pandoc 3.14). `make test` passed under
+  `-O2` and `-OC`: 421 case tests. pandoc 3.14's
+  `Block/Header.hs` (27 inputs) matches byte for byte under both
+  models, with 22 earlier probes and 9 new ones. Of `Directive.hs`
+  and `Meta.hs` (34 and 38), 45 match; the other 27 are `f:` and
+  `tex:` (27.3, 27.4) and document metadata (28.1). Not matched:
+  an emoji's alias in an identifier (docs/user/differences.md,
+  "Later"); a `#+title` that has the same identifier as a headline
+  (`intro-1`) waits for 28.1. Not yet run on the BSDs.

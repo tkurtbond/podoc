@@ -1,0 +1,9 @@
+#+select_tags: keep
+#+exclude_tags: drop
+* Not kept
+* Parent
+** Child :keep:
+*** Grandchild
+*** Dropped :drop:
+* Other :keep:
+Text.

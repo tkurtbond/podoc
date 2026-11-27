@@ -1,0 +1,9 @@
+Before the first headline.
+* Kept
+* Not exported :noexport:
+** Its child
+* COMMENT A comment
+Hidden.
+* Archived :ARCHIVE:
+Archived text.
+* Last

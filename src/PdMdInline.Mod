@@ -16,7 +16,7 @@ MODULE PdMdInline;
    citations, example references, wikilinks, base64 data URIs. *)
 
 IMPORT Ropes, Utf8, Unicode, A := PdAst, B := PdMdBase, W := PdWords,
-  CW := PdWidth, PdEntities;
+  CW := PdWidth, PdEntities, PdAscii;
 
 CONST
   (* the quote context *)
@@ -1888,6 +1888,69 @@ BEGIN
   END;
   RETURN B.BufRope(r)
 END Identifier;
+
+(* inlineListToIdentifier, with the extensions gfm_auto_identifiers
+   (gfm) and ascii_identifiers (ascii), as textToIdentifier makes it:
+   the text in lower case; kept only letters, numbers, white space and
+   _ - . (gfm: _ -, marks and connector punctuation); its words joined
+   by - (gfm: each white space a -); with ascii, each character turned
+   into ASCII, as toAsciiText does, or dropped; without gfm, anything
+   before its first letter dropped. pandoc turns emoji into their
+   names first, with gfm or ascii; podoc does not. *)
+PROCEDURE IdentifierExt*(i: A.Inline; gfm, ascii: BOOLEAN): A.Rope;
+  VAR s, r, a: B.Buf; p, q: LONGINT; c: Utf8.Rune; cat: INTEGER;
+    space, keep: BOOLEAN; ch: CHAR;
+BEGIN
+  Stringify(i, s);
+  B.InitBuf(r); p := 0; space := FALSE;
+  WHILE p < s.len DO
+    q := p;
+    IF ~Utf8.Decode(s.t^, q, c) OR (q <= p) THEN c := 0FFFDH; q := p + 1 END;
+    p := q;
+    c := Unicode.ToLower(c);
+    IF Unicode.IsSpace(c) THEN
+      IF gfm THEN B.PutChar(r, "-") ELSE space := TRUE END
+    ELSE
+      keep := Unicode.IsLetter(c) OR Unicode.IsNumber(c)
+        OR (c = ORD("_")) OR (c = ORD("-"));
+      IF ~keep THEN
+        IF gfm THEN
+          cat := Unicode.Category(c);
+          keep := (cat = Unicode.Mn) OR (cat = Unicode.Mc)
+            OR (cat = Unicode.Me) OR (cat = Unicode.Pc)
+        ELSE keep := c = ORD(".")
+        END
+      END;
+      IF keep THEN
+        IF space & (r.len > 0) THEN B.PutChar(r, "-") END;
+        space := FALSE;
+        B.PutUtf8(r, c)
+      END
+    END
+  END;
+  IF ascii THEN
+    B.InitBuf(a); p := 0;
+    WHILE p < r.len DO
+      q := p;
+      IF ~Utf8.Decode(r.t^, q, c) OR (q <= p) THEN c := 0FFFDH; q := p + 1 END;
+      p := q;
+      IF PdAscii.ToAscii(c, ch) THEN B.PutChar(a, ch) END
+    END;
+    r := a
+  END;
+  IF ~gfm THEN
+    B.InitBuf(a); p := 0; keep := FALSE;
+    WHILE (p < r.len) & ~keep DO
+      q := p;
+      IF ~Utf8.Decode(r.t^, q, c) OR (q <= p) THEN c := 0FFFDH; q := p + 1 END;
+      keep := Unicode.IsLetter(c);
+      IF ~keep THEN p := q END
+    END;
+    WHILE p < r.len DO B.PutChar(a, r.t[p]); INC(p) END;
+    r := a
+  END;
+  RETURN B.BufRope(r)
+END IdentifierExt;
 
 BEGIN
   nbsp[0] := 0C2X; nbsp[1] := 0A0X; nbsp[2] := 0X;

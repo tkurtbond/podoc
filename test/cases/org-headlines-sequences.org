@@ -1,0 +1,12 @@
+#+todo: WAIT BLOCKED | CANCELLED
+#+typ_todo: ALICE BOB
+#+seq_todo: A |
+#+todo: X | Y |Z
+* WAIT for the reply
+* CANCELLED the meeting
+* BOB has it
+* A x
+* | y
+* |Z z
+* Y w
+* TODO no longer a keyword
