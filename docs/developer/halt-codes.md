@@ -26,7 +26,8 @@ under `~/Repos/Oberon`.
 | polibfyaml | 61–65 (`Fyaml.Assert...`) | `ASSERT` |
 | pofltk | 70–78 (its PLAN.md, "Halt codes") | `ASSERT` |
 | polibtls | 90–99 | `ASSERT` |
-| Ropes, ArgParser | none | |
+| Ropes | 1, for misuse: an index out of range, a length that overflows (checked 2026-11-26) | `HALT`, exit status, no message |
+| ArgParser | none (it ends a bad command line with status 2, through `Platform.Exit`) | |
 | **podoc** | from 100; none assigned yet | `HALT` and `ASSERT` |
 
 podoc uses Ropes, pounicode and ArgParser. The others are listed so
@@ -35,7 +36,9 @@ that podoc's codes stay clear of every po* library's.
 podoc's pandoc exit statuses (1, 4, 5, 6, 21–23, 43, 47, 64, 83,
 97–99) share numbers with poc's traps (4 is also a NIL dereference,
 5 a failed type guard, 6 a `WITH` with no match). Only the message
-tells them apart.
+tells them apart. Ropes' `HALT(1)` prints nothing, so it looks like
+pandoc's IOError with its message missing: a status of 1 with nothing
+on standard error is a bug in podoc's use of Ropes.
 
 ## podoc's codes
 

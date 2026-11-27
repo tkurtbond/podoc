@@ -50,6 +50,7 @@ for md in *.md *.rst *.org; do
     fi
     want=0
     [ -f "$name.status" ] && want=$(cat "$name.status")
+    : > "$outdir/$name.$ext.diff"
     if [ "$status" -eq "$want" ] &&
        diff -u "$name.$ext" "$outdir/$name.$ext" > "$outdir/$name.$ext.diff" &&
        diff -u "$errors" "$outdir/$name.$ext.err" >> "$outdir/$name.$ext.diff"; then
