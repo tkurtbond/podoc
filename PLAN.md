@@ -521,6 +521,11 @@ Made by the user on 2026-11-20, on the questions of §15.
     by 0 and writes the widths as NaN, `null` in JSON. podoc gives
     those columns `ColWidthDefault` instead, the user's choice, and
     lists it in `docs/user/differences.md`.
+61. **Plain-text math in HTML** (2026-11-26). pandoc 3.14's HTML
+    writer converts TeX math to MathML by default (3.10's wrote it as
+    plain text). podoc keeps plain-text math, the user's choice, so
+    `-s` HTML keeps the style sheet's `.display.math` rule; it is
+    listed in `docs/user/differences.md`. MathML goes to "Later".
 
 The user also accepted the other recommendations of §8.4 and §15:
 native filters, a pure-Oberon core where there is a choice, and the
@@ -2403,6 +2408,8 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
 
 - An rST writer, `-t rst` (decision 19).
 - An Org writer, `-t org` (decision 59).
+- MathML for TeX math in HTML, pandoc 3.14's default, which needs a
+  TeX-to-MathML converter like texmath (decision 61).
 - Full YAML through polibfyaml, as `make YAML=libfyaml` (decision 2).
 - Embedded Lua 5.4 and a `pandoc` module written in Lua (§8), if a
   filter appears that native code does not cover (decision 6).
@@ -4388,3 +4395,20 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
   models; all match pandoc but the 10 decision-57 ones of Phase
   27.4. The 21 metadata probes that differed before now match, as do
   46 new ones. Not yet run on the BSDs.
+- 2026-11-26, pandoc 3.14's templates: of the templates podoc
+  carries, only `styles.html` differs between 3.10 and 3.14 (dark
+  colours with `light-dark()` and their variables, no `@media print`,
+  `currentColor` rules). `data/templates/styles.html` is now 3.14's
+  with podoc's `code-proportional` block kept before `hr`;
+  `src/PdDefaults.Mod` rewritten by `tools/mktemplates`;
+  `PandocVersion` (`pandoc-version`) is `3.14`. pandoc 3.14 also
+  truncates an HTML table's width (3.10 rounded it): `PdHtml.Table`
+  does too. The 12 `-s` expected files and 5 with table widths were
+  rewritten and compared with pandoc 3.14: the same but for the known
+  differences (ms's `\f[CR]` and `.br` before bookmarks, podoc's
+  aligned code) and math: pandoc 3.14's HTML writer defaults to
+  MathML (3.10's to plain math), so podoc's `-s` HTML keeps the
+  `.display.math` rule. That is recorded in differences.md; the user
+  chose to keep plain-text math (decision 61), MathML is in "Later".
+  `make test` passed under `-O2` and `-OC`: 443 case tests, 23 round
+  trips, 10 image tests, 20 mermaid tests.

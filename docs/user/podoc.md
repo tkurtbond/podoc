@@ -162,7 +162,7 @@ can be checked for what neither program will render.
 
 ## Templates
 
-podoc carries pandoc 3.10's default templates for `html5`, `ms`,
+podoc carries pandoc 3.14's default templates for `html5`, `ms`,
 `context`, `markdown` and `plain`, and its own for `mom` (see "mom"). `--template NAME` looks for the name as
 given, then with the format's extension added, then in pandoc's user
 data directory (`$XDG_DATA_HOME/pandoc/templates`, or

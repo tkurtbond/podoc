@@ -260,8 +260,9 @@ podoc reads YAML with its own small reader, `PdYaml`, not libyaml.
 
 ## Templates
 
-podoc's built-in templates are pandoc 3.10's defaults for `html5`,
-`ms`, `context` and `markdown`.
+podoc's built-in templates are pandoc 3.14's defaults for `html5`,
+`ms`, `context`, `markdown` and `plain` (since 2026-11-26; 3.10's
+differed only in `styles.html`).
 
 - The pipes `left`, `right` and `center` are not supported: a
   template that uses them does not compile.
@@ -277,7 +278,7 @@ podoc's built-in templates are pandoc 3.10's defaults for `html5`,
   pandoc's: `code-column` and `code-gap` in all three,
   `code-proportional` (set by the writer) in `styles.html`, and
   `code-highlight` (set by the writer) in `default.context`.
-- `pandoc-version` is `3.10`, the pandoc that podoc follows.
+- `pandoc-version` is `3.14`, the pandoc that podoc follows.
 - The variable `meta-json` is not set, and there is no
   `--variable-json` or `--data-dir`.
 
@@ -301,8 +302,11 @@ highlighting".
   alignments only `fixed` is available: `elastic` and `hybrid` give
   `fixed`'s output.
 - TeX math is written as its TeX, escaped, inside `span.math`
-  (`\(...\)` and `\[...\]`); pandoc's default output converts it
-  with texmath to HTML where it can.
+  (`\(...\)` and `\[...\]`), as pandoc 3.10 did by default; pandoc
+  3.14's default converts it with texmath to MathML. So `-s` output
+  still has the style sheet's `.display.math` rule, which pandoc 3.14
+  writes only with `--webtex`. (PLAN.md's decision 61; MathML is
+  in its "Later".)
 - Output is not wrapped: `--wrap=auto` behaves as `--wrap=none`;
   `--wrap=preserve` keeps the input's soft line breaks.
 - The media type of an image or link target (for `video`, `audio` and

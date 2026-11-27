@@ -1239,17 +1239,6 @@ BEGIN
   RETURN CatS(r, "</tbody>")
 END TableBody;
 
-(* x rounded to an integer, halves to even *)
-PROCEDURE RoundEven(x: LONGREAL): LONGINT;
-  VAR f: LONGINT; d: LONGREAL;
-BEGIN
-  f := ENTIER(x); d := x - f;
-  IF d > 0.5 THEN INC(f)
-  ELSIF (d = 0.5) & ODD(f) THEN INC(f)
-  END;
-  RETURN f
-END RoundEven;
-
 PROCEDURE Table(t: A.TableBlk): Rope;
   VAR ncols, i: LONGINT; cs: A.ColSpec; aligns: Aligns; total: LONGREAL;
     allDefault, found: BOOLEAN; r, cols: Rope; kvs: A.KeyVal; tb: A.TableBody;
@@ -1266,7 +1255,8 @@ BEGIN
   kvs := KVs(t.attr);
   r := A.GetKeyVal(t.attr, "style", found);
   IF ~found & (total > 0) & (total < 1) THEN
-    kvs := NewKV(R("style"), CatS(Cat(R("width:"), Sh.IntRope(RoundEven(total * 100))), "%;"), kvs)
+    (* truncated, as pandoc 3.14 does (3.10 rounded) *)
+    kvs := NewKV(R("style"), CatS(Cat(R("width:"), Sh.IntRope(ENTIER(total * 100))), "%;"), kvs)
   END;
   r := Cat(CatS(Cat(R("<table"), AttrStr(Id(t.attr), Classes(t.attr), kvs)), ">"), nl);
   IF t.caption.blocks # NIL THEN

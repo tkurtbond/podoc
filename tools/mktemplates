@@ -32,7 +32,7 @@ def pieces(data):
 
 w = sys.stdout.write
 w('''MODULE PdDefaults;
-(* PdDefaults: pandoc 3.10's default templates and their partials,
+(* PdDefaults: pandoc 3.14's default templates and their partials,
    and podoc's own default.mom, from data/templates. Written by
    tools/mktemplates; do not edit. *)
 

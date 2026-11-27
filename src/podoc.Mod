@@ -26,7 +26,7 @@ IMPORT SYSTEM, GarbageCollectedHeap, Platform, PdIO, PdSource, A := PdAst, PdMar
   PdInclude, PdFilters, PdMermaid, PdPdf, PdImages, O := PdOptions, Sh := PdShared, PdCodeAlign, PdKeywords;
 
 CONST
-  PandocVersion = "3.10"; (* the pandoc podoc follows *)
+  PandocVersion = "3.14"; (* the pandoc podoc follows *)
 
 VAR
   doc: A.Doc; (* the document, once it is read *)
