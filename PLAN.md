@@ -2408,6 +2408,11 @@ All of this runs under `-O2` and `-OC`. Org text is indexed with
 
 - An rST writer, `-t rst` (decision 19).
 - An Org writer, `-t org` (decision 59).
+- A BBCode writer, `-t bbcode` and pandoc's five other flavours
+  (`bbcode_steam`, `_phpbb`, `_fluxbb`, `_hubzilla`, `_xenforo`),
+  put here by the user on 2026-11-26: no current build needs it. The
+  research, with its open questions (which flavours, whether to warn
+  when content is dropped), is in `docs/research/bbcode-writer.md`.
 - MathML for TeX math in HTML, pandoc 3.14's default, which needs a
   TeX-to-MathML converter like texmath (decision 61).
 - Full YAML through polibfyaml, as `make YAML=libfyaml` (decision 2).
